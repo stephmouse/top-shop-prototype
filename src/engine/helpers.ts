@@ -38,9 +38,15 @@ export function drawThreeEventIds(seed: number): { ids: string[]; nextSeed: numb
   return { ids, nextSeed: currentSeed };
 }
 
-export function getEffectiveItemRetailPrice(state: GameState, item: ItemDef): number {
-  const mult = state.globalSale?.priceMultiplier ?? 1;
-  return Math.max(1, Math.round(item.retailPrice * mult));
+export function getEffectiveItemRetailPrice(
+  state: GameState,
+  item: ItemDef,
+  shopOwnerId?: string | null
+): number {
+  const saleMult = state.globalSale?.priceMultiplier ?? 1;
+  const owner = shopOwnerId ? state.players.find((p) => p.id === shopOwnerId) : undefined;
+  const ownerMult = owner && owner.doublePriceTurns > 0 ? 2 : 1;
+  return Math.max(1, Math.round(item.retailPrice * saleMult * ownerMult));
 }
 
 export function canPlayerUseElevator(state: GameState, playerId: string): boolean {
@@ -165,6 +171,7 @@ export function advanceToNextTurn(state: GameState): GameState {
       ...p,
       blockDeliveryTurns: Math.max(0, p.blockDeliveryTurns - 1),
       blockNewStoreTurns: Math.max(0, p.blockNewStoreTurns - 1),
+      doublePriceTurns: Math.max(0, p.doublePriceTurns - 1),
     };
   });
 
@@ -241,6 +248,9 @@ export function advanceToNextTurn(state: GameState): GameState {
     moveHistory: [],
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
+    deliverMode: null,
+    deliverPreferredShopId: null,
+    deliveredShopIdsThisTurn: [],
     eventChoices: [],
     eventStorePrompt: null,
     log,

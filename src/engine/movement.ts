@@ -12,13 +12,46 @@ import {
   getTile,
 } from './helpers';
 import { pickRandom } from './rng';
-import type { EscalatorLink, GameState, MoveSnapshot, Player, TurnPhase, VerticalDir } from './types';
+import type {
+  EscalatorLink,
+  GameState,
+  MoveSnapshot,
+  PencilFace,
+  Player,
+  TurnPhase,
+  VerticalDir,
+} from './types';
 
 function updateActivePlayer(state: GameState, patch: Partial<Player>): GameState {
   const players = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, ...patch } : p
   );
   return { ...state, players };
+}
+
+function applyBankPayday(
+  state: GameState,
+  isExactLanding: boolean
+): { nextState: GameState; note: string } {
+  const player = getActivePlayer(state);
+  let payday = 0;
+  let note = 'missed payday ($0)!';
+
+  if (!player.skipNextPayday) {
+    const base = computePaydayAmount(state, player, isExactLanding);
+    payday = player.doubleNextPayday ? base * 2 : base;
+    const tag = player.doubleNextPayday ? ' (2x payday!)' : isExactLanding ? ' (1.5x bonus)!' : ' payday.';
+    note = `+$${payday}${tag}`;
+  }
+
+  const nextState = updateActivePlayer(state, {
+    cash: player.cash + payday,
+    stepsSincePayday: 0,
+    doubleNextPayday: false,
+    skipNextPayday: false,
+    ...(isExactLanding ? { horizontalDir: null, verticalDir: null } : {}),
+  });
+  return { nextState, note };
 }
 
 function captureSnapshot(state: GameState): MoveSnapshot {
@@ -55,15 +88,41 @@ function restoreSnapshot(
   };
 }
 
-export function handleRollPencil(state: GameState): GameState {
+export function handleRollPencil(state: GameState, chosenFace?: PencilFace): GameState {
   if (state.phase !== 'ROLL_PENCIL') return state;
   const player = getActivePlayer(state);
-  const { value: face, nextSeed } = pickRandom(state.seed, PENCIL_FACES);
+  let nextSeed = state.seed;
+  let face: PencilFace;
+
+  if (player.pencilTurnsLeft > 0 && player.pencilMode === 'ones_twos') {
+    const r = pickRandom(nextSeed, [1, 2] as const);
+    face = r.value;
+    nextSeed = r.nextSeed;
+  } else if (player.pencilTurnsLeft > 0 && player.pencilMode === 'event_only') {
+    face = 'E';
+  } else if (
+    player.pencilTurnsLeft > 0 &&
+    player.pencilMode === 'slow' &&
+    chosenFace !== undefined &&
+    PENCIL_FACES.includes(chosenFace)
+  ) {
+    face = chosenFace;
+  } else {
+    const r = pickRandom(nextSeed, PENCIL_FACES);
+    face = r.value;
+    nextSeed = r.nextSeed;
+  }
+
+  const nextPencilTurns = Math.max(0, player.pencilTurnsLeft - 1);
+  const rolledState = updateActivePlayer(state, {
+    pencilTurnsLeft: nextPencilTurns,
+    pencilMode: nextPencilTurns === 0 ? 'normal' : player.pencilMode,
+  });
 
   if (face === 'E') {
     const drawn = drawThreeEventIds(nextSeed);
     return {
-      ...state,
+      ...rolledState,
       seed: drawn.nextSeed,
       lastRoll: 'E',
       remainingSteps: 0,
@@ -72,12 +131,12 @@ export function handleRollPencil(state: GameState): GameState {
       pendingUndoSnapshot: null,
       phase: 'EVENT_PICK',
       eventChoices: drawn.ids,
-      log: appendLog(state, `${player.name} rolled E (Event)!`),
+      log: appendLog(rolledState, `${player.name} rolled E (Event)!`),
     };
   }
 
   return {
-    ...state,
+    ...rolledState,
     seed: nextSeed,
     lastRoll: face,
     remainingSteps: face,
@@ -85,7 +144,7 @@ export function handleRollPencil(state: GameState): GameState {
     moveHistory: [],
     pendingUndoSnapshot: null,
     phase: player.horizontalDir === null ? 'CHOOSE_DIRECTION' : 'STEPPING',
-    log: appendLog(state, `${player.name} rolled ${face}.`),
+    log: appendLog(rolledState, `${player.name} rolled ${face}.`),
   };
 }
 
@@ -174,19 +233,14 @@ function executeHorizontalStep(state: GameState): GameState {
   }
 
   if (landedTile.type === 'bank' && remainingSteps > 0) {
-    const updatedPlayer = getActivePlayer(nextState);
-    const payday = computePaydayAmount(nextState, updatedPlayer, false);
-    const paidState = updateActivePlayer(nextState, {
-      cash: updatedPlayer.cash + payday,
-      stepsSincePayday: 0,
-    });
+    const { nextState: paidState, note } = applyBankPayday(nextState, false);
     return {
       ...paidState,
       phase: 'BANK_MENU',
       hadBranchChoiceThisTurn: false,
       moveHistory: [],
       pendingPostBankPhase: 'STEPPING',
-      log: appendLog(paidState, `${updatedPlayer.name} passed Bank: +$${payday} payday.`),
+      log: appendLog(paidState, `${player.name} passed Bank: ${note}`),
     };
   }
 
@@ -241,20 +295,14 @@ export function resolveTileLanding(state: GameState): GameState {
   const tile = getTile(state, player.tileId);
 
   if (tile.type === 'bank') {
-    const payday = computePaydayAmount(state, player, true);
-    const paidState = updateActivePlayer(state, {
-      cash: player.cash + payday,
-      stepsSincePayday: 0,
-      horizontalDir: null,
-      verticalDir: null,
-    });
+    const { nextState: paidState, note } = applyBankPayday(state, true);
     return {
       ...paidState,
       phase: 'BANK_MENU',
       hadBranchChoiceThisTurn: false,
       moveHistory: [],
       pendingPostBankPhase: null,
-      log: appendLog(paidState, `${player.name} stopped at Bank: +$${payday} (1.5x bonus)!`),
+      log: appendLog(paidState, `${player.name} stopped at Bank: ${note}`),
     };
   }
 

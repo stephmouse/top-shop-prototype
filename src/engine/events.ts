@@ -20,7 +20,7 @@ function activeCount(state: GameState): number {
 }
 
 function resetShopSlot(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
+  return { ...shop, ownerId: null, storeTypeId: null, level: 1, upgradedToL4: false, stock: {}, isClosedTurns: 0 };
 }
 
 function applyStockTransform(
@@ -292,7 +292,7 @@ export function handleResolveEventStore(
       i === state.activePlayerIndex ? { ...p, cash: p.cash + payout } : p
     );
     const nextShops = recomputeSegmentChainLevels(
-      { ...state, shops: { ...state.shops, [shop.id]: { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 } } },
+      { ...state, shops: { ...state.shops, [shop.id]: resetShopSlot(shop) } },
       shop.segmentId,
       active.id
     );
@@ -307,28 +307,42 @@ export function handleResolveEventStore(
 
   if (prompt.mode === 'buy_empty' && storeTypeId) {
     if (shop.ownerId !== null) return state;
-    const ownsSeg = Object.values(state.shops).some(
-      (s) => s.ownerId === active.id && s.segmentId === shop.segmentId
-    );
+    const payer = prompt.payerId ? state.players.find((p) => p.id === prompt.payerId) : active;
+    const ownsSeg =
+      !prompt.allowOwnedSegment &&
+      Object.values(state.shops).some(
+        (s) => s.ownerId === active.id && s.segmentId === shop.segmentId
+      );
     const allowed = getAllowedStoreTypeIds(state, active.id, shop.segmentId);
     const def = STORE_TYPES[storeTypeId];
-    if (ownsSeg || !def || !allowed.includes(storeTypeId) || active.cash < def.baseOpenCost) return state;
+    if (!payer || ownsSeg || !def || !allowed.includes(storeTypeId) || payer.cash < def.baseOpenCost) {
+      return state;
+    }
 
-    const players = state.players.map((p, i) =>
-      i === state.activePlayerIndex ? { ...p, cash: p.cash - def.baseOpenCost } : p
+    const players = state.players.map((p) =>
+      p.id === payer.id ? { ...p, cash: p.cash - def.baseOpenCost } : p
     );
-    const newShop: Shop = {
+    const claimedShop: Shop = {
       ...shop,
       ownerId: active.id,
       storeTypeId,
-      level: 1,
-      stock: buildStarterStock(storeTypeId, 1),
+      upgradedToL4: false,
+      stock: {},
     };
+    const nextShops = recomputeSegmentChainLevels(
+      { ...state, shops: { ...state.shops, [shop.id]: claimedShop } },
+      shop.segmentId,
+      active.id
+    );
+    const leveled = nextShops[shop.id]!;
+    nextShops[shop.id] = { ...leveled, stock: buildStarterStock(storeTypeId, leveled.level) };
+
+    const payerNote = payer.id === active.id ? `-$${def.baseOpenCost}` : `paid $${def.baseOpenCost} by ${payer.name}`;
     return resumeAfterPostAction({
       ...state,
       players,
-      shops: { ...state.shops, [shop.id]: newShop },
-      log: appendLog(state, `${active.name} opened ${def.name} via Event (-$${def.baseOpenCost}).`),
+      shops: nextShops,
+      log: appendLog(state, `${active.name} opened ${def.name} L${leveled.level} (${payerNote}).`),
     });
   }
 

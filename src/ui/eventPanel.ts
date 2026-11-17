@@ -37,10 +37,19 @@ export function renderEventStorePanel(
       list.appendChild(btn);
     }
   } else {
+    const payer = prompt.payerId
+      ? state.players.find((p) => p.id === prompt.payerId) ?? active
+      : active;
     const emptySlots = Object.values(state.shops).filter(
       (s) =>
         s.ownerId === null &&
-        !Object.values(state.shops).some((o) => o.ownerId === active.id && o.segmentId === s.segmentId)
+        (prompt.allowOwnedSegment ||
+          !Object.values(state.shops).some(
+            (o) => o.ownerId === active.id && o.segmentId === s.segmentId
+          )) &&
+        getAllowedStoreTypeIds(state, active.id, s.segmentId).some(
+          (id) => (STORE_TYPES[id]?.baseOpenCost ?? Infinity) <= payer.cash
+        )
     );
     const slotSelect = document.createElement('select');
     for (const s of emptySlots) {
@@ -63,11 +72,12 @@ export function renderEventStorePanel(
         .filter((d): d is NonNullable<typeof d> => Boolean(d))
         .sort((a, b) => b.baseOpenCost - a.baseOpenCost);
 
+      const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
       for (const def of allowed) {
         const btn = document.createElement('button');
         btn.className = 'primary';
-        btn.disabled = active.cash < def.baseOpenCost;
-        btn.textContent = `Open ${def.name} at ${formatLoc(state, slot)} ($${def.baseOpenCost})`;
+        btn.disabled = payer.cash < def.baseOpenCost;
+        btn.textContent = `Open ${def.name} at ${formatLoc(state, slot)} ($${def.baseOpenCost}${payerTag})`;
         btn.addEventListener('click', () =>
           dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: slot.id, storeTypeId: def.id })
         );

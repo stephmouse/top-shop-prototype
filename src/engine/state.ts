@@ -1,8 +1,9 @@
-import { BANK_REWARDS, DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
+import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
 import { createMap1, START_TILE_ID } from '../config/map1';
 import type { GameAction } from './actions';
+import { handleRedeemBankReward } from './bank';
 import { handlePickEventCard, handleResolveEventStore, handleSkipEventStore } from './events';
-import { advanceToNextTurn, appendLog, getActivePlayer } from './helpers';
+import { advanceToNextTurn } from './helpers';
 import {
   handleAdvanceStep,
   handleCancelMove,
@@ -19,7 +20,7 @@ import {
   handleSellShopLiquidate,
   resumeAfterPostAction,
 } from './shops';
-import type { GameState, MatchConfig, Player, Shop } from './types';
+import type { GameState, MatchConfig, Player } from './types';
 
 export interface PlayerSetupInput {
   name: string;
@@ -46,6 +47,11 @@ export function createInitialGameState(
     stepsSincePayday: 0,
     blockDeliveryTurns: 0,
     blockNewStoreTurns: 0,
+    pencilMode: 'normal',
+    pencilTurnsLeft: 0,
+    doubleNextPayday: false,
+    skipNextPayday: false,
+    doublePriceTurns: 0,
     skipNextTurn: false,
     unlockDirNextTurn: false,
     reverseDirNextTurn: false,
@@ -66,6 +72,9 @@ export function createInitialGameState(
     moveHistory: [],
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
+    deliverMode: null,
+    deliverPreferredShopId: null,
+    deliveredShopIdsThisTurn: [],
     eventChoices: [],
     eventStorePrompt: null,
     globalSale: null,
@@ -79,75 +88,12 @@ export function createInitialGameState(
   };
 }
 
-function handleRedeemBankReward(
-  state: GameState,
-  rewardId: string,
-  targetPlayerId?: string,
-  targetShopId?: string
-): GameState {
-  if (state.phase !== 'BANK_MENU') return state;
-
-  const reward = BANK_REWARDS.find((r) => r.id === rewardId);
-  const active = getActivePlayer(state);
-  if (!reward || active.points < reward.pointCost) return state;
-
-  const ownShops = Object.values(state.shops).filter((s) => s.ownerId === active.id);
-  if (reward.id === 'remote_deliver' && (ownShops.length === 0 || active.blockDeliveryTurns > 0)) {
-    return state;
-  }
-
-  let nextPlayers = state.players.map((p, idx) =>
-    idx === state.activePlayerIndex ? { ...p, points: p.points - reward.pointCost } : p
-  );
-  let nextShops: Record<string, Shop> = state.shops;
-
-  if (reward.id === 'earn_point') {
-    nextPlayers = nextPlayers.map((p, idx) =>
-      idx === state.activePlayerIndex ? { ...p, points: p.points + 1 } : p
-    );
-  } else if (reward.id === 'cash_200') {
-    nextPlayers = nextPlayers.map((p, idx) =>
-      idx === state.activePlayerIndex ? { ...p, cash: p.cash + 250 } : p
-    );
-  } else if (reward.id === 'block_delivery' && targetPlayerId) {
-    nextPlayers = nextPlayers.map((p) =>
-      p.id === targetPlayerId ? { ...p, blockDeliveryTurns: p.blockDeliveryTurns + 2 } : p
-    );
-  } else if (reward.id === 'close_rival' && targetShopId && state.shops[targetShopId]) {
-    const targetShop = state.shops[targetShopId]!;
-    nextShops = { ...state.shops, [targetShopId]: { ...targetShop, isClosedTurns: 2 } };
-  } else if (reward.id === 'win_game') {
-    return {
-      ...state,
-      players: nextPlayers,
-      phase: 'GAME_OVER',
-      winnerId: active.id,
-      log: appendLog(state, `${active.name} bought Mall Monopoly and won!`),
-    };
-  }
-
-  const nextState: GameState = {
-    ...state,
-    players: nextPlayers,
-    shops: nextShops,
-    hadBranchChoiceThisTurn: false,
-    moveHistory: [],
-    pendingUndoSnapshot: null,
-    log: appendLog(state, `${active.name} redeemed "${reward.label}".`),
-  };
-
-  if (reward.id === 'remote_deliver') {
-    return { ...nextState, phase: 'SHOP_DELIVER' };
-  }
-  return resumeAfterPostAction(nextState);
-}
-
 export function applyAction(state: GameState, action: GameAction): GameState {
   if (state.phase === 'GAME_OVER') return state;
 
   switch (action.type) {
     case 'ROLL_PENCIL':
-      return handleRollPencil(state);
+      return handleRollPencil(state, action.chosenFace);
     case 'CHOOSE_DIRECTION':
       return handleChooseDirection(state, action.direction);
     case 'ADVANCE_STEP':

@@ -55,6 +55,9 @@ export function resumeAfterPostAction(state: GameState): GameState {
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
     eventStorePrompt: null,
+    deliverMode: null,
+    deliverPreferredShopId: null,
+    deliveredShopIdsThisTurn: [],
   };
   const active = getActivePlayer(committed);
 
@@ -130,8 +133,9 @@ export function recomputeSegmentChainLevels(
       }
     }
 
-    const level = Math.min(4, component.length) as 1 | 2 | 3 | 4;
+    const chainLevel = Math.min(4, component.length) as 1 | 2 | 3 | 4;
     for (const member of component) {
+      const level = member.upgradedToL4 ? 4 : chainLevel;
       shops[member.id] = { ...member, level };
     }
   }
@@ -191,7 +195,14 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     return p;
   });
 
-  const claimedShop: Shop = { ...shop, ownerId: active.id, storeTypeId, stock: {}, isClosedTurns: 0 };
+  const claimedShop: Shop = {
+    ...shop,
+    ownerId: active.id,
+    storeTypeId,
+    upgradedToL4: false,
+    stock: {},
+    isClosedTurns: 0,
+  };
   let nextShops = recomputeSegmentChainLevels(
     { ...state, shops: { ...state.shops, [shop.id]: claimedShop } },
     shop.segmentId,
@@ -215,8 +226,12 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
   const active = getActivePlayer(state);
   if (active.blockDeliveryTurns > 0) return state;
 
+  const mode = state.deliverMode ?? 'own_paid';
   const shop = state.shops[shopId];
-  if (!shop || shop.ownerId !== active.id || !shop.storeTypeId) return state;
+  if (!shop || !shop.storeTypeId) return state;
+  if (mode === 'rival_paid' ? !shop.ownerId || shop.ownerId === active.id : shop.ownerId !== active.id) {
+    return state;
+  }
   const def = STORE_TYPES[shop.storeTypeId];
   if (!def) return state;
 
@@ -230,21 +245,37 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
     const item = def.items.find((i) => i.id === itemId);
     if (!item || item.tier > shop.level) return state;
     totalAdd += qty;
-    totalCost += item.wholesaleCost * qty;
+    totalCost += mode === 'own_free' ? 0 : item.wholesaleCost * qty;
     nextStock[itemId] = (nextStock[itemId] ?? 0) + qty;
   }
 
   if (totalAdd === 0 || getShopTotalStock(shop) + totalAdd > maxCap || totalCost > active.cash) return state;
 
+  const nextCash = active.cash - totalCost;
   const players = state.players.map((p, idx) =>
-    idx === state.activePlayerIndex ? { ...p, cash: p.cash - totalCost } : p
+    idx === state.activePlayerIndex ? { ...p, cash: nextCash } : p
   );
-  return resumeAfterPostAction({
+  const nextShops = { ...state.shops, [shop.id]: { ...shop, stock: nextStock } };
+  const deliveredIds = [...state.deliveredShopIdsThisTurn, shop.id];
+  const updatedState: GameState = {
     ...state,
     players,
-    shops: { ...state.shops, [shop.id]: { ...shop, stock: nextStock } },
+    shops: nextShops,
+    deliveredShopIdsThisTurn: deliveredIds,
     log: appendLog(state, `${active.name} delivered ${totalAdd} item(s) to ${def.name} (-$${totalCost}).`),
-  });
+  };
+
+  if (mode === 'all_own_paid') {
+    const hasMoreOwn = Object.values(nextShops).some((s) => {
+      if (s.ownerId !== active.id || !s.storeTypeId || deliveredIds.includes(s.id)) return false;
+      if (getShopTotalStock(s) >= STORE_CAPACITY_BY_LEVEL[s.level]) return false;
+      const sDef = STORE_TYPES[s.storeTypeId];
+      return sDef?.items.some((i) => i.tier <= s.level && i.wholesaleCost <= nextCash) ?? false;
+    });
+    if (hasMoreOwn) return updatedState;
+  }
+
+  return resumeAfterPostAction(updatedState);
 }
 
 export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameState {
@@ -277,7 +308,7 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
     const roll = nextRandom(seed);
     seed = roll.nextSeed;
     if (roll.value < item.cashbackChance) refunds++;
-    else netPaid += getEffectiveItemRetailPrice(state, item);
+    else netPaid += getEffectiveItemRetailPrice(state, item, shop.ownerId);
   }
 
   const ptsRoll = randomInt(seed, SHOP_RULES.pointsPerPurchaseMin, SHOP_RULES.pointsPerPurchaseMax);
@@ -322,7 +353,15 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     idx === state.activePlayerIndex ? { ...p, cash: p.cash + payout } : p
   );
 
-  const resetShop: Shop = { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
+  const resetShop: Shop = {
+    ...shop,
+    ownerId: null,
+    storeTypeId: null,
+    level: 1,
+    upgradedToL4: false,
+    stock: {},
+    isClosedTurns: 0,
+  };
   const nextShops = recomputeSegmentChainLevels(
     { ...state, shops: { ...state.shops, [shop.id]: resetShop } },
     shop.segmentId,

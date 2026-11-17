@@ -1,9 +1,9 @@
-import type { HorizontalDir, VerticalDir } from './types';
+import type { HorizontalDir, PencilFace, VerticalDir } from './types';
 
 export type DirectionChoice = HorizontalDir | VerticalDir;
 
 export type GameAction =
-  | { type: 'ROLL_PENCIL' }
+  | { type: 'ROLL_PENCIL'; chosenFace?: PencilFace }
   | { type: 'CHOOSE_DIRECTION'; direction: DirectionChoice }
   | { type: 'ADVANCE_STEP' }
   | { type: 'UNDO_STEP' }

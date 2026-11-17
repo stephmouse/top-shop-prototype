@@ -34,9 +34,11 @@ function formatTileLabel(state: GameState, tile: Tile): string {
       const def = STORE_TYPES[shop.storeTypeId];
       const total = getShopTotalStock(shop);
       const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
-      const mult = state.globalSale?.priceMultiplier ?? 1;
+      const owner = state.players.find((p) => p.id === shop.ownerId);
+      const doubleMult = owner && owner.doublePriceTurns > 0 ? 2 : 1;
+      const mult = (state.globalSale?.priceMultiplier ?? 1) * doubleMult;
       const minPrice = getCheapestItemPrice(shop, mult);
-      const priceStr = minPrice !== null ? `$${minPrice}` : 'EMPTY';
+      const priceStr = minPrice !== null ? `$${minPrice}${doubleMult > 1 ? ' (2x)' : ''}` : 'EMPTY';
       const closed = shop.isClosedTurns > 0 ? ' [CLOSED]' : '';
       return `${def?.name ?? 'Shop'} L${shop.level}${closed}\n${total}/${cap} | ${priceStr}`;
     }
@@ -212,7 +214,18 @@ export function renderPlayersHud(container: HTMLElement, state: GameState): void
     }</span>`;
 
     const stats = document.createElement('div');
-    stats.textContent = `Cash: $${player.cash} | Net: $${netWorth} | Dir: ${hArrow} ${vArrow}`;
+    const tags: string[] = [];
+    if (player.doubleNextPayday) tags.push('2xPay');
+    if (player.skipNextPayday) tags.push('NoPay');
+    if (player.doublePriceTurns > 0) tags.push(`2x$${player.doublePriceTurns}T`);
+    if (player.pencilTurnsLeft > 0 && player.pencilMode !== 'normal') {
+      tags.push(`Pencil:${player.pencilMode}(${player.pencilTurnsLeft}T)`);
+    }
+    if (player.blockDeliveryTurns > 0) tags.push(`NoDeliv(${player.blockDeliveryTurns}T)`);
+    if (player.blockNewStoreTurns > 0) tags.push(`NoOpen(${player.blockNewStoreTurns}T)`);
+    if (player.chirpSandals) tags.push('Chirp');
+    const tagSuffix = tags.length > 0 ? ` | [${tags.join(', ')}]` : '';
+    stats.textContent = `Cash: $${player.cash} | Net: $${netWorth} | Dir: ${hArrow} ${vArrow}${tagSuffix}`;
 
     card.appendChild(head);
     card.appendChild(stats);

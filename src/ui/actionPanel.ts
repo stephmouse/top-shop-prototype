@@ -1,7 +1,8 @@
-import { BANK_REWARDS, EVENT_CARDS, STORE_TYPES } from '../config/balance';
+import { EVENT_CARDS, PENCIL_FACES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import type { GameState } from '../engine/types';
+import { renderBankPanel } from './bankPanel';
 import { renderEventStorePanel } from './eventPanel';
 import {
   renderBuyRivalPanel,
@@ -60,7 +61,26 @@ export function renderActionPanel(
   container.appendChild(stack);
 
   if (state.phase === 'ROLL_PENCIL') {
-    stack.appendChild(makeBtn('Roll Pencil (1–8 / E)', () => dispatch({ type: 'ROLL_PENCIL' }), { primary: true }));
+    stack.appendChild(
+      makeBtn('Roll Pencil (1–8 / E)', () => dispatch({ type: 'ROLL_PENCIL' }), { primary: true })
+    );
+    if (active.pencilTurnsLeft > 0 && active.pencilMode === 'slow') {
+      const slowNote = document.createElement('span');
+      slowNote.textContent = `Slow Pencil (${active.pencilTurnsLeft}T) — Instant Stop:`;
+      stack.appendChild(slowNote);
+      for (const face of PENCIL_FACES) {
+        stack.appendChild(
+          makeBtn(`[${face}]`, () => dispatch({ type: 'ROLL_PENCIL', chosenFace: face }))
+        );
+      }
+    } else if (active.pencilTurnsLeft > 0 && active.pencilMode !== 'normal') {
+      const curseNote = document.createElement('span');
+      curseNote.textContent =
+        active.pencilMode === 'ones_twos'
+          ? `Pencil Override: 1 & 2 only (${active.pencilTurnsLeft}T left)`
+          : `Pencil Override: E only (${active.pencilTurnsLeft}T left)`;
+      stack.appendChild(curseNote);
+    }
     return;
   }
 
@@ -136,69 +156,7 @@ export function renderActionPanel(
   }
 
   if (state.phase === 'BANK_MENU') {
-    const list = document.createElement('div');
-    list.className = 'card-list';
-
-    const note = document.createElement('div');
-    note.textContent = 'Bank Point Exchange (1 action per visit):';
-    list.appendChild(note);
-
-    const rivalPlayers = state.players.filter((p) => p.id !== active.id && !p.isBankrupt);
-    const rivalShops = Object.values(state.shops).filter((s) => s.ownerId && s.ownerId !== active.id);
-    const ownShops = Object.values(state.shops).filter((s) => s.ownerId === active.id);
-
-    const playerSelect = document.createElement('select');
-    rivalPlayers.forEach((p) => {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = `Target Player: ${p.name}`;
-      playerSelect.appendChild(opt);
-    });
-
-    const shopSelect = document.createElement('select');
-    rivalShops.forEach((s) => {
-      const owner = state.players.find((p) => p.id === s.ownerId);
-      const def = s.storeTypeId ? STORE_TYPES[s.storeTypeId] : undefined;
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = `Target Store: ${def?.name ?? s.id} (${owner?.name ?? '?'})`;
-      shopSelect.appendChild(opt);
-    });
-
-    if (rivalPlayers.length > 0) list.appendChild(playerSelect);
-    if (rivalShops.length > 0) list.appendChild(shopSelect);
-
-    for (const reward of BANK_REWARDS) {
-      let disabled = active.points < reward.pointCost;
-      if (reward.id === 'remote_deliver' && (ownShops.length === 0 || active.blockDeliveryTurns > 0)) {
-        disabled = true;
-      }
-      if (reward.id === 'block_delivery' && rivalPlayers.length === 0) disabled = true;
-      if (reward.id === 'close_rival' && rivalShops.length === 0) disabled = true;
-
-      list.appendChild(
-        makeBtn(
-          `[${reward.pointCost} pts] ${reward.label}`,
-          () =>
-            dispatch({
-              type: 'REDEEM_BANK_REWARD',
-              rewardId: reward.id,
-              targetPlayerId: playerSelect.value || undefined,
-              targetShopId: shopSelect.value || undefined,
-            }),
-          { disabled }
-        )
-      );
-    }
-
-    list.appendChild(
-      makeBtn(
-        state.pendingPostBankPhase === 'STEPPING' ? 'Skip & Continue Moving' : 'Leave Bank',
-        () => dispatch({ type: 'CLOSE_BANK_MENU' }),
-        { primary: true }
-      )
-    );
-    stack.appendChild(list);
+    renderBankPanel(stack, state, dispatch);
     return;
   }
 
