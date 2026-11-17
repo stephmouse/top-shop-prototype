@@ -66,6 +66,10 @@ export interface Player {
   stepsSincePayday: number;
   blockDeliveryTurns: number;
   blockNewStoreTurns: number;
+  skipNextTurn: boolean;
+  unlockDirNextTurn: boolean;
+  reverseDirNextTurn: boolean;
+  chirpSandals: boolean;
   isBankrupt: boolean;
   isBot: boolean;
 }
@@ -77,6 +81,7 @@ export type TurnPhase =
   | 'ESCALATOR_RIDE'
   | 'ESCALATOR_UNDO'
   | 'EVENT_PICK'
+  | 'EVENT_PICK_STORE'
   | 'BANK_MENU'
   | 'SHOP_BUY_RIVAL'
   | 'SHOP_BUY_SLOT'
@@ -92,11 +97,58 @@ export interface MatchConfig {
   finishRoundOnWin: boolean;
 }
 
+export type EventScope = 'self' | 'all' | 'others';
+
+export type EventEffect =
+  | { kind: 'nothing' }
+  | { kind: 'cash_gift'; amount: number }
+  | { kind: 'pay_each_rival'; amount: number }
+  | { kind: 'collect_each_rival'; amount: number }
+  | { kind: 'drop_cash_fraction'; numerator: number; denominator: number }
+  | { kind: 'equalize_cash' }
+  | { kind: 'sell_store_prompt'; multiplier: number; forced: boolean }
+  | { kind: 'sell_empty_stores'; scope: EventScope; multiplier: number }
+  | { kind: 'buy_empty_store' }
+  | { kind: 'lose_store' }
+  | { kind: 'close_stores'; scope: EventScope; rounds: number }
+  | { kind: 'close_empty_stores'; rounds: number }
+  | { kind: 'restock_grade'; mode: 'second_cheapest_two' | 'dearest_one' }
+  | { kind: 'downgrade_stock' }
+  | { kind: 'lose_some_stock' }
+  | { kind: 'unlock_dir_next' }
+  | { kind: 'reverse_dir_next' }
+  | { kind: 'roll_again' }
+  | { kind: 'draw_another' }
+  | { kind: 'go_steps_1_7' }
+  | { kind: 'miss_turn' }
+  | { kind: 'chirp_sandals' }
+  | { kind: 'elevator_lock'; mode: 'none' | 'only_self' | 'ban_self'; rounds: number }
+  | { kind: 'global_sale'; priceMultiplier: number; rounds: number };
+
 export interface EventCardDef {
   id: string;
   name: string;
   description: string;
   pointsAwarded: number;
+  effect: EventEffect;
+}
+
+export interface GlobalSaleState {
+  label: string;
+  priceMultiplier: number;
+  turnsLeft: number;
+}
+
+export interface ElevatorLockState {
+  turnsLeft: number;
+  onlyPlayerId: string | null;
+  blockedPlayerId: string | null;
+}
+
+export interface EventStorePrompt {
+  mode: 'sell' | 'lose' | 'buy_empty';
+  multiplier: number;
+  forced: boolean;
 }
 
 export interface BankRewardDef {
@@ -131,6 +183,9 @@ export interface GameState {
   pendingUndoSnapshot: MoveSnapshot | null;
   pendingPostBankPhase: TurnPhase | null;
   eventChoices: string[];
+  eventStorePrompt: EventStorePrompt | null;
+  globalSale: GlobalSaleState | null;
+  elevatorLock: ElevatorLockState | null;
   config: MatchConfig;
   players: Player[];
   tiles: Record<string, Tile>;

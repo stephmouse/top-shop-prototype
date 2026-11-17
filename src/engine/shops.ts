@@ -1,10 +1,11 @@
 import { SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { SEGMENT_POOLS } from '../config/testMap';
+import { SEGMENT_POOLS } from '../config/map1';
 import {
   advanceToNextTurn,
   appendLog,
   computeShopAssetValue,
   getActivePlayer,
+  getEffectiveItemRetailPrice,
   getTile,
 } from './helpers';
 import { nextRandom, randomInt } from './rng';
@@ -19,23 +20,14 @@ export function getAllowedStoreTypeIds(
   const existingOwn = Object.values(state.shops).find(
     (s) => s.ownerId === playerId && s.segmentId === segmentId && s.storeTypeId
   );
-  if (existingOwn?.storeTypeId) {
-    return [existingOwn.storeTypeId];
-  }
+  if (existingOwn?.storeTypeId) return [existingOwn.storeTypeId];
 
   const rivalTakenTypes = new Set<string>();
   for (const s of Object.values(state.shops)) {
-    if (
-      s.id !== excludingShopId &&
-      s.segmentId === segmentId &&
-      s.ownerId &&
-      s.ownerId !== playerId &&
-      s.storeTypeId
-    ) {
+    if (s.id !== excludingShopId && s.segmentId === segmentId && s.ownerId && s.ownerId !== playerId && s.storeTypeId) {
       rivalTakenTypes.add(s.storeTypeId);
     }
   }
-
   return (SEGMENT_POOLS[segmentId] ?? []).filter((id) => !rivalTakenTypes.has(id));
 }
 
@@ -43,14 +35,15 @@ export function getShopTotalStock(shop: Shop): number {
   return Object.values(shop.stock).reduce((sum, qty) => sum + qty, 0);
 }
 
-export function getCheapestItemPrice(shop: Shop): number | null {
+export function getCheapestItemPrice(shop: Shop, priceMultiplier = 1): number | null {
   if (!shop.storeTypeId) return null;
   const def = STORE_TYPES[shop.storeTypeId];
   if (!def) return null;
   let min: number | null = null;
   for (const item of def.items) {
     if ((shop.stock[item.id] ?? 0) > 0) {
-      if (min === null || item.retailPrice < min) min = item.retailPrice;
+      const price = Math.max(1, Math.round(item.retailPrice * priceMultiplier));
+      if (min === null || price < min) min = price;
     }
   }
   return min;
@@ -61,6 +54,7 @@ export function resumeAfterPostAction(state: GameState): GameState {
     ...state,
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
+    eventStorePrompt: null,
   };
   const active = getActivePlayer(committed);
 
@@ -90,7 +84,7 @@ export function resumeAfterPostAction(state: GameState): GameState {
   return advanceToNextTurn({ ...committed, pendingPostBankPhase: null });
 }
 
-function buildStarterStock(storeTypeId: string, level: 1 | 2 | 3 | 4): Record<string, number> {
+export function buildStarterStock(storeTypeId: string, level: 1 | 2 | 3 | 4): Record<string, number> {
   const def = STORE_TYPES[storeTypeId];
   if (!def) return {};
   const slots = STORE_CAPACITY_BY_LEVEL[level];
@@ -102,7 +96,7 @@ function buildStarterStock(storeTypeId: string, level: 1 | 2 | 3 | 4): Record<st
   return stock;
 }
 
-function recomputeSegmentChainLevels(
+export function recomputeSegmentChainLevels(
   state: GameState,
   segmentId: string,
   ownerId: string
@@ -129,12 +123,7 @@ function recomputeSegmentChainLevels(
         if (!sideTileId) continue;
         const sideTile = state.tiles[sideTileId];
         const sideShop = sideTile?.shopSlotId ? shops[sideTile.shopSlotId] : undefined;
-        if (
-          sideShop &&
-          sideShop.segmentId === segmentId &&
-          sideShop.ownerId === ownerId &&
-          !visited.has(sideShop.id)
-        ) {
+        if (sideShop && sideShop.segmentId === segmentId && sideShop.ownerId === ownerId && !visited.has(sideShop.id)) {
           visited.add(sideShop.id);
           queue.push(sideShop);
         }
@@ -167,26 +156,15 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
     idx === state.activePlayerIndex ? { ...p, cash: p.cash - def.baseOpenCost } : p
   );
   const claimedShop: Shop = { ...shop, ownerId: active.id, storeTypeId, stock: {} };
-  const interimState: GameState = {
-    ...state,
-    players,
-    shops: { ...state.shops, [shop.id]: claimedShop },
-  };
-
-  const leveledShops = recomputeSegmentChainLevels(interimState, shop.segmentId, active.id);
+  const interim: GameState = { ...state, players, shops: { ...state.shops, [shop.id]: claimedShop } };
+  const leveledShops = recomputeSegmentChainLevels(interim, shop.segmentId, active.id);
   const updatedNewShop = leveledShops[shop.id]!;
-  leveledShops[shop.id] = {
-    ...updatedNewShop,
-    stock: buildStarterStock(storeTypeId, updatedNewShop.level),
-  };
+  leveledShops[shop.id] = { ...updatedNewShop, stock: buildStarterStock(storeTypeId, updatedNewShop.level) };
 
   return resumeAfterPostAction({
-    ...interimState,
+    ...interim,
     shops: leveledShops,
-    log: appendLog(
-      state,
-      `${active.name} opened ${def.name} L${updatedNewShop.level} (-$${def.baseOpenCost}, stocked).`
-    ),
+    log: appendLog(state, `${active.name} opened ${def.name} L${updatedNewShop.level} (-$${def.baseOpenCost}, stocked).`),
   });
 }
 
@@ -196,9 +174,7 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
   const tile = getTile(state, active.tileId);
   if (!tile.shopSlotId) return state;
   const shop = state.shops[tile.shopSlotId];
-  if (!shop || !shop.ownerId || shop.ownerId === active.id || getShopTotalStock(shop) > 0) {
-    return state;
-  }
+  if (!shop || !shop.ownerId || shop.ownerId === active.id || getShopTotalStock(shop) > 0) return state;
 
   const oldDef = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
   const newDef = STORE_TYPES[storeTypeId];
@@ -230,18 +206,11 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     ...state,
     players,
     shops: nextShops,
-    log: appendLog(
-      state,
-      `${active.name} bought out store as ${newDef.name} L${updatedNewShop.level} (-$${cost}).`
-    ),
+    log: appendLog(state, `${active.name} bought out store as ${newDef.name} L${updatedNewShop.level} (-$${cost}).`),
   });
 }
 
-export function handleDeliverItems(
-  state: GameState,
-  shopId: string,
-  order: Record<string, number>
-): GameState {
+export function handleDeliverItems(state: GameState, shopId: string, order: Record<string, number>): GameState {
   if (state.phase !== 'SHOP_DELIVER') return state;
   const active = getActivePlayer(state);
   if (active.blockDeliveryTurns > 0) return state;
@@ -265,9 +234,7 @@ export function handleDeliverItems(
     nextStock[itemId] = (nextStock[itemId] ?? 0) + qty;
   }
 
-  if (totalAdd === 0 || getShopTotalStock(shop) + totalAdd > maxCap || totalCost > active.cash) {
-    return state;
-  }
+  if (totalAdd === 0 || getShopTotalStock(shop) + totalAdd > maxCap || totalCost > active.cash) return state;
 
   const players = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, cash: p.cash - totalCost } : p
@@ -310,7 +277,7 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
     const roll = nextRandom(seed);
     seed = roll.nextSeed;
     if (roll.value < item.cashbackChance) refunds++;
-    else netPaid += item.retailPrice;
+    else netPaid += getEffectiveItemRetailPrice(state, item);
   }
 
   const ptsRoll = randomInt(seed, SHOP_RULES.pointsPerPurchaseMin, SHOP_RULES.pointsPerPurchaseMax);
@@ -355,14 +322,7 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     idx === state.activePlayerIndex ? { ...p, cash: p.cash + payout } : p
   );
 
-  const resetShop: Shop = {
-    ...shop,
-    ownerId: null,
-    storeTypeId: null,
-    level: 1,
-    stock: {},
-    isClosedTurns: 0,
-  };
+  const resetShop: Shop = { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
   const nextShops = recomputeSegmentChainLevels(
     { ...state, shops: { ...state.shops, [shop.id]: resetShop } },
     shop.segmentId,

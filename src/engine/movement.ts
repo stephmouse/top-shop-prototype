@@ -4,6 +4,7 @@ import {
   advanceToNextTurn,
   appendLog,
   canCancelMove,
+  canPlayerUseElevator,
   computePaydayAmount,
   drawThreeEventIds,
   getActivePlayer,
@@ -260,6 +261,14 @@ export function resolveTileLanding(state: GameState): GameState {
   const postState: GameState = state.hadBranchChoiceThisTurn ? state : { ...state, moveHistory: [] };
 
   if (tile.type === 'elevator') {
+    if (!canPlayerUseElevator(postState, player.id)) {
+      return advanceToNextTurn({
+        ...postState,
+        moveHistory: [],
+        hadBranchChoiceThisTurn: false,
+        log: appendLog(postState, `${player.name} landed on locked Elevator.`),
+      });
+    }
     return { ...postState, phase: 'ELEVATOR_PROMPT', log: appendLog(postState, `${player.name} stopped at Elevator.`) };
   }
 
@@ -284,7 +293,7 @@ export function resolveTileLanding(state: GameState): GameState {
 export function handleResolveElevator(state: GameState, ride: boolean): GameState {
   if (state.phase !== 'ELEVATOR_PROMPT') return state;
   const player = getActivePlayer(state);
-  if (!ride) {
+  if (!ride || !canPlayerUseElevator(state, player.id)) {
     const unlocked = updateActivePlayer(state, { horizontalDir: null, verticalDir: null });
     return advanceToNextTurn({
       ...unlocked,

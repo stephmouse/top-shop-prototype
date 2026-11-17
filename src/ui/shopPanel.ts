@@ -4,7 +4,12 @@ import {
   STORE_TYPES,
 } from '../config/balance';
 import type { GameAction } from '../engine/actions';
-import { computeShopAssetValue, getActivePlayer, getTile } from '../engine/helpers';
+import {
+  computeShopAssetValue,
+  getActivePlayer,
+  getEffectiveItemRetailPrice,
+  getTile,
+} from '../engine/helpers';
 import { getAllowedStoreTypeIds, getShopTotalStock } from '../engine/shops';
 import type { GameState, Shop } from '../engine/types';
 
@@ -210,7 +215,7 @@ export function renderBuyRivalPanel(
   const refresh = () => {
     const total = selectedIds.reduce((sum, id) => {
       const it = def.items.find((i) => i.id === id);
-      return sum + (it?.retailPrice ?? 0);
+      return sum + (it ? getEffectiveItemRetailPrice(state, it) : 0);
     }, 0);
     summary.textContent = `Selected: ${selectedIds.length}/2 (Must buy 1–2) | Total: $${total}`;
     buyBtn.disabled = selectedIds.length < 1 || selectedIds.length > 2;
@@ -222,12 +227,13 @@ export function renderBuyRivalPanel(
 
   for (const item of sortedStockedItems) {
     const stockQty = shop.stock[item.id] ?? 0;
+    const price = getEffectiveItemRetailPrice(state, item);
     const row = document.createElement('div');
     row.className = 'action-stack';
     const label = document.createElement('span');
     const updateLabel = () => {
       const chosenCount = selectedIds.filter((id) => id === item.id).length;
-      label.textContent = `${item.name} ($${item.retailPrice}, CB ${Math.round(item.cashbackChance * 100)}%) [Stock: ${stockQty}] Picked: ${chosenCount}`;
+      label.textContent = `${item.name} ($${price}, CB ${Math.round(item.cashbackChance * 100)}%) [Stock: ${stockQty}] Picked: ${chosenCount}`;
       refresh();
     };
     row.appendChild(makeBtn('-', () => {

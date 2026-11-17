@@ -1,6 +1,6 @@
 import { EVENT_CARDS, PAYDAY_CONFIG, STORE_TYPES } from '../config/balance';
 import { pickRandom } from './rng';
-import type { GameState, Player, Shop, Tile } from './types';
+import type { GameState, ItemDef, Player, Shop, Tile } from './types';
 
 export function getActivePlayer(state: GameState): Player {
   const player = state.players[state.activePlayerIndex];
@@ -36,6 +36,19 @@ export function drawThreeEventIds(seed: number): { ids: string[]; nextSeed: numb
     if (removeIdx >= 0) pool.splice(removeIdx, 1);
   }
   return { ids, nextSeed: currentSeed };
+}
+
+export function getEffectiveItemRetailPrice(state: GameState, item: ItemDef): number {
+  const mult = state.globalSale?.priceMultiplier ?? 1;
+  return Math.max(1, Math.round(item.retailPrice * mult));
+}
+
+export function canPlayerUseElevator(state: GameState, playerId: string): boolean {
+  const lock = state.elevatorLock;
+  if (!lock) return true;
+  if (lock.onlyPlayerId !== null) return playerId === lock.onlyPlayerId;
+  if (lock.blockedPlayerId !== null) return playerId !== lock.blockedPlayerId;
+  return false;
 }
 
 export function canCancelMove(state: GameState): boolean {
@@ -145,6 +158,7 @@ export function checkVictory(state: GameState): string | null {
 }
 
 export function advanceToNextTurn(state: GameState): GameState {
+  const finishedId = getActivePlayer(state).id;
   const nextPlayers = state.players.map((p, idx) => {
     if (idx !== state.activePlayerIndex) return p;
     return {
@@ -157,17 +171,59 @@ export function advanceToNextTurn(state: GameState): GameState {
   const nextShops: Record<string, Shop> = {};
   for (const [id, shop] of Object.entries(state.shops)) {
     nextShops[id] =
-      shop.ownerId === getActivePlayer(state).id && shop.isClosedTurns > 0
+      shop.ownerId === finishedId && shop.isClosedTurns > 0
         ? { ...shop, isClosedTurns: shop.isClosedTurns - 1 }
         : shop;
   }
 
+  const nextSale =
+    state.globalSale && state.globalSale.turnsLeft > 1
+      ? { ...state.globalSale, turnsLeft: state.globalSale.turnsLeft - 1 }
+      : null;
+  const nextElevLock =
+    state.elevatorLock && state.elevatorLock.turnsLeft > 1
+      ? { ...state.elevatorLock, turnsLeft: state.elevatorLock.turnsLeft - 1 }
+      : null;
+
+  let log = state.log;
   const total = nextPlayers.length;
   let nextIndex = (state.activePlayerIndex + 1) % total;
   let guard = 0;
-  while (nextPlayers[nextIndex]?.isBankrupt && guard < total) {
-    nextIndex = (nextIndex + 1) % total;
-    guard++;
+
+  while (guard < total) {
+    const cand = nextPlayers[nextIndex];
+    if (!cand || cand.isBankrupt) {
+      nextIndex = (nextIndex + 1) % total;
+      guard++;
+      continue;
+    }
+    if (cand.skipNextTurn) {
+      nextPlayers[nextIndex] = { ...cand, skipNextTurn: false };
+      log = [`[T${state.turnNumber}] ${cand.name} missed their turn!`, ...log].slice(0, 40);
+      nextIndex = (nextIndex + 1) % total;
+      guard++;
+      continue;
+    }
+    break;
+  }
+
+  const incoming = nextPlayers[nextIndex];
+  if (incoming) {
+    let hDir = incoming.horizontalDir;
+    let vDir = incoming.verticalDir;
+    if (incoming.unlockDirNextTurn) {
+      hDir = null;
+      vDir = null;
+    } else if (incoming.reverseDirNextTurn && hDir) {
+      hDir = hDir === 'left' ? 'right' : 'left';
+    }
+    nextPlayers[nextIndex] = {
+      ...incoming,
+      horizontalDir: hDir,
+      verticalDir: vDir,
+      unlockDirNextTurn: false,
+      reverseDirNextTurn: false,
+    };
   }
 
   const isRoundBoundary = nextIndex === state.roundStartPlayerIndex;
@@ -175,6 +231,8 @@ export function advanceToNextTurn(state: GameState): GameState {
     ...state,
     players: nextPlayers,
     shops: nextShops,
+    globalSale: nextSale,
+    elevatorLock: nextElevLock,
     activePlayerIndex: nextIndex,
     turnNumber: state.turnNumber + 1,
     lastRoll: null,
@@ -184,6 +242,8 @@ export function advanceToNextTurn(state: GameState): GameState {
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
     eventChoices: [],
+    eventStorePrompt: null,
+    log,
   };
 
   if (!state.config.finishRoundOnWin || isRoundBoundary) {
@@ -199,8 +259,5 @@ export function advanceToNextTurn(state: GameState): GameState {
     }
   }
 
-  return {
-    ...candidateState,
-    phase: 'ROLL_PENCIL',
-  };
+  return { ...candidateState, phase: 'ROLL_PENCIL' };
 }

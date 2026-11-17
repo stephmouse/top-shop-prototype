@@ -1,6 +1,6 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { TEST_MAP_COLS, TEST_MAP_FLOORS } from '../config/testMap';
-import { computePlayerNetWorth, getActivePlayer } from '../engine/helpers';
+import { MAP_COLS, MAP_FLOORS } from '../config/map1';
+import { canPlayerUseElevator, computePlayerNetWorth, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import { getCheapestItemPrice, getShopTotalStock } from '../engine/shops';
 import type { GameState, Tile } from '../engine/types';
@@ -13,11 +13,12 @@ export interface BoardInteractionOptions {
 }
 
 function formatTileLabel(state: GameState, tile: Tile): string {
+  const active = getActivePlayer(state);
   switch (tile.type) {
     case 'bank':
       return 'BANK ($ / Pts)';
     case 'elevator':
-      return 'ELEVATOR';
+      return canPlayerUseElevator(state, active.id) ? 'ELEVATOR' : 'ELEV [LOCKED]';
     case 'escalator': {
       const { up, down } = tile.neighbors;
       if (up && down) return 'ESC ↕ (X)';
@@ -33,7 +34,8 @@ function formatTileLabel(state: GameState, tile: Tile): string {
       const def = STORE_TYPES[shop.storeTypeId];
       const total = getShopTotalStock(shop);
       const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
-      const minPrice = getCheapestItemPrice(shop);
+      const mult = state.globalSale?.priceMultiplier ?? 1;
+      const minPrice = getCheapestItemPrice(shop, mult);
       const priceStr = minPrice !== null ? `$${minPrice}` : 'EMPTY';
       const closed = shop.isClosedTurns > 0 ? ' [CLOSED]' : '';
       return `${def?.name ?? 'Shop'} L${shop.level}${closed}\n${total}/${cap} | ${priceStr}`;
@@ -51,6 +53,8 @@ export function renderBoard(
   interaction?: BoardInteractionOptions
 ): void {
   container.innerHTML = '';
+  container.style.gridTemplateColumns = `repeat(${MAP_COLS}, minmax(0, 1fr))`;
+
   const activePlayer = getActivePlayer(state);
   const nextByTile = new Map(
     (interaction?.preview.nextTiles ?? []).map((opt) => [opt.tileId, opt])
@@ -59,8 +63,8 @@ export function renderBoard(
     (interaction?.preview.endTargets ?? []).map((target) => [target.tileId, target])
   );
 
-  for (let floor = TEST_MAP_FLOORS; floor >= 1; floor--) {
-    for (let col = 0; col < TEST_MAP_COLS; col++) {
+  for (let floor = MAP_FLOORS; floor >= 1; floor--) {
+    for (let col = 0; col < MAP_COLS; col++) {
       const tile = findTileAt(state, floor, col);
       const cell = document.createElement('div');
       if (!tile) {

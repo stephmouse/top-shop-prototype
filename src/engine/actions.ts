@@ -10,6 +10,8 @@ export type GameAction =
   | { type: 'CANCEL_MOVE' }
   | { type: 'RESOLVE_ELEVATOR'; ride: boolean }
   | { type: 'PICK_EVENT_CARD'; cardId: string }
+  | { type: 'RESOLVE_EVENT_STORE'; shopId: string; storeTypeId?: string }
+  | { type: 'SKIP_EVENT_STORE' }
   | { type: 'REDEEM_BANK_REWARD'; rewardId: string; targetPlayerId?: string; targetShopId?: string }
   | { type: 'CLOSE_BANK_MENU' }
   | { type: 'OPEN_SHOP'; storeTypeId: string }

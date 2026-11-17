@@ -1,6 +1,7 @@
-import { BANK_REWARDS, DEFAULT_MATCH_CONFIG, EVENT_CARDS, PLAYER_COLORS } from '../config/balance';
-import { createTestMap, START_TILE_ID } from '../config/testMap';
+import { BANK_REWARDS, DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
+import { createMap1, START_TILE_ID } from '../config/map1';
 import type { GameAction } from './actions';
+import { handlePickEventCard, handleResolveEventStore, handleSkipEventStore } from './events';
 import { advanceToNextTurn, appendLog, getActivePlayer } from './helpers';
 import {
   handleAdvanceStep,
@@ -10,7 +11,6 @@ import {
   handleRollPencil,
   handleUndoStep,
 } from './movement';
-import { pickRandom } from './rng';
 import {
   handleBuyoutShop,
   handleBuyRivalItems,
@@ -32,7 +32,7 @@ export function createInitialGameState(
   seed = 1337
 ): GameState {
   const config: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...configOverrides };
-  const { tiles, shops } = createTestMap();
+  const { tiles, shops } = createMap1();
 
   const players: Player[] = playerInputs.map((input, idx) => ({
     id: `p_${idx + 1}`,
@@ -46,6 +46,10 @@ export function createInitialGameState(
     stepsSincePayday: 0,
     blockDeliveryTurns: 0,
     blockNewStoreTurns: 0,
+    skipNextTurn: false,
+    unlockDirNextTurn: false,
+    reverseDirNextTurn: false,
+    chirpSandals: false,
     isBankrupt: false,
     isBot: Boolean(input.isBot),
   }));
@@ -63,88 +67,16 @@ export function createInitialGameState(
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
     eventChoices: [],
+    eventStorePrompt: null,
+    globalSale: null,
+    elevatorLock: null,
     config,
     players,
     tiles,
     shops,
     winnerId: null,
-    log: ['Match started at Floor 1 Bank.'],
+    log: ['Match started at Floor 1 Bank (Map 1).'],
   };
-}
-
-function handlePickEventCard(state: GameState, cardId: string): GameState {
-  if (state.phase !== 'EVENT_PICK' || !state.eventChoices.includes(cardId)) {
-    return state;
-  }
-  const card = EVENT_CARDS.find((c) => c.id === cardId);
-  if (!card) return state;
-
-  const active = getActivePlayer(state);
-  let nextSeed = state.seed;
-  let nextShops = state.shops;
-  let cashDelta = 0;
-  let unlockDir = false;
-  let triggerRemoteDeliver = false;
-  let detail = '';
-
-  if (card.id === 'cash_bonus') {
-    cashDelta = 300;
-  } else if (card.id === 'tax_audit') {
-    cashDelta = -200;
-  } else if (card.id === 'free_direction') {
-    unlockDir = true;
-  } else if (card.id === 'close_random') {
-    const rivalShops = Object.values(state.shops).filter(
-      (s) => s.ownerId && s.ownerId !== active.id
-    );
-    if (rivalShops.length > 0) {
-      const picked = pickRandom(nextSeed, rivalShops);
-      nextSeed = picked.nextSeed;
-      const target = picked.value;
-      nextShops = {
-        ...state.shops,
-        [target.id]: { ...target, isClosedTurns: 2 },
-      };
-      detail = ' Closed a rival store for 2 turns.';
-    }
-  } else if (card.id === 'remote_stock') {
-    const ownShops = Object.values(state.shops).filter((s) => s.ownerId === active.id);
-    if (ownShops.length > 0 && active.blockDeliveryTurns === 0) {
-      triggerRemoteDeliver = true;
-    }
-  }
-
-  const players = state.players.map((p, idx) =>
-    idx === state.activePlayerIndex
-      ? {
-          ...p,
-          cash: p.cash + cashDelta,
-          points: p.points + card.pointsAwarded,
-          horizontalDir: unlockDir ? null : p.horizontalDir,
-          verticalDir: unlockDir ? null : p.verticalDir,
-        }
-      : p
-  );
-
-  const updated: GameState = {
-    ...state,
-    seed: nextSeed,
-    players,
-    shops: nextShops,
-    hadBranchChoiceThisTurn: false,
-    moveHistory: [],
-    pendingUndoSnapshot: null,
-    eventChoices: [],
-    log: appendLog(
-      state,
-      `${active.name} picked "${card.name}" (+${card.pointsAwarded} pts).${detail}`
-    ),
-  };
-
-  if (triggerRemoteDeliver) {
-    return { ...updated, phase: 'SHOP_DELIVER' };
-  }
-  return resumeAfterPostAction(updated);
 }
 
 function handleRedeemBankReward(
@@ -210,11 +142,6 @@ function handleRedeemBankReward(
   return resumeAfterPostAction(nextState);
 }
 
-function handleCloseBankMenu(state: GameState): GameState {
-  if (state.phase !== 'BANK_MENU') return state;
-  return resumeAfterPostAction(state);
-}
-
 export function applyAction(state: GameState, action: GameAction): GameState {
   if (state.phase === 'GAME_OVER') return state;
 
@@ -233,15 +160,14 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return handleResolveElevator(state, action.ride);
     case 'PICK_EVENT_CARD':
       return handlePickEventCard(state, action.cardId);
+    case 'RESOLVE_EVENT_STORE':
+      return handleResolveEventStore(state, action.shopId, action.storeTypeId);
+    case 'SKIP_EVENT_STORE':
+      return handleSkipEventStore(state);
     case 'REDEEM_BANK_REWARD':
-      return handleRedeemBankReward(
-        state,
-        action.rewardId,
-        action.targetPlayerId,
-        action.targetShopId
-      );
+      return handleRedeemBankReward(state, action.rewardId, action.targetPlayerId, action.targetShopId);
     case 'CLOSE_BANK_MENU':
-      return handleCloseBankMenu(state);
+      return state.phase === 'BANK_MENU' ? resumeAfterPostAction(state) : state;
     case 'OPEN_SHOP':
       return handleOpenShop(state, action.storeTypeId);
     case 'BUYOUT_SHOP':

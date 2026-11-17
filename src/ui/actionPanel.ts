@@ -2,6 +2,7 @@ import { BANK_REWARDS, EVENT_CARDS, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import type { GameState } from '../engine/types';
+import { renderEventStorePanel } from './eventPanel';
 import {
   renderBuyRivalPanel,
   renderBuySlotPanel,
@@ -48,7 +49,10 @@ export function renderActionPanel(
 
   const heading = document.createElement('h3');
   heading.className = 'panel-title';
-  heading.textContent = `Turn ${state.turnNumber} — ${active.name} (${state.phase})`;
+  const saleTag = state.globalSale
+    ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
+    : '';
+  heading.textContent = `Turn ${state.turnNumber} — ${active.name} (${state.phase})${saleTag}`;
   container.appendChild(heading);
 
   const stack = document.createElement('div');
@@ -123,6 +127,11 @@ export function renderActionPanel(
       );
     }
     stack.appendChild(list);
+    return;
+  }
+
+  if (state.phase === 'EVENT_PICK_STORE') {
+    renderEventStorePanel(stack, state, dispatch);
     return;
   }
 
