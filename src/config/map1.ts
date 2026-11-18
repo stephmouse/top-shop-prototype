@@ -54,6 +54,7 @@ function addShopWing(
 export function createMap1(): {
   tiles: Record<string, Tile>;
   shops: Record<string, Shop>;
+  segmentPools: Record<string, string[]>;
 } {
   const tiles: Record<string, Tile> = {
     // --- Outer Escalators (c0 and c10) ---
@@ -98,5 +99,5 @@ export function createMap1(): {
     }
   }
 
-  return { tiles, shops };
+  return { tiles, shops, segmentPools: SEGMENT_POOLS };
 }

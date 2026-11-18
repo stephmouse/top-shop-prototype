@@ -1,5 +1,4 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { MAP_COLS, MAP_FLOORS } from '../config/map1';
 import { canPlayerUseElevator, computePlayerNetWorth, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import { getCheapestItemPrice, getShopTotalStock } from '../engine/shops';
@@ -12,24 +11,33 @@ export interface BoardInteractionOptions {
   onHoverEndTarget?: (tileId: string | null) => void;
 }
 
-function formatTileLabel(state: GameState, tile: Tile): string {
+interface TileContent {
+  name: string;
+  stats?: string;
+  isClosed?: boolean;
+}
+
+function formatTileContent(state: GameState, tile: Tile): TileContent {
   const active = getActivePlayer(state);
   switch (tile.type) {
     case 'bank':
-      return 'BANK ($ / Pts)';
+      return { name: 'BANK', stats: '$ / Pts' };
     case 'elevator':
-      return canPlayerUseElevator(state, active.id) ? 'ELEVATOR' : 'ELEV [LOCKED]';
+      return {
+        name: 'ELEVATOR',
+        stats: canPlayerUseElevator(state, active.id) ? undefined : 'LOCKED',
+      };
     case 'escalator': {
       const { up, down } = tile.neighbors;
-      if (up && down) return 'ESC ↕ (X)';
-      if (up) return up.exitHorizontalDir === 'right' ? 'ESC ↗' : 'ESC ↖';
-      if (down) return down.exitHorizontalDir === 'right' ? 'ESC ↘' : 'ESC ↙';
-      return 'ESC';
+      if (up && down) return { name: 'ESC ↕ (X)' };
+      if (up) return { name: up.exitHorizontalDir === 'right' ? 'ESC ↗' : 'ESC ↖' };
+      if (down) return { name: down.exitHorizontalDir === 'right' ? 'ESC ↘' : 'ESC ↙' };
+      return { name: 'ESC' };
     }
     case 'shop': {
       const shop = tile.shopSlotId ? state.shops[tile.shopSlotId] : undefined;
       if (!shop || !shop.ownerId || !shop.storeTypeId) {
-        return 'Tenant Wanted';
+        return { name: 'Tenant Wanted' };
       }
       const def = STORE_TYPES[shop.storeTypeId];
       const total = getShopTotalStock(shop);
@@ -38,9 +46,12 @@ function formatTileLabel(state: GameState, tile: Tile): string {
       const doubleMult = owner && owner.doublePriceTurns > 0 ? 2 : 1;
       const mult = (state.globalSale?.priceMultiplier ?? 1) * doubleMult;
       const minPrice = getCheapestItemPrice(shop, mult);
-      const priceStr = minPrice !== null ? `$${minPrice}${doubleMult > 1 ? ' (2x)' : ''}` : 'EMPTY';
-      const closed = shop.isClosedTurns > 0 ? ' [CLOSED]' : '';
-      return `${def?.name ?? 'Shop'} L${shop.level}${closed}\n${total}/${cap} | ${priceStr}`;
+      const priceStr = minPrice !== null ? `$${minPrice}${doubleMult > 1 ? '×2' : ''}` : 'EMPTY';
+      return {
+        name: def?.name ?? 'Shop',
+        stats: `L${shop.level} · ${total}/${cap} · ${priceStr}`,
+        isClosed: shop.isClosedTurns > 0,
+      };
     }
   }
 }
@@ -54,8 +65,12 @@ export function renderBoard(
   state: GameState,
   interaction?: BoardInteractionOptions
 ): void {
+  const tileValues = Object.values(state.tiles);
+  const cols = Math.max(1, ...tileValues.map((t) => t.col + 1));
+  const floors = Math.max(1, ...tileValues.map((t) => t.floor));
+
   container.innerHTML = '';
-  container.style.gridTemplateColumns = `repeat(${MAP_COLS}, minmax(0, 1fr))`;
+  container.style.gridTemplateColumns = `repeat(${cols}, minmax(104px, 1fr))`;
 
   const activePlayer = getActivePlayer(state);
   const nextByTile = new Map(
@@ -65,8 +80,8 @@ export function renderBoard(
     (interaction?.preview.endTargets ?? []).map((target) => [target.tileId, target])
   );
 
-  for (let floor = MAP_FLOORS; floor >= 1; floor--) {
-    for (let col = 0; col < MAP_COLS; col++) {
+  for (let floor = floors; floor >= 1; floor--) {
+    for (let col = 0; col < cols; col++) {
       const tile = findTileAt(state, floor, col);
       const cell = document.createElement('div');
       if (!tile) {
@@ -97,6 +112,8 @@ export function renderBoard(
         }
       }
 
+      const content = formatTileContent(state, tile);
+
       const header = document.createElement('div');
       header.className = 'tile-header';
       const coord = document.createElement('span');
@@ -113,13 +130,26 @@ export function renderBoard(
         badge.className = 'tile-badge badge-step';
         badge.textContent = nextOpt.direction ? nextOpt.direction.toUpperCase() : 'STEP';
         header.appendChild(badge);
+      } else if (content.isClosed) {
+        const badge = document.createElement('span');
+        badge.className = 'tile-badge badge-closed';
+        badge.textContent = 'CLOSED';
+        header.appendChild(badge);
       }
       cell.appendChild(header);
 
       const body = document.createElement('div');
       body.className = 'tile-body';
-      body.style.whiteSpace = 'pre-line';
-      body.textContent = formatTileLabel(state, tile);
+      const nameEl = document.createElement('div');
+      nameEl.className = 'tile-name';
+      nameEl.textContent = content.name;
+      body.appendChild(nameEl);
+      if (content.stats) {
+        const statsEl = document.createElement('div');
+        statsEl.className = 'tile-stats';
+        statsEl.textContent = content.stats;
+        body.appendChild(statsEl);
+      }
       cell.appendChild(body);
 
       const spacer = document.createElement('div');

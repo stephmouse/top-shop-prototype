@@ -160,6 +160,7 @@ export interface EventStorePrompt {
   forced: boolean;
   payerId?: string;
   allowOwnedSegment?: boolean;
+  fromBank?: boolean;
 }
 
 export type BankTargetKind =
@@ -238,6 +239,7 @@ export interface GameState {
   moveHistory: MoveSnapshot[];
   pendingUndoSnapshot: MoveSnapshot | null;
   pendingPostBankPhase: TurnPhase | null;
+  pendingBankRefundPts: number;
   deliverMode: DeliverMode | null;
   deliverPreferredShopId: string | null;
   deliveredShopIdsThisTurn: string[];
@@ -249,6 +251,7 @@ export interface GameState {
   players: Player[];
   tiles: Record<string, Tile>;
   shops: Record<string, Shop>;
+  segmentPools: Record<string, string[]>;
   winnerId: string | null;
   log: string[];
 }

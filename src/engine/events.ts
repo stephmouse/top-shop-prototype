@@ -353,6 +353,21 @@ export function handleSkipEventStore(state: GameState): GameState {
   if (state.phase !== 'EVENT_PICK_STORE' || !state.eventStorePrompt || state.eventStorePrompt.forced) {
     return state;
   }
+  if (state.eventStorePrompt.fromBank) {
+    const active = getActivePlayer(state);
+    const refund = state.pendingBankRefundPts;
+    const players = state.players.map((p, idx) =>
+      idx === state.activePlayerIndex ? { ...p, points: p.points + refund } : p
+    );
+    return {
+      ...state,
+      players,
+      phase: 'BANK_MENU',
+      pendingBankRefundPts: 0,
+      eventStorePrompt: null,
+      log: appendLog(state, `${active.name} canceled Bank store opening (+${refund} pts refunded).`),
+    };
+  }
   return resumeAfterPostAction(state);
 }
 

@@ -92,7 +92,7 @@ export function renderEventStorePanel(
 
   if (!prompt.forced) {
     const skip = document.createElement('button');
-    skip.textContent = 'Decline / Skip';
+    skip.textContent = prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip';
     skip.addEventListener('click', () => dispatch({ type: 'SKIP_EVENT_STORE' }));
     list.appendChild(skip);
   }

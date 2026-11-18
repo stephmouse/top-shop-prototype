@@ -95,17 +95,16 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
   let face: PencilFace;
 
   if (player.pencilTurnsLeft > 0 && player.pencilMode === 'ones_twos') {
-    const r = pickRandom(nextSeed, [1, 2] as const);
-    face = r.value;
-    nextSeed = r.nextSeed;
+    if (chosenFace === 1 || chosenFace === 2) {
+      face = chosenFace;
+    } else {
+      const r = pickRandom(nextSeed, [1, 2] as const);
+      face = r.value;
+      nextSeed = r.nextSeed;
+    }
   } else if (player.pencilTurnsLeft > 0 && player.pencilMode === 'event_only') {
     face = 'E';
-  } else if (
-    player.pencilTurnsLeft > 0 &&
-    player.pencilMode === 'slow' &&
-    chosenFace !== undefined &&
-    PENCIL_FACES.includes(chosenFace)
-  ) {
+  } else if (chosenFace !== undefined && PENCIL_FACES.includes(chosenFace)) {
     face = chosenFace;
   } else {
     const r = pickRandom(nextSeed, PENCIL_FACES);

@@ -217,6 +217,15 @@ window.addEventListener('keydown', (e) => {
   const tag = (e.target as HTMLElement | null)?.tagName;
   if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
+  if (state.phase === 'ROLL_PENCIL' && (e.key === ' ' || e.key === 'Enter')) {
+    const pencilBtn = actionBox.querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
+    if (pencilBtn && !pencilBtn.disabled) {
+      e.preventDefault();
+      pencilBtn.click();
+    }
+    return;
+  }
+
   if ((e.key === 'Escape' || e.key === 'Backspace') && canCancelMove(state)) {
     e.preventDefault();
     dispatch({ type: 'CANCEL_MOVE' });
@@ -285,6 +294,15 @@ function render(): void {
   });
   renderRouteOverlay(routeSvgEl, boardEl, state, preview, showRoutes, hoveredEndTileId);
   renderTokensOverlay(tokensLayerEl, boardEl, state);
+  if (boardStageEl.scrollWidth > boardStageEl.clientWidth) {
+    const activeTileId = getActivePlayer(state).tileId;
+    const activeTileEl = boardEl.querySelector<HTMLElement>(`[data-tile-id="${activeTileId}"]`);
+    if (activeTileEl) {
+      const targetLeft =
+        activeTileEl.offsetLeft - boardStageEl.clientWidth / 2 + activeTileEl.offsetWidth / 2;
+      boardStageEl.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
+    }
+  }
   renderActionPanel(actionBox, state, dispatch);
 
   logList.innerHTML = '';

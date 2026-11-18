@@ -29,6 +29,7 @@ function makeShop(id: string, tileId: string, segmentId: string): Shop {
 export function createTestMap(): {
   tiles: Record<string, Tile>;
   shops: Record<string, Shop>;
+  segmentPools: Record<string, string[]>;
 } {
   const tiles: Record<string, Tile> = {
     // --- FLOOR 1 (Bottom) ---
@@ -84,5 +85,5 @@ export function createTestMap(): {
     }
   }
 
-  return { tiles, shops };
+  return { tiles, shops, segmentPools: SEGMENT_POOLS };
 }

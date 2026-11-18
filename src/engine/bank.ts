@@ -90,6 +90,7 @@ export function handleRedeemBankReward(
       return {
         ...makeState('Select items to deliver.'),
         phase: 'SHOP_DELIVER',
+        pendingBankRefundPts: reward.pointCost,
         deliverMode: eff.mode,
         deliverPreferredShopId: targetShopId ?? null,
         deliveredShopIdsThisTurn: [],
@@ -153,12 +154,14 @@ export function handleRedeemBankReward(
       return {
         ...makeState(`Using ${rival.name}'s cash ($${rival.cash}).`),
         phase: 'EVENT_PICK_STORE',
+        pendingBankRefundPts: reward.pointCost,
         eventStorePrompt: {
           mode: 'buy_empty',
           multiplier: 1,
           forced: false,
           payerId: rival.id,
           allowOwnedSegment: true,
+          fromBank: true,
         },
       };
     }
@@ -240,7 +243,7 @@ export function handleRedeemBankReward(
       players = players.map((p) => {
         if (p.id === active.id || p.isBankrupt) return p;
         const count = Object.values(shops).filter((s) => s.ownerId === p.id).length;
-        return { ...p, cash: Math.max(0, p.cash - count * eff.amountPerStore) };
+        return { ...p, cash: p.cash - count * eff.amountPerStore };
       });
       return resumeAfterPostAction(makeState(`Rivals lost $${eff.amountPerStore}/store.`));
 
@@ -305,7 +308,14 @@ export function handleRedeemBankReward(
 
     case 'upgrade_own_store_l4': {
       const target = resolveTargetOwnShop(state, targetShopId, (s) => s.level < 4)!;
-      shops[target.id] = { ...target, level: 4, upgradedToL4: true };
+      shops = recomputeSegmentChainLevels(
+        {
+          ...state,
+          shops: { ...shops, [target.id]: { ...target, level: 4, upgradedToL4: true } },
+        },
+        target.segmentId,
+        active.id
+      );
       return resumeAfterPostAction(makeState(`Upgraded ${target.id} to Level 4!`));
     }
 

@@ -164,7 +164,31 @@ export function checkVictory(state: GameState): string | null {
 }
 
 export function advanceToNextTurn(state: GameState): GameState {
-  const finishedId = getActivePlayer(state).id;
+  const active = getActivePlayer(state);
+  if (!active.isBankrupt && active.cash < 0) {
+    const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
+    if (owned.length > 0) {
+      return {
+        ...state,
+        phase: 'LIQUIDATE_ASSETS',
+        moveHistory: [],
+        hadBranchChoiceThisTurn: false,
+        log: appendLog(state, `${active.name} has negative cash ($${active.cash}) — must sell assets.`),
+      };
+    }
+    const bankruptPlayers = state.players.map((p, idx) =>
+      idx === state.activePlayerIndex ? { ...p, isBankrupt: true } : p
+    );
+    return advanceToNextTurn({
+      ...state,
+      players: bankruptPlayers,
+      pendingPostBankPhase: null,
+      pendingBankRefundPts: 0,
+      log: appendLog(state, `${active.name} went BANKRUPT!`),
+    });
+  }
+
+  const finishedId = active.id;
   const nextPlayers = state.players.map((p, idx) => {
     if (idx !== state.activePlayerIndex) return p;
     return {
@@ -248,6 +272,7 @@ export function advanceToNextTurn(state: GameState): GameState {
     moveHistory: [],
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
+    pendingBankRefundPts: 0,
     deliverMode: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],

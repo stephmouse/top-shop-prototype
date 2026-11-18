@@ -1,9 +1,10 @@
-import { EVENT_CARDS, PENCIL_FACES } from '../config/balance';
+import { EVENT_CARDS } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import type { GameState } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
 import { renderEventStorePanel } from './eventPanel';
+import { renderPencilPanel } from './pencilView';
 import {
   renderBuyRivalPanel,
   renderBuySlotPanel,
@@ -61,26 +62,7 @@ export function renderActionPanel(
   container.appendChild(stack);
 
   if (state.phase === 'ROLL_PENCIL') {
-    stack.appendChild(
-      makeBtn('Roll Pencil (1–8 / E)', () => dispatch({ type: 'ROLL_PENCIL' }), { primary: true })
-    );
-    if (active.pencilTurnsLeft > 0 && active.pencilMode === 'slow') {
-      const slowNote = document.createElement('span');
-      slowNote.textContent = `Slow Pencil (${active.pencilTurnsLeft}T) — Instant Stop:`;
-      stack.appendChild(slowNote);
-      for (const face of PENCIL_FACES) {
-        stack.appendChild(
-          makeBtn(`[${face}]`, () => dispatch({ type: 'ROLL_PENCIL', chosenFace: face }))
-        );
-      }
-    } else if (active.pencilTurnsLeft > 0 && active.pencilMode !== 'normal') {
-      const curseNote = document.createElement('span');
-      curseNote.textContent =
-        active.pencilMode === 'ones_twos'
-          ? `Pencil Override: 1 & 2 only (${active.pencilTurnsLeft}T left)`
-          : `Pencil Override: E only (${active.pencilTurnsLeft}T left)`;
-      stack.appendChild(curseNote);
-    }
+    renderPencilPanel(stack, state, dispatch);
     return;
   }
 

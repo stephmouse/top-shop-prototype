@@ -18,6 +18,7 @@ import {
   handleDeliverItems,
   handleOpenShop,
   handleSellShopLiquidate,
+  handleSkipDeliver,
   resumeAfterPostAction,
 } from './shops';
 import type { GameState, MatchConfig, Player } from './types';
@@ -33,7 +34,7 @@ export function createInitialGameState(
   seed = 1337
 ): GameState {
   const config: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...configOverrides };
-  const { tiles, shops } = createMap1();
+  const { tiles, shops, segmentPools } = createMap1();
 
   const players: Player[] = playerInputs.map((input, idx) => ({
     id: `p_${idx + 1}`,
@@ -72,6 +73,7 @@ export function createInitialGameState(
     moveHistory: [],
     pendingUndoSnapshot: null,
     pendingPostBankPhase: null,
+    pendingBankRefundPts: 0,
     deliverMode: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
@@ -83,6 +85,7 @@ export function createInitialGameState(
     players,
     tiles,
     shops,
+    segmentPools,
     winnerId: null,
     log: ['Match started at Floor 1 Bank (Map 1).'],
   };
@@ -123,7 +126,7 @@ export function applyAction(state: GameState, action: GameAction): GameState {
     case 'DELIVER_ITEMS':
       return handleDeliverItems(state, action.shopId, action.order);
     case 'SKIP_DELIVER':
-      return state.phase === 'SHOP_DELIVER' ? resumeAfterPostAction(state) : state;
+      return handleSkipDeliver(state);
     case 'BUY_RIVAL_ITEMS':
       return handleBuyRivalItems(state, action.itemIds);
     case 'SELL_SHOP_LIQUIDATE':

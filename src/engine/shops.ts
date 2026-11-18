@@ -1,5 +1,4 @@
 import { SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { SEGMENT_POOLS } from '../config/map1';
 import {
   advanceToNextTurn,
   appendLog,
@@ -28,7 +27,7 @@ export function getAllowedStoreTypeIds(
       rivalTakenTypes.add(s.storeTypeId);
     }
   }
-  return (SEGMENT_POOLS[segmentId] ?? []).filter((id) => !rivalTakenTypes.has(id));
+  return (state.segmentPools[segmentId] ?? []).filter((id) => !rivalTakenTypes.has(id));
 }
 
 export function getShopTotalStock(shop: Shop): number {
@@ -55,31 +54,11 @@ export function resumeAfterPostAction(state: GameState): GameState {
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
     eventStorePrompt: null,
+    pendingBankRefundPts: 0,
     deliverMode: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
   };
-  const active = getActivePlayer(committed);
-
-  if (active.cash < 0) {
-    const owned = Object.values(committed.shops).filter((s) => s.ownerId === active.id);
-    if (owned.length === 0) {
-      const players = committed.players.map((p, idx) =>
-        idx === committed.activePlayerIndex ? { ...p, isBankrupt: true } : p
-      );
-      return advanceToNextTurn({
-        ...committed,
-        players,
-        pendingPostBankPhase: null,
-        log: appendLog(committed, `${active.name} went BANKRUPT!`),
-      });
-    }
-    return {
-      ...committed,
-      phase: 'LIQUIDATE_ASSETS',
-      log: appendLog(committed, `${active.name} has negative cash ($${active.cash}) — must sell assets.`),
-    };
-  }
 
   if (committed.pendingPostBankPhase === 'STEPPING' && committed.remainingSteps > 0) {
     return { ...committed, phase: 'STEPPING', pendingPostBankPhase: null };
@@ -133,10 +112,11 @@ export function recomputeSegmentChainLevels(
       }
     }
 
+    const hasL4 = component.some((m) => Boolean(m.upgradedToL4));
     const chainLevel = Math.min(4, component.length) as 1 | 2 | 3 | 4;
+    const level = hasL4 ? 4 : chainLevel;
     for (const member of component) {
-      const level = member.upgradedToL4 ? 4 : chainLevel;
-      shops[member.id] = { ...member, level };
+      shops[member.id] = { ...member, level, upgradedToL4: hasL4 };
     }
   }
   return shops;
@@ -261,6 +241,7 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
     ...state,
     players,
     shops: nextShops,
+    pendingBankRefundPts: 0,
     deliveredShopIdsThisTurn: deliveredIds,
     log: appendLog(state, `${active.name} delivered ${totalAdd} item(s) to ${def.name} (-$${totalCost}).`),
   };
@@ -276,6 +257,28 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
   }
 
   return resumeAfterPostAction(updatedState);
+}
+
+export function handleSkipDeliver(state: GameState): GameState {
+  if (state.phase !== 'SHOP_DELIVER') return state;
+  if (state.deliverMode !== null && state.deliveredShopIdsThisTurn.length === 0) {
+    const active = getActivePlayer(state);
+    const refund = state.pendingBankRefundPts;
+    const players = state.players.map((p, idx) =>
+      idx === state.activePlayerIndex ? { ...p, points: p.points + refund } : p
+    );
+    return {
+      ...state,
+      players,
+      phase: 'BANK_MENU',
+      pendingBankRefundPts: 0,
+      deliverMode: null,
+      deliverPreferredShopId: null,
+      deliveredShopIdsThisTurn: [],
+      log: appendLog(state, `${active.name} canceled Bank delivery (+${refund} pts refunded).`),
+    };
+  }
+  return resumeAfterPostAction(state);
 }
 
 export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameState {

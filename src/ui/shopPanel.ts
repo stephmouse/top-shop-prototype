@@ -225,11 +225,13 @@ export function renderDeliverPanel(
   list.appendChild(itemsWrap);
   list.appendChild(summaryEl);
   list.appendChild(submitBtn);
-  list.appendChild(
-    makeBtn(mode === 'all_own_paid' ? 'Finish Deliveries' : 'Do Not Deliver', () =>
-      dispatch({ type: 'SKIP_DELIVER' })
-    )
-  );
+  const cancelLabel =
+    mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.length > 0
+      ? 'Finish Deliveries'
+      : state.deliverMode !== null
+        ? 'Cancel & Return to Bank'
+        : 'Do Not Deliver';
+  list.appendChild(makeBtn(cancelLabel, () => dispatch({ type: 'SKIP_DELIVER' })));
   container.appendChild(list);
 }
 
