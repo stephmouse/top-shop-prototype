@@ -22,17 +22,13 @@ export function renderEventStorePanel(
   const list = document.createElement('div');
   list.className = 'card-list';
 
-  if (prompt.mode === 'sell' || prompt.mode === 'lose') {
+  if (prompt.mode === 'sell') {
     const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
     for (const shop of owned) {
       const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
-      const payout = prompt.mode === 'sell'
-        ? Math.floor(computeShopAssetValue(shop) * prompt.multiplier)
-        : 0;
+      const payout = Math.floor(computeShopAssetValue(shop) * prompt.multiplier);
       const btn = document.createElement('button');
-      btn.textContent = prompt.mode === 'sell'
-        ? `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`
-        : `Forfeit ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level}`;
+      btn.textContent = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
       btn.addEventListener('click', () => dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: shop.id }));
       list.appendChild(btn);
     }

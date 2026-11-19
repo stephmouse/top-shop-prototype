@@ -12,8 +12,7 @@ export interface RawStoreSpec {
 
 const RETAIL_PRICE_MULTIPLIER = 2;
 const SLOT_TIERS: readonly (1 | 2 | 3 | 4)[] = [1, 1, 1, 2, 3, 4];
-// VERIFY: Placeholder cashback rates per slot (cheapest -> dearest)
-const SLOT_CASHBACK_CHANCES: readonly number[] = [0.04, 0.06, 0.08, 0.12, 0.16, 0.22];
+const SLOT_CASHBACK_CHANCES: readonly number[] = [0.02, 0.04, 0.06, 0.08, 0.10, 0.12];
 
 function slugifyItem(storeId: string, itemName: string): string {
   const clean = itemName
@@ -24,18 +23,20 @@ function slugifyItem(storeId: string, itemName: string): string {
 }
 
 function buildStoreType(spec: RawStoreSpec): StoreTypeDef {
+  const emptyBaseCost = (spec.items[0]?.[1] ?? 0) * 5;
   const items: ItemDef[] = spec.items.map(([name, wholesaleCost], idx) => ({
     id: slugifyItem(spec.id, name),
     name,
     wholesaleCost,
     retailPrice: wholesaleCost * RETAIL_PRICE_MULTIPLIER,
     tier: SLOT_TIERS[idx] ?? 4,
-    cashbackChance: SLOT_CASHBACK_CHANCES[idx] ?? 0.22,
+    cashbackChance: SLOT_CASHBACK_CHANCES[idx] ?? 0.12,
   }));
 
   return {
     id: spec.id,
     name: spec.name,
+    emptyBaseCost,
     baseOpenCost: spec.baseOpenCost,
     segmentPool: spec.segmentPool,
     items,

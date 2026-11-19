@@ -105,25 +105,43 @@ export function renderRouteOverlay(
       }
     }
 
+    if (tile.neighbors.left && state.tiles[tile.neighbors.left]?.neighbors.right !== tile.id) {
+      const to = centers.get(tile.neighbors.left);
+      if (to) {
+        svg.appendChild(
+          createSvgPath(`M ${from.x} ${from.y} L ${to.x} ${to.y}`, {
+            stroke: 'rgba(146, 161, 184, 0.2)',
+            'stroke-width': '2',
+          })
+        );
+      }
+    }
+
     for (const [dir, link] of [
       ['up', tile.neighbors.up],
       ['down', tile.neighbors.down],
     ] as const) {
       if (!link) continue;
-      const rawTo = centers.get(link.targetTileId);
-      if (!rawTo) continue;
+      const exits = link.byEntryDir ? Object.values(link.byEntryDir) : [link];
+      const drawnTargets = new Set<string>();
+      for (const exit of exits) {
+        if (drawnTargets.has(exit.targetTileId)) continue;
+        drawnTargets.add(exit.targetTileId);
+        const rawTo = centers.get(exit.targetTileId);
+        if (!rawTo) continue;
 
-      const [p1, p2] = trimSegment(from, rawTo, 14, 18);
-      const midX = (p1.x + p2.x) / 2;
-      const midY = (p1.y + p2.y) / 2 + (dir === 'up' ? -10 : 10);
+        const [p1, p2] = trimSegment(from, rawTo, 14, 18);
+        const midX = (p1.x + p2.x) / 2;
+        const midY = (p1.y + p2.y) / 2 + (dir === 'up' ? -10 : 10);
 
-      svg.appendChild(
-        createSvgPath(`M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`, {
-          stroke: dir === 'up' ? 'rgba(88, 166, 255, 0.55)' : 'rgba(210, 153, 34, 0.55)',
-          'stroke-width': '2.2',
-          'marker-end': dir === 'up' ? 'url(#arrow-up)' : 'url(#arrow-down)',
-        })
-      );
+        svg.appendChild(
+          createSvgPath(`M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`, {
+            stroke: dir === 'up' ? 'rgba(88, 166, 255, 0.55)' : 'rgba(210, 153, 34, 0.55)',
+            'stroke-width': '2.2',
+            'marker-end': dir === 'up' ? 'url(#arrow-up)' : 'url(#arrow-down)',
+          })
+        );
+      }
     }
   }
 

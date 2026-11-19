@@ -58,10 +58,10 @@ export const STORES_PART_2: readonly RawStoreSpec[] = [
     ],
   },
   {
-    id: 'kiss', name: 'Kiss', segmentPool: 'food', baseOpenCost: 192,
+    id: 'kiss', name: 'KISS', segmentPool: 'food', baseOpenCost: 192,
     items: [
       ['Chocolate Shake', 16], ['Apple Pie', 32], ['Chicken Wings', 64],
-      ['Grilled Chicken', 112], ['T-Bone Steak', 176], ['Steak & Shrimp', 256],
+      ['Grilled Chicken', 112], ['T-bone Steak', 176], ['Steak & Shrimp', 256],
     ],
   },
   {
@@ -103,7 +103,7 @@ export const STORES_PART_2: readonly RawStoreSpec[] = [
     id: 'pancake_house', name: 'Pancake House', segmentPool: 'food', baseOpenCost: 480, // Manual p.25
     items: [
       ['Coffee', 40], ['Cream Soda', 80], ['Pancake', 160],
-      ['Omelet', 280], ['Pancake and Eggs', 440], ['Pancake and Combo', 640],
+      ['Omelet', 280], ['Pancake & Eggs', 440], ['Pancake Combo', 640],
     ],
   },
   {
@@ -145,13 +145,13 @@ export const STORES_PART_2: readonly RawStoreSpec[] = [
     id: 'tour_tours', name: 'Tour Tours', segmentPool: 'service', baseOpenCost: 816,
     items: [
       ['Hot Springs Tour', 68], ['Las Vegas Tour', 136], ['Miami Resort', 272],
-      ['Hawaii 6 Days', 476], ['8-Day Europe', 748], ['World Tour', 1088],
+      ['Hawaii 6 days', 476], ['8-day Europe', 748], ['World Tour', 1088],
     ],
   },
   {
     id: 'yamato_music', name: 'Yamato Music', segmentPool: 'retail', baseOpenCost: 624,
     items: [
-      ['Castanets', 52], ['Triangle', 104], ['Guitar', 208],
+      ['Castanet', 52], ['Triangle', 104], ['Guitar', 208],
       ['Drum Set', 364], ['Violin', 572], ['Piano', 832],
     ],
   },

@@ -1,72 +1,78 @@
 import type { EventCardDef } from '../engine/types';
 
-// VERIFY: Point awards (0-3) and cash amounts marked below are defaults where
-// Dreen's FAQ and the patch repo did not record exact numbers.
+// Full 55 reachable US Event cards verified against SLUS_013.33 & EVE_000..099.J.
+// Cash events scale with computeEventBaseCash(totalMonths) = (floor(totalMonths / 24) + 1) * 100.
 export const EVENT_CARDS: readonly EventCardDef[] = [
   // EVE_024 - EVE_029: Sell a store at multiplier
-  { id: 'eve_024', name: 'Store Offer (1.5x)', description: 'You can sell a store for 1.5x its usual price.', pointsAwarded: 1, effect: { kind: 'sell_store_prompt', multiplier: 1.5, forced: false } },
-  { id: 'eve_025', name: 'Store Offer (2x)', description: 'You can sell a store for twice its usual price.', pointsAwarded: 1, effect: { kind: 'sell_store_prompt', multiplier: 2, forced: false } },
-  { id: 'eve_026', name: 'Store Offer (2.5x)', description: 'You can sell a store for 2.5x its usual price.', pointsAwarded: 2, effect: { kind: 'sell_store_prompt', multiplier: 2.5, forced: false } },
-  { id: 'eve_027', name: 'Forced Sale (2x)', description: 'You must sell a store for twice its usual price.', pointsAwarded: 2, effect: { kind: 'sell_store_prompt', multiplier: 2, forced: true } },
-  { id: 'eve_028', name: 'Forced Sale (2.5x)', description: 'You must sell a store for 2.5x its usual price.', pointsAwarded: 2, effect: { kind: 'sell_store_prompt', multiplier: 2.5, forced: true } },
-  { id: 'eve_029', name: 'Forced Sale (3x)', description: 'You must sell a store for 3x its usual price.', pointsAwarded: 3, effect: { kind: 'sell_store_prompt', multiplier: 3, forced: true } },
+  { id: 'eve_024', name: 'Store Offer (1.5x)', description: 'Your store can be sold for 1.5 times the price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 1.5, forced: false } },
+  { id: 'eve_025', name: 'Store Offer (2x)', description: 'Your store can be sold for twice the price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 2, forced: false } },
+  { id: 'eve_026', name: 'Store Offer (2.5x)', description: 'Your store can be sold for 2.5 times the price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 2.5, forced: false } },
+  { id: 'eve_027', name: 'Forced Sale (2x)', description: 'Please sell your store for twice the price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 2, forced: true } },
+  { id: 'eve_028', name: 'Forced Sale (2.5x)', description: 'Please sell your store for 2.5 times price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 2.5, forced: true } },
+  { id: 'eve_029', name: 'Forced Sale (3x)', description: 'Please sell your store for 3 times price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 3, forced: true } },
 
   // EVE_030 - EVE_033: Store closures
-  { id: 'eve_030', name: 'Store Inspection', description: 'Your stores are closed for 1 turn.', pointsAwarded: 2, effect: { kind: 'close_stores', scope: 'self', rounds: 1 } },
-  { id: 'eve_031', name: 'Mall Holiday', description: 'All stores are closed for 1 turn.', pointsAwarded: 1, effect: { kind: 'close_stores', scope: 'all', rounds: 1 } },
-  { id: 'eve_032', name: 'Exclusive Open', description: 'All stores except yours are closed for 1 turn.', pointsAwarded: 2, effect: { kind: 'close_stores', scope: 'others', rounds: 1 } },
-  { id: 'eve_033', name: 'Mall Renovation', description: 'All stores are closed for 2 turns.', pointsAwarded: 2, effect: { kind: 'close_stores', scope: 'all', rounds: 2 } },
+  { id: 'eve_030', name: 'Store Inspection', description: 'Your store is closed one turn.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'self', rounds: 1 } },
+  { id: 'eve_031', name: 'Mall Holiday', description: 'All stores are closed one turn.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 1 } },
+  { id: 'eve_032', name: 'Exclusive Open', description: 'All stores except yours are closed.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'others', rounds: 1 } },
+  { id: 'eve_033', name: 'Mall Renovation', description: 'All stores are closed two turns.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 2 } },
 
-  // EVE_035 - EVE_042: Player-to-player & Santa cash
-  { id: 'eve_035', name: 'Cash Handout', description: 'Each player takes $200 from you.', pointsAwarded: 2, effect: { kind: 'pay_each_rival', amount: 200 } }, // VERIFY amount
-  { id: 'eve_036', name: 'Cash Collection', description: 'Receive $150 from everyone.', pointsAwarded: 1, effect: { kind: 'collect_each_rival', amount: 150 } }, // VERIFY amount
-  { id: 'eve_037', name: 'Big Collection', description: 'Receive $300 from everyone.', pointsAwarded: 2, effect: { kind: 'collect_each_rival', amount: 300 } }, // VERIFY amount
-  { id: 'eve_040', name: 'Santa Gift I', description: "Santa: Here's a present! (+$300)", pointsAwarded: 1, effect: { kind: 'cash_gift', amount: 300 } }, // VERIFY amount
-  { id: 'eve_041', name: 'Santa Gift II', description: "Santa: Here's a present! (+$500)", pointsAwarded: 1, effect: { kind: 'cash_gift', amount: 500 } }, // VERIFY amount
-  { id: 'eve_042', name: 'Santa Gift III', description: "Santa: Here's a present! (+$800)", pointsAwarded: 2, effect: { kind: 'cash_gift', amount: 800 } }, // VERIFY amount
+  // EVE_034 - EVE_037, EVE_040 - EVE_042: Scaling player-to-player & Santa cash
+  { id: 'eve_034', name: 'Cash Handout I', description: 'Each player took 0.5x base cash from you.', awardsPoints: true, effect: { kind: 'pay_each_rival_scaled', baseMultiplier: 0.5 } },
+  { id: 'eve_035', name: 'Cash Handout II', description: 'Each player took away 1x base cash from you.', awardsPoints: true, effect: { kind: 'pay_each_rival_scaled', baseMultiplier: 1 } },
+  { id: 'eve_036', name: 'Cash Collection I', description: 'You are given 1x base cash by everybody.', awardsPoints: true, effect: { kind: 'collect_each_rival_scaled', baseMultiplier: 1 } },
+  { id: 'eve_037', name: 'Cash Collection II', description: 'Received 1.5x base cash from everybody.', awardsPoints: true, effect: { kind: 'collect_each_rival_scaled', baseMultiplier: 1.5 } },
+  { id: 'eve_040', name: 'Santa Gift I', description: "Santa: Here's a present! (3x base cash)", awardsPoints: true, effect: { kind: 'cash_gift_scaled', baseMultiplier: 3 } },
+  { id: 'eve_041', name: 'Santa Gift II', description: "Santa: Here's a present! (5x base cash)", awardsPoints: true, effect: { kind: 'cash_gift_scaled', baseMultiplier: 5 } },
+  { id: 'eve_042', name: 'Santa Gift III', description: "Santa: Here's a present! (7x base cash)", awardsPoints: true, effect: { kind: 'cash_gift_scaled', baseMultiplier: 7 } },
 
   // EVE_043 - EVE_050: Movement & Stock manipulation
-  { id: 'eve_043', name: 'Change Direction', description: 'You can turn around next turn.', pointsAwarded: 1, effect: { kind: 'unlock_dir_next' } },
-  { id: 'eve_044', name: 'Forced U-Turn', description: 'You must turn around next turn.', pointsAwarded: 2, effect: { kind: 'reverse_dir_next' } },
-  { id: 'eve_045', name: 'Spin Again', description: 'Spin the pencil one more time.', pointsAwarded: 1, effect: { kind: 'roll_again' } },
-  { id: 'eve_046', name: 'Draw Again', description: 'Draw another event card.', pointsAwarded: 1, effect: { kind: 'draw_another' } },
-  { id: 'eve_047', name: 'Owner Offer', description: 'Buy an empty store in a section where you own none.', pointsAwarded: 1, effect: { kind: 'buy_empty_store' } },
-  { id: 'eve_048', name: 'Delivery Mix-Up (Cheap)', description: 'Each of your stores now has just 2 cheap items.', pointsAwarded: 2, effect: { kind: 'restock_grade', mode: 'second_cheapest_two' } },
-  { id: 'eve_049', name: 'Stock Downgrade', description: 'Your stock is swapped for cheaper items.', pointsAwarded: 2, effect: { kind: 'downgrade_stock' } },
-  { id: 'eve_050', name: 'Delivery Mix-Up (Costly)', description: 'Each of your stores is left with 1 costly item.', pointsAwarded: 2, effect: { kind: 'restock_grade', mode: 'dearest_one' } },
+  { id: 'eve_043', name: 'Change Direction', description: 'You can change directions next turn.', awardsPoints: true, effect: { kind: 'unlock_dir_next' } },
+  { id: 'eve_044', name: 'Forced U-Turn', description: 'You will change directions next turn.', awardsPoints: true, effect: { kind: 'reverse_dir_next' } },
+  { id: 'eve_045', name: 'Spin Again', description: 'Roll the pencil one more time.', awardsPoints: true, effect: { kind: 'roll_again' } },
+  { id: 'eve_046', name: 'Draw Again', description: 'Flip a card one more time.', awardsPoints: true, effect: { kind: 'draw_another' } },
+  { id: 'eve_047', name: 'Owner Offer', description: 'You can purchase an empty store in a section where you own none.', awardsPoints: true, effect: { kind: 'buy_empty_store' } },
+  { id: 'eve_048', name: 'Delivery Mix-Up (Cheap)', description: 'All items have been changed to 2 cheap items!', awardsPoints: true, effect: { kind: 'restock_grade', mode: 'second_cheapest_two' } },
+  { id: 'eve_049', name: 'Stock Downgrade', description: 'Due to an error in ordering, all items changed to cheaper items.', awardsPoints: true, effect: { kind: 'downgrade_stock' } },
+  { id: 'eve_050', name: 'Delivery Mix-Up (Costly)', description: 'Due to an error in ordering, all items changed to 1 expensive item.', awardsPoints: true, effect: { kind: 'restock_grade', mode: 'dearest_one' } },
 
-  // EVE_053 - EVE_060: Cash drops & Empty store liquidation
-  { id: 'eve_053', name: 'Dropped Cash (1/3)', description: 'You dropped 1/3 of your money!', pointsAwarded: 2, effect: { kind: 'drop_cash_fraction', numerator: 1, denominator: 3 } },
-  { id: 'eve_054', name: 'Dropped Cash (1/2)', description: 'You dropped 1/2 of your money!', pointsAwarded: 3, effect: { kind: 'drop_cash_fraction', numerator: 1, denominator: 2 } },
-  { id: 'eve_058', name: 'Clear Empty (Self)', description: 'Your out-of-stock stores are sold for 1.5x usual price.', pointsAwarded: 2, effect: { kind: 'sell_empty_stores', scope: 'self', multiplier: 1.5 } },
-  { id: 'eve_059', name: 'Clear Empty (All)', description: "Everyone's out-of-stock stores are sold for 1.5x usual price.", pointsAwarded: 1, effect: { kind: 'sell_empty_stores', scope: 'all', multiplier: 1.5 } },
-  { id: 'eve_060', name: 'Clear Empty (Rivals)', description: 'Out-of-stock stores except yours are sold for 1.5x usual price.', pointsAwarded: 1, effect: { kind: 'sell_empty_stores', scope: 'others', multiplier: 1.5 } },
+  // EVE_051 - EVE_054: Cash drops
+  { id: 'eve_051', name: 'Dropped Cash I', description: 'You dropped 3x base cash somewhere.', awardsPoints: true, effect: { kind: 'drop_cash_scaled', baseMultiplier: 3 } },
+  { id: 'eve_052', name: 'Dropped Cash II', description: 'You dropped 6x base cash somewhere.', awardsPoints: true, effect: { kind: 'drop_cash_scaled', baseMultiplier: 6 } },
+  { id: 'eve_053', name: 'Dropped Cash (1/3)', description: 'You dropped 1/3 of the total sum of money.', awardsPoints: true, effect: { kind: 'drop_cash_fraction', numerator: 1, denominator: 3 } },
+  { id: 'eve_054', name: 'Dropped Cash (1/2)', description: 'You dropped 1/2 of the total sum of money.', awardsPoints: true, effect: { kind: 'drop_cash_fraction', numerator: 1, denominator: 2 } },
 
-  // EVE_070 - EVE_076: Elevator & Misc
-  { id: 'eve_070', name: 'Elevator Outage', description: 'No one can use the elevator for 1 turn.', pointsAwarded: 1, effect: { kind: 'elevator_lock', mode: 'none', rounds: 1 } },
-  { id: 'eve_071', name: 'VIP Elevator', description: 'Only you can use the elevator for 1 turn.', pointsAwarded: 1, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 1 } },
-  { id: 'eve_075', name: 'Chirp-Chirp Sandals', description: 'You are now wearing "Chirp-Chirp" sandals.', pointsAwarded: 1, effect: { kind: 'chirp_sandals' } },
-  { id: 'eve_076', name: 'Miss', description: 'Nothing happens.', pointsAwarded: 0, effect: { kind: 'nothing' } },
+  // EVE_058 - EVE_060: Empty store liquidation
+  { id: 'eve_058', name: 'Clear Empty (Self)', description: 'Sells stores in shortage owned by you (1.5x).', awardsPoints: true, effect: { kind: 'sell_empty_stores', scope: 'self', multiplier: 1.5 } },
+  { id: 'eve_059', name: 'Clear Empty (All)', description: 'Sells stores in shortage owned by everyone (1.5x).', awardsPoints: true, effect: { kind: 'sell_empty_stores', scope: 'all', multiplier: 1.5 } },
+  { id: 'eve_060', name: 'Clear Empty (Rivals)', description: 'Sells stores in shortage except yours (1.5x).', awardsPoints: true, effect: { kind: 'sell_empty_stores', scope: 'others', multiplier: 1.5 } },
 
-  // EVE_080 - EVE_088: Seasonal / Sale events
-  { id: 'eve_080', name: 'Snowstorm Sale', description: 'A snowstorm has hit! All items are 50% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_081', name: 'Hurricane Sale', description: 'A hurricane has hit! All items are 50% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_082', name: 'Halloween Sale', description: 'Halloween Sale! All items are 30% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } },
-  { id: 'eve_083', name: 'Winter Sale', description: 'All items are 30% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } }, // VERIFY name & %
-  { id: 'eve_084', name: 'Final Sale', description: 'Final Sale! All items are 70% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.3, rounds: 1 } }, // Patch: Clearance Sale
-  { id: 'eve_085', name: 'Spring Sale', description: 'All items are 30% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } }, // VERIFY name & %
-  { id: 'eve_086', name: 'Summer Sale', description: 'All items are 50% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } }, // VERIFY name & %
-  { id: 'eve_087', name: 'Fall Sale', description: 'Fall Sale! All items are 30% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } }, // VERIFY %
-  { id: 'eve_088', name: 'Seasonal Sale', description: 'All items are 50% off for 1 turn.', pointsAwarded: 1, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } }, // VERIFY name & %
+  // EVE_061 - EVE_068: Go forward 1..8 steps
+  { id: 'eve_061', name: 'Go Forward 1', description: 'Go forward 1 step.', awardsPoints: true, effect: { kind: 'go_steps', steps: 1 } },
+  { id: 'eve_062', name: 'Go Forward 2', description: 'Go forward 2 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 2 } },
+  { id: 'eve_063', name: 'Go Forward 3', description: 'Go forward 3 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 3 } },
+  { id: 'eve_064', name: 'Go Forward 4', description: 'Go forward 4 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 4 } },
+  { id: 'eve_065', name: 'Go Forward 5', description: 'Go forward 5 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 5 } },
+  { id: 'eve_066', name: 'Go Forward 6', description: 'Go forward 6 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 6 } },
+  { id: 'eve_067', name: 'Go Forward 7', description: 'Go forward 7 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 7 } },
+  { id: 'eve_068', name: 'Go Forward 8', description: 'Go forward 8 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 8 } },
 
-  // Reachable cards from Dreen's FAQ (IDs in 34, 51-52, 61-69 — VERIFY exact IDs)
-  { id: 'dreen_miss_turn', name: 'Miss a Turn', description: 'Miss your next turn.', pointsAwarded: 0, effect: { kind: 'miss_turn' } },
-  { id: 'dreen_go_move', name: 'Go!', description: 'Move 1-7 squares and receive free points.', pointsAwarded: 2, effect: { kind: 'go_steps_1_7' } },
-  { id: 'dreen_lose_store', name: 'Lose a Store', description: 'You lose one of your stores.', pointsAwarded: 3, effect: { kind: 'lose_store' } },
-  { id: 'dreen_lose_stock', name: 'Shoplifting', description: 'You lose some of the stock in your stores.', pointsAwarded: 2, effect: { kind: 'lose_some_stock' } },
-  { id: 'dreen_equalize_cash', name: 'Cash Match', description: 'All players now have the same cash as you.', pointsAwarded: 1, effect: { kind: 'equalize_cash' } },
-  { id: 'dreen_close_empty', name: 'Shutdown', description: 'All currently out-of-stock stores are closed down.', pointsAwarded: 1, effect: { kind: 'close_empty_stores', rounds: 2 } },
-  { id: 'dreen_elev_self_ban', name: 'Elevator Ban', description: 'You cannot use the elevator for 2 turns.', pointsAwarded: 2, effect: { kind: 'elevator_lock', mode: 'ban_self', rounds: 2 } },
-  { id: 'dreen_elev_all_ban_2', name: 'Elevator Outage (2)', description: 'No one can use the elevator for 2 turns.', pointsAwarded: 1, effect: { kind: 'elevator_lock', mode: 'none', rounds: 2 } },
-  { id: 'dreen_elev_only_me_2', name: 'VIP Elevator (2)', description: 'Only you can use the elevator for 2 turns.', pointsAwarded: 1, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 2 } },
+  // EVE_069 - EVE_072, EVE_075 - EVE_076: Elevator, Cash Match, Misc
+  { id: 'eve_069', name: 'Elevator Ban', description: "You can't use the elevator for one turn.", awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'ban_self', rounds: 1 } },
+  { id: 'eve_070', name: 'Elevator Outage', description: 'No one can use the elevator one turn.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'none', rounds: 1 } },
+  { id: 'eve_071', name: 'VIP Elevator', description: 'No one except you can use the elevator one turn.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 1 } },
+  { id: 'eve_072', name: 'Cash Match', description: 'Everyone now has the same amount of money as you.', awardsPoints: true, effect: { kind: 'equalize_cash' } },
+  { id: 'eve_075', name: 'Chirp-Chirp Sandals', description: 'You have worn the "Chirp-Chirp" Sandals.', awardsPoints: true, effect: { kind: 'chirp_sandals' } },
+  { id: 'eve_076', name: 'Miss', description: '-------Miss-------', awardsPoints: false, effect: { kind: 'nothing' } },
+
+  // EVE_080 - EVE_088: Seasonal / Sale events (all 1 turn)
+  { id: 'eve_080', name: 'Snowstorm', description: 'There is a snowstorm. All items are 50% off until next turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_081', name: 'Hurricane', description: 'There is a hurricane outside. All items are 50% off until next turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_082', name: 'Halloween Sale', description: 'Halloween sale. All items are 30% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } },
+  { id: 'eve_083', name: 'Christmas Sale', description: 'Santa: Merry Christmas! All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_084', name: 'Final Sale', description: 'Final Sale. All items are 70% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.3, rounds: 1 } },
+  { id: 'eve_085', name: 'Spring Sale', description: 'Spring Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_086', name: 'Summer Sale', description: 'Summer Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_087', name: 'Fall Sale', description: 'Fall Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_088', name: 'Winter Sale', description: 'Winter Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
 ];

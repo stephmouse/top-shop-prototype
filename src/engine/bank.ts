@@ -1,27 +1,13 @@
-import { BANK_REWARDS, STORE_TYPES } from '../config/balance';
-import {
-  autoStockOwnShops,
-  canCaptureShop,
-  canPlayerOpenWithCash,
-  canRedeemBankReward,
-  captureRivalShopForPlayer,
-  resolveTargetOwnShop,
-  resolveTargetRival,
-  resolveTargetRivalShop,
-  vacateShopSlot,
-} from './bankHelpers';
-import { appendLog, getActivePlayer } from './helpers';
-import { pickRandom, randomInt } from './rng';
-import {
-  buildStarterStock,
-  getAllowedStoreTypeIds,
-  getShopTotalStock,
-  recomputeSegmentChainLevels,
-  resumeAfterPostAction,
-} from './shops';
-import type { GameState, Player, Shop } from './types';
+import { BANK_REWARDS } from '../config/balance';
+import { canRedeemBankReward } from './bankEligibility';
+import { resolveTargetRival } from './bankHelpers';
+import { applyBankShopEffect } from './bankShopEffects';
+import { appendLog, clampPoints, getActivePlayer } from './helpers';
+import { randomInt } from './rng';
+import { resumeAfterPostAction } from './shops';
+import type { GameState, Player } from './types';
 
-export { canRedeemBankReward } from './bankHelpers';
+export { canRedeemBankReward } from './bankEligibility';
 
 export function handleRedeemBankReward(
   state: GameState,
@@ -40,7 +26,19 @@ export function handleRedeemBankReward(
   let players: Player[] = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, points: p.points - reward.pointCost } : p
   );
-  let shops: Record<string, Shop> = { ...state.shops };
+  const shops = { ...state.shops };
+
+  const shopHandled = applyBankShopEffect({
+    state,
+    reward,
+    active,
+    players,
+    shops,
+    seed,
+    targetPlayerId,
+    targetShopId,
+  });
+  if (shopHandled) return shopHandled;
 
   const makeState = (note: string): GameState => ({
     ...state,
@@ -60,7 +58,7 @@ export function handleRedeemBankReward(
   const eff = reward.effect;
   switch (eff.kind) {
     case 'gain_points':
-      patchPlayer(active.id, { points: active.points - reward.pointCost + eff.amount });
+      patchPlayer(active.id, { points: clampPoints(active.points - reward.pointCost + eff.amount) });
       return resumeAfterPostAction(makeState(`+${eff.amount} pt.`));
 
     case 'gain_cash':
@@ -86,20 +84,6 @@ export function handleRedeemBankReward(
       return resumeAfterPostAction(makeState(`${rival.name} new stores stopped (${eff.turns}T).`));
     }
 
-    case 'open_delivery':
-      return {
-        ...makeState('Select items to deliver.'),
-        phase: 'SHOP_DELIVER',
-        pendingBankRefundPts: reward.pointCost,
-        deliverMode: eff.mode,
-        deliverPreferredShopId: targetShopId ?? null,
-        deliveredShopIdsThisTurn: [],
-      };
-
-    case 'auto_stock_own':
-      shops = autoStockOwnShops({ ...state, shops }, active.id, eff.mode);
-      return resumeAfterPostAction(makeState('Own stores restocked.'));
-
     case 'reverse_direction':
       if (eff.scope === 'rival') {
         const rival = resolveTargetRival(state, targetPlayerId)!;
@@ -109,106 +93,10 @@ export function handleRedeemBankReward(
       players = players.map((p) => (p.isBankrupt ? p : { ...p, reverseDirNextTurn: true }));
       return resumeAfterPostAction(makeState('All players reverse next turn.'));
 
-    case 'close_rival_store_level': {
-      const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === eff.level)!;
-      shops = vacateShopSlot({ ...state, shops }, target.id);
-      return resumeAfterPostAction(makeState(`Closed ${target.id} (L${eff.level}).`));
-    }
-
-    case 'close_all_empty_rival_stores': {
-      let cur: GameState = { ...state, shops };
-      for (const s of Object.values(shops)) {
-        if (s.ownerId && s.ownerId !== active.id && getShopTotalStock(s) === 0) {
-          cur = { ...cur, shops: vacateShopSlot(cur, s.id) };
-        }
-      }
-      shops = cur.shops;
-      return resumeAfterPostAction(makeState("Closed rivals' empty stores."));
-    }
-
-    case 'open_free_random_shop': {
-      const candidates = Object.values(shops).filter(
-        (s) => s.ownerId === null && getAllowedStoreTypeIds(state, active.id, s.segmentId).length > 0
-      );
-      const pickedSlot = pickRandom(seed, candidates);
-      seed = pickedSlot.nextSeed;
-      const allowed = getAllowedStoreTypeIds(state, active.id, pickedSlot.value.segmentId);
-      const pickedType = pickRandom(seed, allowed);
-      seed = pickedType.nextSeed;
-      const typeId = pickedType.value;
-      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, stock: {} };
-      shops = recomputeSegmentChainLevels(
-        { ...state, shops: { ...shops, [claimed.id]: claimed } },
-        claimed.segmentId,
-        active.id
-      );
-      const leveled = shops[claimed.id]!;
-      shops[claimed.id] = { ...leveled, stock: buildStarterStock(typeId, leveled.level) };
-      return resumeAfterPostAction(makeState(`Opened free ${STORE_TYPES[typeId]?.name ?? typeId}.`));
-    }
-
-    case 'open_shop_rival_cash': {
-      const rival = resolveTargetRival(state, targetPlayerId, (p) =>
-        canPlayerOpenWithCash(state, active.id, p.cash)
-      )!;
-      return {
-        ...makeState(`Using ${rival.name}'s cash ($${rival.cash}).`),
-        phase: 'EVENT_PICK_STORE',
-        pendingBankRefundPts: reward.pointCost,
-        eventStorePrompt: {
-          mode: 'buy_empty',
-          multiplier: 1,
-          forced: false,
-          payerId: rival.id,
-          allowOwnedSegment: true,
-          fromBank: true,
-        },
-      };
-    }
-
     case 'pencil_override': {
       const target = eff.target === 'self' ? active : resolveTargetRival(state, targetPlayerId)!;
       patchPlayer(target.id, { pencilMode: eff.mode, pencilTurnsLeft: eff.turns });
       return resumeAfterPostAction(makeState(`${target.name} pencil -> ${eff.mode} (${eff.turns}T).`));
-    }
-
-    case 'capture_rival_store': {
-      if (eff.mode === 'all_empty') {
-        let cur: GameState = { ...state, shops };
-        for (const s of Object.values(shops)) {
-          if (s.ownerId && s.ownerId !== active.id && getShopTotalStock(s) === 0 && canCaptureShop(cur, active.id, s)) {
-            cur = { ...cur, shops: captureRivalShopForPlayer(cur, s.id, active.id, false) };
-          }
-        }
-        shops = cur.shops;
-        return resumeAfterPostAction(makeState("Captured rivals' empty stores."));
-      }
-      const target = resolveTargetRivalShop(
-        state,
-        targetShopId,
-        (s) =>
-          (eff.mode === 'one_l4' ? s.level === 4 : getShopTotalStock(s) === 0) &&
-          canCaptureShop(state, active.id, s)
-      )!;
-      shops = captureRivalShopForPlayer({ ...state, shops }, target.id, active.id, eff.mode === 'one_l4');
-      return resumeAfterPostAction(makeState(`Captured ${target.id}.`));
-    }
-
-    case 'empty_rival_stores': {
-      const stocked = Object.values(shops).filter(
-        (s) => s.ownerId && s.ownerId !== active.id && getShopTotalStock(s) > 0
-      );
-      const first = resolveTargetRivalShop(state, targetShopId, (s) => getShopTotalStock(s) > 0);
-      const chosen: Shop[] = first ? [first] : [];
-      const pool = stocked.filter((s) => s.id !== first?.id);
-      while (chosen.length < eff.count && pool.length > 0) {
-        const pick = pickRandom(seed, pool);
-        seed = pick.nextSeed;
-        chosen.push(pick.value);
-        pool.splice(pool.findIndex((s) => s.id === pick.value.id), 1);
-      }
-      for (const s of chosen) shops[s.id] = { ...s, stock: {} };
-      return resumeAfterPostAction(makeState(`Emptied ${chosen.length} rival store(s).`));
     }
 
     case 'set_rival_cash_fraction': {
@@ -306,24 +194,14 @@ export function handleRedeemBankReward(
       patchPlayer(active.id, { doublePriceTurns: eff.turns + 1 });
       return resumeAfterPostAction(makeState(`Store prices 2x for ${eff.turns} turns!`));
 
-    case 'upgrade_own_store_l4': {
-      const target = resolveTargetOwnShop(state, targetShopId, (s) => s.level < 4)!;
-      shops = recomputeSegmentChainLevels(
-        {
-          ...state,
-          shops: { ...shops, [target.id]: { ...target, level: 4, upgradedToL4: true } },
-        },
-        target.segmentId,
-        active.id
-      );
-      return resumeAfterPostAction(makeState(`Upgraded ${target.id} to Level 4!`));
-    }
-
     case 'claim_victory':
       return {
         ...makeState('Claimed victory!'),
         phase: 'GAME_OVER',
         winnerId: active.id,
       };
+
+    default:
+      return state;
   }
 }

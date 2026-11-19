@@ -1,6 +1,14 @@
-import { EVENT_CARDS, PAYDAY_CONFIG, STORE_TYPES } from '../config/balance';
-import { pickRandom } from './rng';
-import type { GameState, ItemDef, Player, Shop, Tile } from './types';
+import { PAYDAY_CONFIG, SHOP_RULES, STORE_TYPES } from '../config/balance';
+import type {
+  EscalatorExit,
+  EscalatorLink,
+  GameState,
+  HorizontalDir,
+  ItemDef,
+  Player,
+  Shop,
+  Tile,
+} from './types';
 
 export function getActivePlayer(state: GameState): Player {
   const player = state.players[state.activePlayerIndex];
@@ -23,19 +31,14 @@ export function appendLog(state: GameState, message: string): string[] {
   return [entry, ...state.log].slice(0, 40);
 }
 
-export function drawThreeEventIds(seed: number): { ids: string[]; nextSeed: number } {
-  const pool = [...EVENT_CARDS];
-  const ids: string[] = [];
-  let currentSeed = seed;
-
-  while (ids.length < 3 && pool.length > 0) {
-    const { value, nextSeed } = pickRandom(currentSeed, pool);
-    currentSeed = nextSeed;
-    ids.push(value.id);
-    const removeIdx = pool.findIndex((c) => c.id === value.id);
-    if (removeIdx >= 0) pool.splice(removeIdx, 1);
+export function resolveEscalatorExit(
+  link: EscalatorLink,
+  entryDir: HorizontalDir | null
+): EscalatorExit {
+  if (entryDir && link.byEntryDir?.[entryDir]) {
+    return link.byEntryDir[entryDir]!;
   }
-  return { ids, nextSeed: currentSeed };
+  return { targetTileId: link.targetTileId, exitHorizontalDir: link.exitHorizontalDir };
 }
 
 export function getEffectiveItemRetailPrice(
@@ -78,18 +81,35 @@ export function canCancelMove(state: GameState): boolean {
   return false;
 }
 
+export function clampPoints(points: number): number {
+  return Math.max(0, Math.min(SHOP_RULES.maxPoints, points));
+}
+
 export function computeShopAssetValue(shop: Shop): number {
   if (!shop.storeTypeId) return 0;
   const def = STORE_TYPES[shop.storeTypeId];
   if (!def) return 0;
 
-  const baseValue = def.baseOpenCost * shop.level;
+  const baseValue = def.emptyBaseCost;
   let stockValue = 0;
   for (const item of def.items) {
     const qty = shop.stock[item.id] ?? 0;
     stockValue += qty * item.wholesaleCost;
   }
   return baseValue + stockValue;
+}
+
+export function computeBuyoutCosts(
+  oldShop: Shop,
+  newStoreTypeId: string
+): { rivalPayout: number; totalCost: number } {
+  const oldDef = oldShop.storeTypeId ? STORE_TYPES[oldShop.storeTypeId] : undefined;
+  const newDef = STORE_TYPES[newStoreTypeId];
+  if (!oldDef || !newDef) return { rivalPayout: 0, totalCost: 0 };
+
+  const mult = SHOP_RULES.buyoutLevelMultipliers[oldShop.level];
+  const rivalPayout = Math.floor(oldDef.emptyBaseCost * mult);
+  return { rivalPayout, totalCost: rivalPayout + newDef.baseOpenCost };
 }
 
 export function computePlayerNetWorth(state: GameState, playerId: string): number {
@@ -103,6 +123,22 @@ export function computePlayerNetWorth(state: GameState, playerId: string): numbe
     }
   }
   return total;
+}
+
+export function computePlayerRank(
+  state: GameState,
+  playerId: string
+): { rank: number; activeCount: number } {
+  const active = state.players.filter((p) => !p.isBankrupt);
+  const netWorthById = new Map(active.map((p) => [p.id, computePlayerNetWorth(state, p.id)]));
+  const sorted = [...active].sort(
+    (a, b) => (netWorthById.get(b.id) ?? 0) - (netWorthById.get(a.id) ?? 0)
+  );
+  const idx = sorted.findIndex((p) => p.id === playerId);
+  return {
+    rank: idx >= 0 ? idx + 1 : active.length,
+    activeCount: Math.max(1, active.length),
+  };
 }
 
 export function computePaydayAmount(
@@ -137,162 +173,4 @@ export function getAvailableDirections(
   if (tile.neighbors.left) dirs.push('left');
   if (tile.neighbors.right) dirs.push('right');
   return dirs;
-}
-
-export function checkVictory(state: GameState): string | null {
-  const activePlayers = state.players.filter((p) => !p.isBankrupt);
-  const bankruptCount = state.players.length - activePlayers.length;
-
-  if (bankruptCount >= state.config.bankruptLimit && activePlayers.length > 0) {
-    const sorted = [...activePlayers].sort(
-      (a, b) => computePlayerNetWorth(state, b.id) - computePlayerNetWorth(state, a.id)
-    );
-    return sorted[0]?.id ?? null;
-  }
-
-  const qualifiers = activePlayers.filter(
-    (p) => computePlayerNetWorth(state, p.id) >= state.config.targetAssets
-  );
-  if (qualifiers.length > 0) {
-    const sorted = [...qualifiers].sort(
-      (a, b) => computePlayerNetWorth(state, b.id) - computePlayerNetWorth(state, a.id)
-    );
-    return sorted[0]?.id ?? null;
-  }
-
-  return null;
-}
-
-export function advanceToNextTurn(state: GameState): GameState {
-  const active = getActivePlayer(state);
-  if (!active.isBankrupt && active.cash < 0) {
-    const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
-    if (owned.length > 0) {
-      return {
-        ...state,
-        phase: 'LIQUIDATE_ASSETS',
-        moveHistory: [],
-        hadBranchChoiceThisTurn: false,
-        log: appendLog(state, `${active.name} has negative cash ($${active.cash}) — must sell assets.`),
-      };
-    }
-    const bankruptPlayers = state.players.map((p, idx) =>
-      idx === state.activePlayerIndex ? { ...p, isBankrupt: true } : p
-    );
-    return advanceToNextTurn({
-      ...state,
-      players: bankruptPlayers,
-      pendingPostBankPhase: null,
-      pendingBankRefundPts: 0,
-      log: appendLog(state, `${active.name} went BANKRUPT!`),
-    });
-  }
-
-  const finishedId = active.id;
-  const nextPlayers = state.players.map((p, idx) => {
-    if (idx !== state.activePlayerIndex) return p;
-    return {
-      ...p,
-      blockDeliveryTurns: Math.max(0, p.blockDeliveryTurns - 1),
-      blockNewStoreTurns: Math.max(0, p.blockNewStoreTurns - 1),
-      doublePriceTurns: Math.max(0, p.doublePriceTurns - 1),
-    };
-  });
-
-  const nextShops: Record<string, Shop> = {};
-  for (const [id, shop] of Object.entries(state.shops)) {
-    nextShops[id] =
-      shop.ownerId === finishedId && shop.isClosedTurns > 0
-        ? { ...shop, isClosedTurns: shop.isClosedTurns - 1 }
-        : shop;
-  }
-
-  const nextSale =
-    state.globalSale && state.globalSale.turnsLeft > 1
-      ? { ...state.globalSale, turnsLeft: state.globalSale.turnsLeft - 1 }
-      : null;
-  const nextElevLock =
-    state.elevatorLock && state.elevatorLock.turnsLeft > 1
-      ? { ...state.elevatorLock, turnsLeft: state.elevatorLock.turnsLeft - 1 }
-      : null;
-
-  let log = state.log;
-  const total = nextPlayers.length;
-  let nextIndex = (state.activePlayerIndex + 1) % total;
-  let guard = 0;
-
-  while (guard < total) {
-    const cand = nextPlayers[nextIndex];
-    if (!cand || cand.isBankrupt) {
-      nextIndex = (nextIndex + 1) % total;
-      guard++;
-      continue;
-    }
-    if (cand.skipNextTurn) {
-      nextPlayers[nextIndex] = { ...cand, skipNextTurn: false };
-      log = [`[T${state.turnNumber}] ${cand.name} missed their turn!`, ...log].slice(0, 40);
-      nextIndex = (nextIndex + 1) % total;
-      guard++;
-      continue;
-    }
-    break;
-  }
-
-  const incoming = nextPlayers[nextIndex];
-  if (incoming) {
-    let hDir = incoming.horizontalDir;
-    let vDir = incoming.verticalDir;
-    if (incoming.unlockDirNextTurn) {
-      hDir = null;
-      vDir = null;
-    } else if (incoming.reverseDirNextTurn && hDir) {
-      hDir = hDir === 'left' ? 'right' : 'left';
-    }
-    nextPlayers[nextIndex] = {
-      ...incoming,
-      horizontalDir: hDir,
-      verticalDir: vDir,
-      unlockDirNextTurn: false,
-      reverseDirNextTurn: false,
-    };
-  }
-
-  const isRoundBoundary = nextIndex === state.roundStartPlayerIndex;
-  const candidateState: GameState = {
-    ...state,
-    players: nextPlayers,
-    shops: nextShops,
-    globalSale: nextSale,
-    elevatorLock: nextElevLock,
-    activePlayerIndex: nextIndex,
-    turnNumber: state.turnNumber + 1,
-    lastRoll: null,
-    remainingSteps: 0,
-    hadBranchChoiceThisTurn: false,
-    moveHistory: [],
-    pendingUndoSnapshot: null,
-    pendingPostBankPhase: null,
-    pendingBankRefundPts: 0,
-    deliverMode: null,
-    deliverPreferredShopId: null,
-    deliveredShopIdsThisTurn: [],
-    eventChoices: [],
-    eventStorePrompt: null,
-    log,
-  };
-
-  if (!state.config.finishRoundOnWin || isRoundBoundary) {
-    const winnerId = checkVictory(candidateState);
-    if (winnerId) {
-      const winner = candidateState.players.find((p) => p.id === winnerId);
-      return {
-        ...candidateState,
-        phase: 'GAME_OVER',
-        winnerId,
-        log: appendLog(candidateState, `${winner?.name ?? 'Player'} wins the match!`),
-      };
-    }
-  }
-
-  return { ...candidateState, phase: 'ROLL_PENCIL' };
 }

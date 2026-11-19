@@ -1,9 +1,10 @@
 import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
-import { createMap1, START_TILE_ID } from '../config/map1';
+import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
+import type { StageId } from '../config/maps';
 import type { GameAction } from './actions';
 import { handleRedeemBankReward } from './bank';
 import { handlePickEventCard, handleResolveEventStore, handleSkipEventStore } from './events';
-import { advanceToNextTurn } from './helpers';
+import { advanceToNextTurn } from './turn';
 import {
   handleAdvanceStep,
   handleCancelMove,
@@ -31,10 +32,12 @@ export interface PlayerSetupInput {
 export function createInitialGameState(
   playerInputs: PlayerSetupInput[],
   configOverrides: Partial<MatchConfig> = {},
-  seed = 1337
+  seed = 1337,
+  stageId: StageId = DEFAULT_STAGE_ID
 ): GameState {
   const config: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...configOverrides };
-  const { tiles, shops, segmentPools } = createMap1();
+  const stageDef = getStageDef(stageId);
+  const { tiles, shops, segmentPools, startTileId } = createStageMap(stageId);
 
   const players: Player[] = playerInputs.map((input, idx) => ({
     id: `p_${idx + 1}`,
@@ -42,7 +45,7 @@ export function createInitialGameState(
     color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffffff',
     cash: config.startingCash,
     points: 0,
-    tileId: START_TILE_ID,
+    tileId: startTileId,
     horizontalDir: null,
     verticalDir: null,
     stepsSincePayday: 0,
@@ -63,7 +66,11 @@ export function createInitialGameState(
 
   return {
     seed,
+    mapId: stageId,
     turnNumber: 1,
+    month: 0,
+    year: 1,
+    totalMonths: 0,
     roundStartPlayerIndex: 0,
     activePlayerIndex: 0,
     phase: 'ROLL_PENCIL',
@@ -87,7 +94,7 @@ export function createInitialGameState(
     shops,
     segmentPools,
     winnerId: null,
-    log: ['Match started at Floor 1 Bank (Map 1).'],
+    log: [`Match started at Floor 1 Bank (${stageDef.name} · Year 1, April).`],
   };
 }
 

@@ -1,11 +1,15 @@
+import { DEFAULT_STAGE_ID } from './config/maps';
+import type { StageId } from './config/maps';
 import type { DirectionChoice, GameAction } from './engine/actions';
-import { canCancelMove, getActivePlayer, getAvailableDirections } from './engine/helpers';
+import { getActivePlayer } from './engine/helpers';
 import { computeMovePreview } from './engine/movePreview';
 import { applyAction, createInitialGameState } from './engine/state';
 import type { GameState } from './engine/types';
 import { renderActionPanel } from './ui/actionPanel';
 import { renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
+import { bindKeyboardControls } from './ui/keyboard';
 import { renderRouteOverlay } from './ui/routeOverlay';
+import { createTopbar } from './ui/topbar';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
@@ -16,64 +20,21 @@ let hoveredEndTileId: string | null = null;
 let stepTimer: number | null = null;
 let guidedWalkActive = false;
 let guidedChoices: DirectionChoice[] = [];
+let selectedStageId: StageId = DEFAULT_STAGE_ID;
+let selectedPlayerCount = 2;
 
 function buildPlayers(count: number) {
   return Array.from({ length: count }, (_, idx) => ({ name: `Player ${idx + 1}` }));
 }
 
-let state: GameState = createInitialGameState(buildPlayers(2), {}, Date.now() & 0xffffff);
+function createMatchState(count: number, stageId: StageId): GameState {
+  return createInitialGameState(buildPlayers(count), {}, Date.now() & 0xffffff, stageId);
+}
+
+let state: GameState = createMatchState(selectedPlayerCount, selectedStageId);
 
 const shell = document.createElement('div');
 shell.className = 'app-shell';
-
-const topbar = document.createElement('header');
-topbar.className = 'topbar';
-
-const title = document.createElement('div');
-title.className = 'topbar-title';
-title.textContent = 'TOP SHOP PROTOTYPE — Move: Arrows/WASD, Click Tiles, Esc: Reset';
-
-const controls = document.createElement('div');
-controls.className = 'topbar-controls';
-
-const routesLabel = document.createElement('label');
-const routesCheckbox = document.createElement('input');
-routesCheckbox.type = 'checkbox';
-routesCheckbox.checked = showRoutes;
-routesCheckbox.addEventListener('change', () => {
-  showRoutes = routesCheckbox.checked;
-  renderRouteOverlay(routeSvgEl, boardEl, state, computeMovePreview(state), showRoutes, hoveredEndTileId);
-});
-routesLabel.appendChild(routesCheckbox);
-routesLabel.append(' Routes');
-controls.appendChild(routesLabel);
-
-const autoStepLabel = document.createElement('label');
-const autoStepCheckbox = document.createElement('input');
-autoStepCheckbox.type = 'checkbox';
-autoStepCheckbox.checked = autoStepEnabled;
-autoStepCheckbox.addEventListener('change', () => {
-  autoStepEnabled = autoStepCheckbox.checked;
-  scheduleMovementTick();
-});
-autoStepLabel.appendChild(autoStepCheckbox);
-autoStepLabel.append(' Auto-Move');
-controls.appendChild(autoStepLabel);
-
-for (const count of [2, 3, 4]) {
-  const btn = document.createElement('button');
-  btn.textContent = `New ${count}P`;
-  btn.addEventListener('click', () => {
-    cancelGuidedWalk();
-    tokensLayerEl.innerHTML = '';
-    state = createInitialGameState(buildPlayers(count), {}, Date.now() & 0xffffff);
-    render();
-  });
-  controls.appendChild(btn);
-}
-
-topbar.appendChild(title);
-topbar.appendChild(controls);
 
 const hudEl = document.createElement('section');
 hudEl.className = 'hud-row';
@@ -108,6 +69,31 @@ logBox.appendChild(logList);
 
 bottomGrid.appendChild(actionBox);
 bottomGrid.appendChild(logBox);
+
+function startNewMatch(count: number, stageId: StageId): void {
+  cancelGuidedWalk();
+  tokensLayerEl.innerHTML = '';
+  selectedPlayerCount = count;
+  selectedStageId = stageId;
+  state = createMatchState(count, stageId);
+  render();
+}
+
+const topbar = createTopbar({
+  initialShowRoutes: showRoutes,
+  initialAutoStep: autoStepEnabled,
+  initialStageId: selectedStageId,
+  onToggleRoutes: (show) => {
+    showRoutes = show;
+    renderRouteOverlay(routeSvgEl, boardEl, state, computeMovePreview(state), showRoutes, hoveredEndTileId);
+  },
+  onToggleAutoStep: (enabled) => {
+    autoStepEnabled = enabled;
+    scheduleMovementTick();
+  },
+  onSelectStage: (stageId) => startNewMatch(selectedPlayerCount, stageId),
+  onNewMatch: (count) => startNewMatch(count, selectedStageId),
+});
 
 shell.appendChild(topbar);
 shell.appendChild(hudEl);
@@ -190,82 +176,11 @@ function dispatch(action: GameAction): void {
   render();
 }
 
-function keyToDirection(key: string): DirectionChoice | null {
-  switch (key) {
-    case 'ArrowLeft':
-    case 'a':
-    case 'A':
-      return 'left';
-    case 'ArrowRight':
-    case 'd':
-    case 'D':
-      return 'right';
-    case 'ArrowUp':
-    case 'w':
-    case 'W':
-      return 'up';
-    case 'ArrowDown':
-    case 's':
-    case 'S':
-      return 'down';
-    default:
-      return null;
-  }
-}
-
-window.addEventListener('keydown', (e) => {
-  const tag = (e.target as HTMLElement | null)?.tagName;
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-
-  if (state.phase === 'ROLL_PENCIL' && (e.key === ' ' || e.key === 'Enter')) {
-    const pencilBtn = actionBox.querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
-    if (pencilBtn && !pencilBtn.disabled) {
-      e.preventDefault();
-      pencilBtn.click();
-    }
-    return;
-  }
-
-  if ((e.key === 'Escape' || e.key === 'Backspace') && canCancelMove(state)) {
-    e.preventDefault();
-    dispatch({ type: 'CANCEL_MOVE' });
-    return;
-  }
-
-  if (!isMovingPhase(state.phase) || state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') {
-    return;
-  }
-
-  const active = getActivePlayer(state);
-  const dirKey = keyToDirection(e.key);
-  const oppositeHorizontal =
-    active.horizontalDir === 'left' ? 'right' : active.horizontalDir === 'right' ? 'left' : null;
-
-  if (
-    dirKey &&
-    oppositeHorizontal === dirKey &&
-    canCancelMove(state) &&
-    (state.phase === 'STEPPING' || !getAvailableDirections(state, active).includes(dirKey))
-  ) {
-    e.preventDefault();
-    dispatch({ type: 'UNDO_STEP' });
-    return;
-  }
-
-  if (state.phase === 'CHOOSE_DIRECTION' && dirKey) {
-    if (getAvailableDirections(state, active).includes(dirKey)) {
-      e.preventDefault();
-      dispatch({ type: 'CHOOSE_DIRECTION', direction: dirKey });
-    }
-    return;
-  }
-
-  if (state.phase === 'STEPPING') {
-    if (e.key === ' ' || e.key === 'Enter' || (dirKey && dirKey === active.horizontalDir)) {
-      e.preventDefault();
-      dispatch({ type: 'ADVANCE_STEP' });
-    }
-  }
+bindKeyboardControls({
+  getState: () => state,
+  getActionBox: () => actionBox,
+  dispatch,
+  isMovingPhase,
 });
 
 function render(): void {

@@ -1,8 +1,10 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { canPlayerUseElevator, computePlayerNetWorth, getActivePlayer } from '../engine/helpers';
+import { canPlayerUseElevator, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import { getCheapestItemPrice, getShopTotalStock } from '../engine/shops';
 import type { GameState, Tile } from '../engine/types';
+
+export { renderPlayersHud, renderTokensOverlay } from './hudView';
 
 export interface BoardInteractionOptions {
   preview: MovePreview;
@@ -17,21 +19,35 @@ interface TileContent {
   isClosed?: boolean;
 }
 
-function formatTileContent(state: GameState, tile: Tile): TileContent {
+function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: boolean): TileContent {
   const active = getActivePlayer(state);
   switch (tile.type) {
     case 'bank':
       return { name: 'BANK', stats: '$ / Pts' };
     case 'elevator':
       return {
-        name: 'ELEVATOR',
+        name: hasMultiShaft ? `ELEVATOR ${tile.elevatorShaft === 1 ? 'B' : 'A'}` : 'ELEVATOR',
         stats: canPlayerUseElevator(state, active.id) ? undefined : 'LOCKED',
       };
     case 'escalator': {
       const { up, down } = tile.neighbors;
       if (up && down) return { name: 'ESC ↕ (X)' };
-      if (up) return { name: up.exitHorizontalDir === 'right' ? 'ESC ↗' : 'ESC ↖' };
-      if (down) return { name: down.exitHorizontalDir === 'right' ? 'ESC ↘' : 'ESC ↙' };
+      if (up) {
+        if (up.byEntryDir) return { name: 'ESC ↑ (↖↗)' };
+        const dest = state.tiles[up.targetTileId];
+        if (dest && Math.abs(dest.floor - tile.floor) > 1) {
+          return { name: up.exitHorizontalDir === 'right' ? `ESC ↗ ${dest.floor}F` : `ESC ↖ ${dest.floor}F` };
+        }
+        return { name: up.exitHorizontalDir === 'right' ? 'ESC ↗' : 'ESC ↖' };
+      }
+      if (down) {
+        if (down.byEntryDir) return { name: 'ESC ↓ (↙↘)' };
+        const dest = state.tiles[down.targetTileId];
+        if (dest && Math.abs(dest.floor - tile.floor) > 1) {
+          return { name: down.exitHorizontalDir === 'right' ? `ESC ↘ ${dest.floor}F` : `ESC ↙ ${dest.floor}F` };
+        }
+        return { name: down.exitHorizontalDir === 'right' ? 'ESC ↘' : 'ESC ↙' };
+      }
       return { name: 'ESC' };
     }
     case 'shop': {
@@ -68,6 +84,8 @@ export function renderBoard(
   const tileValues = Object.values(state.tiles);
   const cols = Math.max(1, ...tileValues.map((t) => t.col + 1));
   const floors = Math.max(1, ...tileValues.map((t) => t.floor));
+  const hasMultiShaft =
+    new Set(tileValues.filter((t) => t.type === 'elevator').map((t) => t.elevatorShaft ?? 0)).size > 1;
 
   container.innerHTML = '';
   container.style.gridTemplateColumns = `repeat(${cols}, minmax(104px, 1fr))`;
@@ -85,7 +103,7 @@ export function renderBoard(
       const tile = findTileAt(state, floor, col);
       const cell = document.createElement('div');
       if (!tile) {
-        cell.className = 'tile';
+        cell.className = 'tile tile--void';
         container.appendChild(cell);
         continue;
       }
@@ -112,7 +130,7 @@ export function renderBoard(
         }
       }
 
-      const content = formatTileContent(state, tile);
+      const content = formatTileContent(state, tile, hasMultiShaft);
 
       const header = document.createElement('div');
       header.className = 'tile-header';
@@ -174,91 +192,4 @@ export function renderBoard(
       container.appendChild(cell);
     }
   }
-}
-
-export function renderTokensOverlay(
-  tokensLayer: HTMLElement,
-  boardGrid: HTMLElement,
-  state: GameState
-): void {
-  const activeIds = new Set(state.players.filter((p) => !p.isBankrupt).map((p) => p.id));
-
-  for (const child of Array.from(tokensLayer.children)) {
-    const el = child as HTMLElement;
-    if (!el.dataset.playerId || !activeIds.has(el.dataset.playerId)) {
-      el.remove();
-    }
-  }
-
-  const slotCounters: Record<string, number> = {};
-
-  state.players.forEach((player, idx) => {
-    if (player.isBankrupt) return;
-
-    const tileEl = boardGrid.querySelector<HTMLElement>(`[data-tile-id="${player.tileId}"]`);
-    if (!tileEl) return;
-
-    const slotIdx = slotCounters[player.tileId] ?? 0;
-    slotCounters[player.tileId] = slotIdx + 1;
-
-    const x = tileEl.offsetLeft + 8 + (slotIdx % 4) * 21;
-    const y = tileEl.offsetTop + tileEl.offsetHeight - 28 - Math.floor(slotIdx / 4) * 20;
-
-    let token = tokensLayer.querySelector<HTMLElement>(`[data-player-id="${player.id}"]`);
-    const isNew = !token;
-    if (!token) {
-      token = document.createElement('span');
-      token.dataset.playerId = player.id;
-      token.style.backgroundColor = player.color;
-      token.textContent = String(idx + 1);
-      token.title = player.name;
-    }
-
-    token.className = `token token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
-    token.style.transform = `translate(${x}px, ${y}px)`;
-    if (isNew) {
-      tokensLayer.appendChild(token);
-    }
-  });
-}
-
-export function renderPlayersHud(container: HTMLElement, state: GameState): void {
-  container.innerHTML = '';
-
-  state.players.forEach((player, idx) => {
-    const isActive = idx === state.activePlayerIndex;
-    const card = document.createElement('div');
-    card.className = `player-card${isActive ? ' is-active' : ''}`;
-    card.style.borderColor = isActive ? player.color : '';
-
-    const netWorth = computePlayerNetWorth(state, player.id);
-    const hArrow =
-      player.horizontalDir === 'left' ? '←' : player.horizontalDir === 'right' ? '→' : '?';
-    const vArrow =
-      player.verticalDir === 'up' ? '↑' : player.verticalDir === 'down' ? '↓' : '?';
-
-    const head = document.createElement('div');
-    head.className = 'player-card-head';
-    head.innerHTML = `<span style="color:${player.color}">P${idx + 1} ${player.name}</span><span>${
-      player.isBankrupt ? 'BANKRUPT' : `Pts: ${player.points}`
-    }</span>`;
-
-    const stats = document.createElement('div');
-    const tags: string[] = [];
-    if (player.doubleNextPayday) tags.push('2xPay');
-    if (player.skipNextPayday) tags.push('NoPay');
-    if (player.doublePriceTurns > 0) tags.push(`2x$${player.doublePriceTurns}T`);
-    if (player.pencilTurnsLeft > 0 && player.pencilMode !== 'normal') {
-      tags.push(`Pencil:${player.pencilMode}(${player.pencilTurnsLeft}T)`);
-    }
-    if (player.blockDeliveryTurns > 0) tags.push(`NoDeliv(${player.blockDeliveryTurns}T)`);
-    if (player.blockNewStoreTurns > 0) tags.push(`NoOpen(${player.blockNewStoreTurns}T)`);
-    if (player.chirpSandals) tags.push('Chirp');
-    const tagSuffix = tags.length > 0 ? ` | [${tags.join(', ')}]` : '';
-    stats.textContent = `Cash: $${player.cash} | Net: $${netWorth} | Dir: ${hArrow} ${vArrow}${tagSuffix}`;
-
-    card.appendChild(head);
-    card.appendChild(stats);
-    container.appendChild(card);
-  });
 }

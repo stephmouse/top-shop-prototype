@@ -1,5 +1,10 @@
 import type { DirectionChoice } from './actions';
-import { getActivePlayer, getAvailableDirections, getTile } from './helpers';
+import {
+  getActivePlayer,
+  getAvailableDirections,
+  getTile,
+  resolveEscalatorExit,
+} from './helpers';
 import type { EscalatorLink, GameState, HorizontalDir, VerticalDir } from './types';
 
 export interface MoveOption {
@@ -34,21 +39,22 @@ function collectEndTargets(
   results: Map<string, EndTarget>,
   depth = 0
 ): void {
-  if (depth > 20) return;
+  if (depth > 24) return;
   const tile = state.tiles[cursor.tileId];
   if (!tile) return;
 
   if (cursor.onEscalator) {
     const { up, down } = tile.neighbors;
     const handleLink = (link: EscalatorLink, chosenV?: VerticalDir) => {
+      const exit = resolveEscalatorExit(link, cursor.hDir);
       const nextCursor: SimCursor = {
-        tileId: link.targetTileId,
-        hDir: link.exitHorizontalDir,
+        tileId: exit.targetTileId,
+        hDir: exit.exitHorizontalDir,
         vDir: link.nextVerticalDir ?? chosenV ?? cursor.vDir,
         stepsLeft: cursor.stepsLeft,
         onEscalator: false,
         choices: chosenV ? [...cursor.choices, chosenV] : cursor.choices,
-        path: [...cursor.path, link.targetTileId],
+        path: [...cursor.path, exit.targetTileId],
       };
       if (nextCursor.stepsLeft === 0) {
         if (!results.has(nextCursor.tileId)) {
@@ -155,7 +161,12 @@ export function computeMovePreview(state: GameState): MovePreview {
           if (targetId) nextTiles.push({ tileId: targetId, direction: dir });
         } else {
           const link = currentTile.neighbors[dir];
-          if (link) nextTiles.push({ tileId: link.targetTileId, direction: dir });
+          if (link) {
+            nextTiles.push({
+              tileId: resolveEscalatorExit(link, active.horizontalDir).targetTileId,
+              direction: dir,
+            });
+          }
         }
       }
     } else if (state.phase === 'STEPPING' && active.horizontalDir) {
@@ -164,7 +175,9 @@ export function computeMovePreview(state: GameState): MovePreview {
     } else if (state.phase === 'ESCALATOR_RIDE') {
       const { up, down } = currentTile.neighbors;
       const link = up && down ? (active.verticalDir === 'down' ? down : up) : up ?? down;
-      if (link) nextTiles.push({ tileId: link.targetTileId });
+      if (link) {
+        nextTiles.push({ tileId: resolveEscalatorExit(link, active.horizontalDir).targetTileId });
+      }
     }
   }
 

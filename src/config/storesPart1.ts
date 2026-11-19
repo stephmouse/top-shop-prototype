@@ -19,7 +19,7 @@ export const STORES_PART_1: readonly RawStoreSpec[] = [
     id: 'arcade_games', name: 'Arcade Games', segmentPool: 'leisure', baseOpenCost: 624,
     items: [
       ['Fighting Game', 52], ['Puzzle Game', 104],
-      ['Crane Game', 208], // VERIFY: Dreen FAQ says 108; 52*4 pattern = 208
+      ['Crane Game', 208],
       ['Shooting Game', 364], ['Basketball Game', 572], ['Racing Game', 832],
     ],
   },
@@ -87,9 +87,9 @@ export const STORES_PART_1: readonly RawStoreSpec[] = [
     ],
   },
   {
-    id: 'corner_deli_cafe', name: 'Corner deli Cafe', segmentPool: 'food', baseOpenCost: 336,
+    id: 'corner_deli_cafe', name: 'Corner Deli Cafe', segmentPool: 'food', baseOpenCost: 336,
     items: [
-      ['Tuna Sandwich', 28], ['Caesar Salad', 56], ['B.L.T', 112],
+      ['Tuna Sandwich', 28], ['Caesar Salad', 56], ['B.L.T.', 112],
       ['Chicken Sandwich', 196], ['Roast Beef', 308], ['Cheese Steak', 448],
     ],
   },
@@ -105,7 +105,7 @@ export const STORES_PART_1: readonly RawStoreSpec[] = [
     items: [
       ['Boom Box', 56], ['TV', 112], ['VCR', 224],
       ['DVD Player', 392], ['Air Conditioner', 616],
-      ['Refrigerator', 896], // VERIFY: Dreen FAQ says 856; 56*16 pattern = 896
+      ['Refrigerator', 896],
     ],
   },
   {
@@ -125,7 +125,7 @@ export const STORES_PART_1: readonly RawStoreSpec[] = [
   {
     id: 'fishing_gear', name: 'Fishing Gear', segmentPool: 'retail', baseOpenCost: 720,
     items: [
-      ['Lure', 60], ['Electric Rod', 120], ['Carbon Rod', 240],
+      ['Lure', 60], ['Electric Reel', 120], ['Carbon Rod', 240],
       ['DX Fishing Set', 420], ['Fish Radar', 660], ['Bass Fish Boat', 960],
     ],
   },

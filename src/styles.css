@@ -146,6 +146,7 @@ button.primary:hover:not(:disabled) {
 .tile--elevator { background: #26233d; border-color: #8957e5; }
 .tile--escalator { background: #2d2618; border-color: #d29922; }
 .tile--shop { background: #1c2433; border-color: #3a4a66; }
+.tile--void { background: transparent; border-color: transparent; pointer-events: none; }
 
 .tile--next-step {
   cursor: pointer;
