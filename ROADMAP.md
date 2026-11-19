@@ -28,5 +28,22 @@
   1. Run `npm.cmd run dev`. Vite prints a `Network: http://192.168.x.x:5173` URL because `server.host` is `true` in `vite.config.ts`.
   2. Open that LAN URL on another laptop, tablet, or phone on the same Wi-Fi and enter the Host's 6-character Room Code (Note: desktop/LAN browsers outside `localhost` may require HTTPS for `navigator.clipboard`; typing the 6-char room code manually works everywhere).
 
+## Next Vertical Slices — 2D Mall Visual Polish & Animation (Tier 1 + Tier 2 Highlights)
+- **Architectural Foundation (`src/ui/boardView.ts` + Client FX Diff Hook):**
+  - Keep board tile DOM elements persistent per stage load (updating in place instead of wiping `innerHTML` every turn) so CSS transitions, shutters, and shelf displays animate cleanly across states.
+  - Add a client-side `prevState -> nextState` diff hook (with optional short presentation queue) to trigger animations and SFX identically for both local turns and remote multiplayer `STATE_SYNC` frames without touching `src/engine/` or `src/net/`.
+- **Tier 1 — Styled Mall Theme, Storefront CSS & Audio/Juice:**
+  - **Retro Mall Visual Theme:** Stage/floor color palettes, stylized storefront awnings matching owner colors, rolling closed-shutter overlays (`isClosedTurns > 0`), distinct `Tenant Wanted` boards, and merged canopies/borders across L2–L4 chains.
+  - **44 Store Type Icons:** Crisp SVG/vector storefront emblems for every shop type.
+  - **Tactile Feedback & Audio:** 3D card-flip animations on the 3 Event cards, floating `+$` / `-$` cash popups, Bank payday pulses, and synthesized Web Audio retro SFX (pencil spin/stop, footstep/escalator glide, cash register chime, event jingle, elevator bell).
+- **Character & Avatar Customization (Zero-Artist Friendly):**
+  - **Flat-Vector Animal-Themed Presets:** Cute minimalist inline SVG animal standees (e.g., cat, fox, wolf, dog, bunny, bear, bird, frog, etc.) with customizable fur/base color, accent/outfit color (`player.color`), and simple accessories/hats.
+  - **Custom Image Upload + Interactive Manual Cropper:** Accept browser-supported raster images (PNG/JPG/WebP/GIF/AVIF; note TIFF would require an optional JS decoder library) with a drag-and-zoom crop overlay that downsamples via `<canvas>` to a compact token (`64×64`–`96×96`, capped `<= 12 KB`, never raw SVG) and syncs once per session (`AVATAR_SYNC` / `HELLO`) rather than inside every `STATE_SYNC`.
+  - **Color-Coded Standee Framing:** Automatically wrap both animal presets and custom uploaded portraits in a high-contrast `player.color` ring/pedestal base + `P1`–`P4` corner pip so ownership on the board and HUD always stays unmistakable regardless of image palette.
+- **Tier 2 Highlights — Standee Micro-Animations & Living Store Tiles:**
+  - **Board-Game Standee Animations (Single-Image / No Walk Cycles Needed):** Pure CSS tile-to-tile step hop with squash-and-stretch, subtle travel lean/flip by `horizontalDir`, escalator glide, double-hop celebrations on Payday/Cash Back, and shake reactions on rival bills/bad Events.
+  - **Mini Storefront Shelves & Transitions:** Visual shelf slots (`3–6` items) on shop tiles reflecting `shop.stock`, plus store opening/buyout pop-in and metal shutter drop animations.
+
 ## Future / Optional (Maybe Later)
+- **Tier 3 — Hybrid 2D Animated Mall Cross-Section (PixiJS + HTML/CSS UI):** Replace the CSS Grid board with a 2D WebGL canvas (`PixiJS`) featuring animated scrolling escalator treads, moving elevator cars between floors, walking customers/cashiers inside open stores, character reaction portraits on Events/Bank visits, illustrated icons across all 264 items, and smooth camera zoom/pan for larger stages (`16×4`, `11×5`), while keeping menus/modals in HTML/CSS.
 - **AI Bot Players:** Heuristic bot controller in `src/engine/bot.ts` (auto-picks direction toward unowned/own stores, buys/delivers/redeems points) for solo play.

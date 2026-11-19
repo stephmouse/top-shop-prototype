@@ -9,6 +9,18 @@ export interface HudNetInfo {
   myClientToken: string;
 }
 
+export function getTokenBodyElement(tokensLayer: HTMLElement, playerId: string): HTMLElement | undefined {
+  for (const child of Array.from(tokensLayer.children)) {
+    const wrap = child as HTMLElement;
+    if (wrap.dataset?.playerId === playerId) {
+      return Array.from(wrap.children).find((c) => (c as HTMLElement).className?.includes('token-body')) as
+        | HTMLElement
+        | undefined;
+    }
+  }
+  return undefined;
+}
+
 export function renderTokensOverlay(
   tokensLayer: HTMLElement,
   boardGrid: HTMLElement,
@@ -53,13 +65,27 @@ export function renderTokensOverlay(
     if (!token) {
       token = document.createElement('span');
       token.dataset.playerId = player.id;
-      token.textContent = String(idx + 1);
+    }
+    let bodyEl = Array.from(token.children).find((c) =>
+      (c as HTMLElement).className?.includes('token-body')
+    ) as HTMLElement | undefined;
+    if (!bodyEl) {
+      bodyEl = document.createElement('span');
+      bodyEl.className = 'token token-body';
+      token.appendChild(bodyEl);
     }
 
-    token.style.backgroundColor = player.color;
     token.title = player.name;
-    token.className = `token token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
+    token.className = `token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
     token.style.transform = `translate(${x}px, ${y}px)`;
+
+    bodyEl.style.backgroundColor = player.color;
+    bodyEl.textContent = String(idx + 1);
+    const fxCls = (bodyEl.className || '').split(/\s+/).filter((c) => c.startsWith('fx-'));
+    const dirCls =
+      player.horizontalDir === 'left' ? ['dir-left'] : player.horizontalDir === 'right' ? ['dir-right'] : [];
+    bodyEl.className = ['token', 'token-body', ...dirCls, ...fxCls].join(' ');
+
     if (isNew) {
       tokensLayer.appendChild(token);
     }

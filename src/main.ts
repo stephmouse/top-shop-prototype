@@ -7,7 +7,8 @@ import { applyAction, createInitialGameState } from './engine/state';
 import type { GameState } from './engine/types';
 import { createMultiplayerSession } from './net/session';
 import { renderActionPanel } from './ui/actionPanel';
-import { renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
+import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
+import { createFxOverlay } from './ui/fxOverlay';
 import { bindKeyboardControls } from './ui/keyboard';
 import {
   extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot, loadStoredSetup,
@@ -15,6 +16,7 @@ import {
 } from './ui/persistence';
 import type { MatchSetupData } from './ui/persistence';
 import { renderRouteOverlay } from './ui/routeOverlay';
+import { createSoundFx } from './ui/soundFx';
 import { createLobbyModal } from './ui/lobbyModal';
 import { createSetupModal } from './ui/setupModal';
 import { createTopbar } from './ui/topbar';
@@ -26,6 +28,7 @@ let autoStepEnabled = false, showRoutes = true, guidedWalkActive = false, awaiti
 let hoveredEndTileId: string | null = null, stepTimer: number | null = null;
 let guidedChoices: DirectionChoice[] = [];
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
+let prevRenderedState: GameState | null = null;
 
 const autoSaved = loadAutoSavedMatch();
 let currentSetup: MatchSetupData = autoSaved ? extractSetupFromState(autoSaved) : loadStoredSetup();
@@ -39,7 +42,9 @@ const shell = mk('div', 'app-shell'), hudEl = mk('section', 'hud-row'), boardSta
 const boardEl = mk('div', 'board-grid'), tokensLayerEl = mk('div', 'tokens-layer');
 const routeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 routeSvgEl.setAttribute('class', 'route-layer');
-boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl);
+const soundFx = createSoundFx();
+const fxOverlay = createFxOverlay(boardEl, tokensLayerEl, soundFx);
+boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl, fxOverlay.el);
 
 const bottomGrid = mk('section', 'bottom-grid'), actionBox = mk('div', 'panel-box'), logBox = mk('div', 'panel-box');
 const logList = mk('ol', 'log-list');
@@ -65,8 +70,8 @@ const netSession = createMultiplayerSession({
 (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
-  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; tokensLayerEl.innerHTML = '';
-  state = nextState; currentSetup = nextSetup;
+  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; tokensLayerEl.innerHTML = ''; fxOverlay.clear();
+  prevRenderedState = null; state = nextState; currentSetup = nextSetup;
   saveStoredSetup(nextSetup); saveAutoSavedMatch(state);
   netSession.broadcastHostState(state);
   render();
@@ -111,11 +116,10 @@ const drawRoutes = (preview = computeMovePreview(state)) =>
   renderRouteOverlay(routeSvgEl, boardEl, state, preview, showRoutes, hoveredEndTileId);
 
 const topbar = createTopbar({
-  initialShowRoutes: showRoutes,
-  initialAutoStep: autoStepEnabled,
-  initialStageId: state.mapId as StageId,
+  initialShowRoutes: showRoutes, initialAutoStep: autoStepEnabled, initialSoundEnabled: !soundFx.isMuted(), initialStageId: state.mapId as StageId,
   onToggleRoutes: (show) => { showRoutes = show; drawRoutes(); },
   onToggleAutoStep: (enabled) => { autoStepEnabled = enabled; scheduleMovementTick(); },
+  onToggleSound: (enabled) => soundFx.setMuted(!enabled),
   onSelectStage: (stageId) => startMatchFromSetup({ ...currentSetup, stageId }),
   onOpenSetup: openSetup,
   onOpenLobby: () => { setupModal.close(); lobbyModal.open(); },
@@ -130,8 +134,7 @@ const topbar = createTopbar({
 const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
   const roster = netSession.getRoster();
   topbar.sync(state.mapId as StageId, hasSave, {
-    role: netSession.getRole(),
-    roomCode: netSession.getRoomCode(),
+    role: netSession.getRole(), roomCode: netSession.getRoomCode(),
     peerCount: roster?.peers.filter((p) => p.connected).length ?? 0,
     waitingCount: roster?.peers.filter((p) => p.connected && !roster.seatOwners.includes(p.clientToken)).length ?? 0,
   });
@@ -146,15 +149,14 @@ const cancelGuidedWalk = () => { clearStepTimer(); guidedWalkActive = false; gui
 const isMovingPhase = (phase: GameState['phase']) =>
   phase === 'STEPPING' || phase === 'ESCALATOR_RIDE' || phase === 'ESCALATOR_UNDO' || phase === 'CHOOSE_DIRECTION';
 
-function sendStepAction(action: GameAction): void {
+const sendStepAction = (action: GameAction) => {
   if (netSession.getRole() === 'guest') awaitingRemoteStepAck = true;
   if (!netSession.sendOrApplyAction(action)) awaitingRemoteStepAck = false;
-}
+};
 
 function stepGuidedOrAuto(): void {
   if ((state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') && netSession.shouldTickEscalator()) {
-    netSession.broadcastHostState(applyHostAction({ type: 'ADVANCE_STEP' }));
-    return;
+    netSession.broadcastHostState(applyHostAction({ type: 'ADVANCE_STEP' })); return;
   }
   if (!netSession.isLocalTurn(state) || awaitingRemoteStepAck) return;
   if (guidedWalkActive) {
@@ -228,11 +230,10 @@ function render(): void {
   });
   drawRoutes(preview);
   renderTokensOverlay(tokensLayerEl, boardEl, state);
-  if (boardStageEl.scrollWidth > boardStageEl.clientWidth) {
-    const activeTileId = getActivePlayer(state).tileId;
-    const activeEl = Array.from(boardEl.children).find((el) => (el as HTMLElement).dataset.tileId === activeTileId) as HTMLElement | undefined;
-    if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
-  }
+  fxOverlay.playStateDiff(prevRenderedState, state);
+  prevRenderedState = state;
+  const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
+  if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   renderActionBox(netSession.isLocalTurn(state));
   logList.innerHTML = '';
   for (const entry of state.log) logList.appendChild(mk('li', '', entry));

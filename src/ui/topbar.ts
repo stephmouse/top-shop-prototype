@@ -12,9 +12,11 @@ export interface TopbarNetInfo {
 export interface TopbarOptions {
   initialShowRoutes: boolean;
   initialAutoStep: boolean;
+  initialSoundEnabled?: boolean;
   initialStageId: StageId;
   onToggleRoutes: (show: boolean) => void;
   onToggleAutoStep: (enabled: boolean) => void;
+  onToggleSound?: (enabled: boolean) => void;
   onSelectStage: (stageId: StageId) => void;
   onOpenSetup: () => void;
   onOpenLobby: () => void;
@@ -47,21 +49,21 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   const controls = document.createElement('div');
   controls.className = 'topbar-controls';
 
-  const routesLabel = document.createElement('label');
-  const routesCheckbox = document.createElement('input');
-  routesCheckbox.type = 'checkbox';
-  routesCheckbox.checked = options.initialShowRoutes;
-  routesCheckbox.addEventListener('change', () => options.onToggleRoutes(routesCheckbox.checked));
-  routesLabel.append(routesCheckbox, ' Routes');
-  controls.appendChild(routesLabel);
+  const makeToggle = (labelText: string, checked: boolean, onChange: (val: boolean) => void) => {
+    const lbl = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = checked;
+    cb.addEventListener('change', () => onChange(cb.checked));
+    lbl.append(cb, ` ${labelText}`);
+    return lbl;
+  };
 
-  const autoStepLabel = document.createElement('label');
-  const autoStepCheckbox = document.createElement('input');
-  autoStepCheckbox.type = 'checkbox';
-  autoStepCheckbox.checked = options.initialAutoStep;
-  autoStepCheckbox.addEventListener('change', () => options.onToggleAutoStep(autoStepCheckbox.checked));
-  autoStepLabel.append(autoStepCheckbox, ' Auto-Move');
-  controls.appendChild(autoStepLabel);
+  controls.append(
+    makeToggle('Routes', options.initialShowRoutes, options.onToggleRoutes),
+    makeToggle('Auto-Move', options.initialAutoStep, options.onToggleAutoStep),
+    makeToggle('SFX', options.initialSoundEnabled ?? true, (v) => options.onToggleSound?.(v))
+  );
 
   const stageSelect = document.createElement('select');
   stageSelect.setAttribute('aria-label', 'Select Map Stage');

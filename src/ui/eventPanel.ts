@@ -62,6 +62,7 @@ export function renderEventPickPanel(
     applyBtn.dataset.pencilPrimary = 'true';
     applyBtn.addEventListener('click', commitPick);
     header.appendChild(applyBtn);
+    grid.className = 'event-cards-grid is-revealed-grid';
 
     state.eventChoices.forEach((cardId, idx) => {
       const def = EVENT_CARDS.find((c) => c.id === cardId);
@@ -70,7 +71,8 @@ export function renderEventPickPanel(
       const tags = formatCardTags(def, baseCash);
       const cardBtn = document.createElement('button');
       cardBtn.type = 'button';
-      cardBtn.className = `event-card-btn is-revealed ${isPicked ? 'is-picked' : 'is-unpicked'}`;
+      cardBtn.className = `event-card-btn is-revealed is-flipping ${isPicked ? 'is-picked' : 'is-unpicked'}`;
+      cardBtn.style.animationDelay = isPicked ? '0ms' : '130ms';
       cardBtn.disabled = !isPicked;
       cardBtn.append(
         mkSpan('event-card-badge', isPicked ? 'YOUR PICK' : 'UNPICKED'),
