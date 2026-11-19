@@ -55,7 +55,7 @@ export function bindKeyboardControls({
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
     const state = getState();
-    if (state.phase === 'ROLL_PENCIL' && (e.key === ' ' || e.key === 'Enter')) {
+    if ((state.phase === 'ROLL_PENCIL' || state.phase === 'EVENT_PICK') && (e.key === ' ' || e.key === 'Enter')) {
       const pencilBtn = getActionBox().querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
       if (pencilBtn && !pencilBtn.disabled) {
         e.preventDefault();

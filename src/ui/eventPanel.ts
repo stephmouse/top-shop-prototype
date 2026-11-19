@@ -1,10 +1,104 @@
-import { STORE_TYPES } from '../config/balance';
+import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
+import { computeEventBaseCash } from '../engine/events';
 import { computeShopAssetValue, getActivePlayer } from '../engine/helpers';
 import { getAllowedStoreTypeIds } from '../engine/shops';
-import type { GameState, Shop } from '../engine/types';
+import type { EventCardDef, GameState, Shop } from '../engine/types';
 
 type DispatchFn = (action: GameAction) => void;
+
+let revealedKey: string | null = null;
+let chosenCardId: string | null = null;
+
+function formatCardTags(def: EventCardDef, baseCash: number): { scaledTag: string; ptsTag: string } {
+  const scaledTag =
+    def.effect.kind === 'cash_gift_scaled' ||
+    def.effect.kind === 'pay_each_rival_scaled' ||
+    def.effect.kind === 'collect_each_rival_scaled' ||
+    def.effect.kind === 'drop_cash_scaled'
+      ? ` [$${Math.floor(baseCash * def.effect.baseMultiplier)}]`
+      : '';
+  return { scaledTag, ptsTag: def.awardsPoints ? '+1–3 pts' : '0 pts' };
+}
+
+function mkSpan(className: string, text: string): HTMLSpanElement {
+  return Object.assign(document.createElement('span'), { className, textContent: text });
+}
+
+export function renderEventPickPanel(
+  container: HTMLElement,
+  state: GameState,
+  dispatch: DispatchFn
+): void {
+  container.innerHTML = '';
+  const currentKey = `${state.turnNumber}:${state.activePlayerIndex}:${state.seed}:${state.eventChoices.join(',')}`;
+  if (revealedKey !== currentKey) {
+    revealedKey = null;
+    chosenCardId = null;
+  }
+
+  const header = Object.assign(document.createElement('div'), { className: 'event-pick-header' });
+  const grid = Object.assign(document.createElement('div'), { className: 'event-cards-grid' });
+  const baseCash = computeEventBaseCash(state.totalMonths);
+  const pickedDef = chosenCardId ? EVENT_CARDS.find((c) => c.id === chosenCardId) : undefined;
+
+  if (!chosenCardId || !pickedDef) {
+    header.appendChild(mkSpan('', 'Choose 1 of 3 face-down Event Cards'));
+    state.eventChoices.forEach((cardId, idx) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'event-card-btn is-facedown';
+      btn.append(
+        mkSpan('event-card-badge', `EVENT CARD ${idx + 1}`),
+        mkSpan('event-card-emblem', '?'),
+        mkSpan('event-card-desc', 'Click to Flip')
+      );
+      btn.addEventListener('click', () => {
+        revealedKey = currentKey;
+        chosenCardId = cardId;
+        renderEventPickPanel(container, state, dispatch);
+      });
+      grid.appendChild(btn);
+    });
+  } else {
+    const commitPick = () => {
+      const cardId = chosenCardId!;
+      revealedKey = null;
+      chosenCardId = null;
+      dispatch({ type: 'PICK_EVENT_CARD', cardId });
+    };
+    const { scaledTag, ptsTag } = formatCardTags(pickedDef, baseCash);
+    header.appendChild(mkSpan('', `${pickedDef.name}: ${pickedDef.description}${scaledTag} (${ptsTag})`));
+    const applyBtn = Object.assign(document.createElement('button'), {
+      type: 'button',
+      className: 'primary',
+      textContent: 'Apply Event (Space)',
+    });
+    applyBtn.dataset.pencilPrimary = 'true';
+    applyBtn.addEventListener('click', commitPick);
+    header.appendChild(applyBtn);
+
+    for (const cardId of state.eventChoices) {
+      const def = EVENT_CARDS.find((c) => c.id === cardId);
+      if (!def) continue;
+      const isPicked = cardId === chosenCardId;
+      const tags = formatCardTags(def, baseCash);
+      const cardBtn = document.createElement('button');
+      cardBtn.type = 'button';
+      cardBtn.className = `event-card-btn is-revealed ${isPicked ? 'is-picked' : 'is-unpicked'}`;
+      cardBtn.disabled = !isPicked;
+      cardBtn.append(
+        mkSpan('event-card-badge', isPicked ? 'YOUR PICK' : 'UNPICKED'),
+        mkSpan('event-card-title', `${def.name} (${tags.ptsTag})`),
+        mkSpan('event-card-desc', `${def.description}${tags.scaledTag}`)
+      );
+      if (isPicked) cardBtn.addEventListener('click', commitPick);
+      grid.appendChild(cardBtn);
+    }
+  }
+
+  container.append(header, grid);
+}
 
 function formatLoc(state: GameState, shop: Shop): string {
   const t = state.tiles[shop.tileId];

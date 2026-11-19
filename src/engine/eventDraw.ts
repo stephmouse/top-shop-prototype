@@ -73,6 +73,49 @@ export function rollWeightedEventId(
   };
 }
 
+function collectColumnPool(col: EventRubberBandColumn, month: number, excluding: string[]): string[] {
+  const pool: string[] = [];
+  let prev = 0;
+  for (const row of EVENT_WEIGHT_TABLE) {
+    const thresh = row.thresholds[col];
+    if (thresh > prev) {
+      const resolved = resolveTableEventId(row.id, month);
+      if (!excluding.includes(resolved) && !pool.includes(resolved)) {
+        pool.push(resolved);
+      }
+    }
+    prev = thresh;
+  }
+  return pool;
+}
+
+function drawDistinctFromColumn(
+  col: EventRubberBandColumn,
+  month: number,
+  existing: string[],
+  startSeed: number
+): { id: string; nextSeed: number } {
+  let currentSeed = startSeed;
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const { value: roll, nextSeed } = randomInt(currentSeed, 0, EVENT_RUBBER_BAND_CONFIG.rollMax - 1);
+    currentSeed = nextSeed;
+    const id = selectEventFromColumn(roll, col, month);
+    if (!existing.includes(id)) {
+      return { id, nextSeed: currentSeed };
+    }
+  }
+
+  let fallbackPool = collectColumnPool(col, month, existing);
+  if (fallbackPool.length === 0) {
+    fallbackPool = collectColumnPool(1, month, existing);
+  }
+  if (fallbackPool.length > 0) {
+    const picked = pickRandom(currentSeed, fallbackPool);
+    return { id: picked.value, nextSeed: picked.nextSeed };
+  }
+  return { id: getSeasonalEventId(month), nextSeed: currentSeed };
+}
+
 export function drawThreeEventIds(
   state: GameState,
   seed: number
@@ -81,35 +124,18 @@ export function drawThreeEventIds(
   const ids: string[] = [];
   let currentSeed = seed;
 
-  for (let attempt = 0; attempt < 32 && ids.length < 3; attempt++) {
-    const { value: roll, nextSeed } = randomInt(currentSeed, 0, EVENT_RUBBER_BAND_CONFIG.rollMax - 1);
-    currentSeed = nextSeed;
-    const id = selectEventFromColumn(roll, col, state.month);
-    if (!ids.includes(id)) {
-      ids.push(id);
-    }
+  for (let k = 0; k < 3; k++) {
+    const drawn = drawDistinctFromColumn(col, state.month, ids, currentSeed);
+    currentSeed = drawn.nextSeed;
+    ids.push(drawn.id);
   }
 
-  if (ids.length < 3) {
-    const fallbackPool: string[] = [];
-    let prev = 0;
-    for (const row of EVENT_WEIGHT_TABLE) {
-      const thresh = row.thresholds[col];
-      if (thresh > prev) {
-        const resolved = resolveTableEventId(row.id, state.month);
-        if (!ids.includes(resolved) && !fallbackPool.includes(resolved)) {
-          fallbackPool.push(resolved);
-        }
-      }
-      prev = thresh;
-    }
-    while (ids.length < 3 && fallbackPool.length > 0) {
-      const { value, nextSeed } = pickRandom(currentSeed, fallbackPool);
-      currentSeed = nextSeed;
-      ids.push(value);
-      const removeIdx = fallbackPool.indexOf(value);
-      if (removeIdx >= 0) fallbackPool.splice(removeIdx, 1);
-    }
+  for (let i = ids.length - 1; i > 0; i--) {
+    const { value: j, nextSeed } = randomInt(currentSeed, 0, i);
+    currentSeed = nextSeed;
+    const tmp = ids[i]!;
+    ids[i] = ids[j]!;
+    ids[j] = tmp;
   }
 
   return { ids, nextSeed: currentSeed };

@@ -1,11 +1,9 @@
-import { EVENT_CARDS, EVENT_RUBBER_BAND_LABELS } from '../config/balance';
 import type { GameAction } from '../engine/actions';
-import { formatCalendarDate, getEventRubberBandColumn, getSeasonalEventId } from '../engine/eventDraw';
-import { computeEventBaseCash } from '../engine/events';
+import { formatCalendarDate } from '../engine/eventDraw';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import type { GameState } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
-import { renderEventStorePanel } from './eventPanel';
+import { renderEventPickPanel, renderEventStorePanel } from './eventPanel';
 import { renderPencilPanel } from './pencilView';
 import {
   renderBuyRivalPanel,
@@ -121,34 +119,7 @@ export function renderActionPanel(
   }
 
   if (state.phase === 'EVENT_PICK') {
-    const col = getEventRubberBandColumn(state);
-    const seasonalId = getSeasonalEventId(state.month);
-    const seasonalName = EVENT_CARDS.find((c) => c.id === seasonalId)?.name ?? seasonalId;
-    const meta = document.createElement('span');
-    meta.textContent = `Event Odds: ${EVENT_RUBBER_BAND_LABELS[col]} · Season: ${seasonalName}`;
-    stack.appendChild(meta);
-
-    const list = document.createElement('div');
-    list.className = 'card-list';
-    const baseCash = computeEventBaseCash(state.totalMonths);
-    for (const cardId of state.eventChoices) {
-      const def = EVENT_CARDS.find((c) => c.id === cardId);
-      if (!def) continue;
-      const scaledTag =
-        def.effect.kind === 'cash_gift_scaled' ||
-        def.effect.kind === 'pay_each_rival_scaled' ||
-        def.effect.kind === 'collect_each_rival_scaled' ||
-        def.effect.kind === 'drop_cash_scaled'
-          ? ` [$${Math.floor(baseCash * def.effect.baseMultiplier)}]`
-          : '';
-      const ptsTag = def.awardsPoints ? '+1–3 pts' : '0 pts';
-      list.appendChild(
-        makeBtn(`${def.name}: ${def.description}${scaledTag} (${ptsTag})`, () =>
-          dispatch({ type: 'PICK_EVENT_CARD', cardId: def.id })
-        )
-      );
-    }
-    stack.appendChild(list);
+    renderEventPickPanel(stack, state, dispatch);
     return;
   }
 
