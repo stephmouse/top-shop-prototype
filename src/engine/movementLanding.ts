@@ -35,6 +35,7 @@ export function applyBankPayday(
 
   const nextState = updateActivePlayer(state, {
     cash: player.cash + payday,
+    bankVisits: (player.bankVisits ?? 0) + 1,
     stepsSincePayday: 0,
     doubleNextPayday: false,
     skipNextPayday: false,

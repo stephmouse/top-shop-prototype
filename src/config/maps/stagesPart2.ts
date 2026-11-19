@@ -12,6 +12,7 @@ export const STAGES_PART_2: readonly StageDefinition[] = [
     cols: 16,
     floors: 4,
     shopCount: 35,
+    lapSteps: 42,
     rows: [
       '.  .   .   .   .   T   A8  A8  A8  A8  E1  A9  A9  A9  A9  T',
       '.  .   .   .   .   S   A5  A5  A5  =   T   =   A10 A10 A10 S',
@@ -26,6 +27,7 @@ export const STAGES_PART_2: readonly StageDefinition[] = [
     cols: 16,
     floors: 4,
     shopCount: 31,
+    lapSteps: 36,
     rows: [
       'T  A5  A5  A5  A5  E0  A9  A9  A9  A9  T   .   .   .   .   .',
       'S  .   .   .   .   T   A8  A8  A8  A8  S   .   .   .   .   .',
@@ -40,6 +42,7 @@ export const STAGES_PART_2: readonly StageDefinition[] = [
     cols: 16,
     floors: 4,
     shopCount: 39,
+    lapSteps: 44,
     rows: [
       'T  A10 A10 A10 A10 E0  A9  A9  A9  A9  E1  A8  A8  A8  A8  T',
       'S  A7  A7  A7  A7  T   .   .   .   .   T   A4  A4  A4  A4  S',
@@ -54,6 +57,7 @@ export const STAGES_PART_2: readonly StageDefinition[] = [
     cols: 11,
     floors: 5,
     shopCount: 40,
+    lapSteps: 72,
     rows: [
       'T  A9  A9  A9  A9  E0  A10 A10 A10 A10 T',
       'S  A8  A8  A8  A8  E0  A7  A7  A7  A7  S',
@@ -69,6 +73,7 @@ export const STAGES_PART_2: readonly StageDefinition[] = [
     cols: 16,
     floors: 4,
     shopCount: 40,
+    lapSteps: 46,
     rows: [
       'T  A9  A9  A9  A9  E0  A7  A7  A7  A7  E1  A6  A6  A6  A6  T',
       'S  A8  A8  A8  A8  E0  A5  A5  A5  A5  T   .   .   .   .   S',

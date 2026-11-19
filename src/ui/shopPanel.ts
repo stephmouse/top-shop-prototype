@@ -32,9 +32,9 @@ export function renderBuySlotPanel(
   const list = document.createElement('div');
   list.className = 'card-list';
 
-  if (!isBuyout && active.blockNewStoreTurns > 0) {
+  if (active.blockNewStoreTurns > 0) {
     const blocked = document.createElement('div');
-    blocked.textContent = 'Opening new stores is blocked this turn.';
+    blocked.textContent = "This store can't be opened due to vandalism.";
     list.appendChild(blocked);
   } else {
     const allowedIds = getAllowedStoreTypeIds(

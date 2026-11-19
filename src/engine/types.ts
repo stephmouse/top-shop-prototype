@@ -102,6 +102,7 @@ export interface Player {
   horizontalDir: HorizontalDir | null;
   verticalDir: VerticalDir | null;
   stepsSincePayday: number;
+  bankVisits: number;
   blockDeliveryTurns: number;
   blockNewStoreTurns: number;
   pencilMode: PencilOverrideMode;

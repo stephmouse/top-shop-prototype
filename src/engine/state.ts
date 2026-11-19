@@ -50,6 +50,7 @@ export function createInitialGameState(
     horizontalDir: null,
     verticalDir: null,
     stepsSincePayday: 0,
+    bankVisits: 0,
     blockDeliveryTurns: 0,
     blockNewStoreTurns: 0,
     pencilMode: 'normal',

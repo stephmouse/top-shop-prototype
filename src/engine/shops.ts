@@ -62,6 +62,7 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
 export function handleBuyoutShop(state: GameState, storeTypeId: string): GameState {
   if (state.phase !== 'SHOP_BUY_SLOT') return state;
   const active = getActivePlayer(state);
+  if (active.blockNewStoreTurns > 0) return state;
   const tile = getTile(state, active.tileId);
   if (!tile.shopSlotId) return state;
   const shop = state.shops[tile.shopSlotId];

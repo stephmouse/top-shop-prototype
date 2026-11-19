@@ -29,10 +29,13 @@ export const STORE_CAPACITY_BY_LEVEL: Record<1 | 2 | 3 | 4, number> = {
 };
 
 export const PAYDAY_CONFIG = {
-  baseSalary: 250,
-  assetRate: 0.04,
-  stepBonus: 15,
-  landMultiplier: 1.5,
+  visitSalaryStep: 100,
+  assetDivisor: 10,
+  referenceLapSteps: 36,
+  minStepPercent: 25,
+  lapStepPercent: 75,
+  landMultiplierNumerator: 3,
+  landMultiplierDenominator: 2,
 } as const;
 
 export const SHOP_RULES = {

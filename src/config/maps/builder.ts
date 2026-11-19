@@ -28,6 +28,7 @@ export interface StageDefinition {
   readonly cols: number;
   readonly floors: number;
   readonly shopCount: number;
+  readonly lapSteps: number;
   readonly rows: readonly string[];
 }
 

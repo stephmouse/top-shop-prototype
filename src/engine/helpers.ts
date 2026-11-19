@@ -1,4 +1,6 @@
 import { PAYDAY_CONFIG, SHOP_RULES, STORE_TYPES } from '../config/balance';
+import { getStageDef } from '../config/maps';
+import type { StageId } from '../config/maps';
 import type {
   EscalatorExit,
   EscalatorLink,
@@ -146,15 +148,19 @@ export function computePaydayAmount(
   player: Player,
   isExactLanding: boolean
 ): number {
-  const netWorth = Math.max(0, computePlayerNetWorth(state, player.id));
-  const raw =
-    PAYDAY_CONFIG.baseSalary +
-    Math.floor(netWorth * PAYDAY_CONFIG.assetRate) +
-    player.stepsSincePayday * PAYDAY_CONFIG.stepBonus;
+  const stageLap = getStageDef(state.mapId as StageId).lapSteps;
+  const netWorth = computePlayerNetWorth(state, player.id);
+  const assetPart = Math.max(0, Math.floor(netWorth / PAYDAY_CONFIG.assetDivisor));
+  const visitBonus = ((player.bankVisits ?? 0) + 1) * PAYDAY_CONFIG.visitSalaryStep;
+  const scaledBase = Math.floor(((assetPart + visitBonus) * stageLap) / PAYDAY_CONFIG.referenceLapSteps);
+  const stepPct =
+    PAYDAY_CONFIG.minStepPercent +
+    Math.floor((PAYDAY_CONFIG.lapStepPercent * player.stepsSincePayday) / stageLap);
+  const rawPay = Math.floor((scaledBase * stepPct) / 100);
 
   return isExactLanding
-    ? Math.floor(raw * PAYDAY_CONFIG.landMultiplier)
-    : raw;
+    ? Math.floor((rawPay * PAYDAY_CONFIG.landMultiplierNumerator) / PAYDAY_CONFIG.landMultiplierDenominator)
+    : rawPay;
 }
 
 export function getAvailableDirections(
