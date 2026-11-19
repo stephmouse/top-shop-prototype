@@ -30,7 +30,7 @@ function activeCount(state: GameState): number {
 export function handlePickEventCard(state: GameState, cardId: string): GameState {
   if (state.phase !== 'EVENT_PICK' || !state.eventChoices.includes(cardId)) return state;
   const revealed = state.revealedEventSlot ?? null;
-  if (revealed !== null && state.eventChoices[revealed] !== cardId) return state;
+  if (revealed === null || state.eventChoices[revealed] !== cardId) return state;
   const card = EVENT_CARDS.find((c) => c.id === cardId);
   if (!card) return state;
 

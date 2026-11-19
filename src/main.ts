@@ -22,13 +22,10 @@ import { createTopbar } from './ui/topbar';
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
 
-let autoStepEnabled = false;
-let showRoutes = true;
-let hoveredEndTileId: string | null = null;
-let stepTimer: number | null = null;
-let guidedWalkActive = false;
+let autoStepEnabled = false, showRoutes = true, guidedWalkActive = false, awaitingRemoteStepAck = false;
+let hoveredEndTileId: string | null = null, stepTimer: number | null = null;
 let guidedChoices: DirectionChoice[] = [];
-let awaitingRemoteStepAck = false;
+let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
 
 const autoSaved = loadAutoSavedMatch();
 let currentSetup: MatchSetupData = autoSaved ? extractSetupFromState(autoSaved) : loadStoredSetup();
@@ -38,24 +35,21 @@ let state: GameState =
 const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, textContent = '') =>
   Object.assign(document.createElement(tag), { className, textContent });
 
-const shell = mk('div', 'app-shell');
-const hudEl = mk('section', 'hud-row');
-const boardStageEl = mk('section', 'board-stage');
-const boardEl = mk('div', 'board-grid');
+const shell = mk('div', 'app-shell'), hudEl = mk('section', 'hud-row'), boardStageEl = mk('section', 'board-stage');
+const boardEl = mk('div', 'board-grid'), tokensLayerEl = mk('div', 'tokens-layer');
 const routeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 routeSvgEl.setAttribute('class', 'route-layer');
-const tokensLayerEl = mk('div', 'tokens-layer');
 boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl);
 
-const bottomGrid = mk('section', 'bottom-grid');
-const actionBox = mk('div', 'panel-box');
-const logBox = mk('div', 'panel-box');
+const bottomGrid = mk('section', 'bottom-grid'), actionBox = mk('div', 'panel-box'), logBox = mk('div', 'panel-box');
 const logList = mk('ol', 'log-list');
 logBox.append(mk('h3', 'panel-title', 'Match Log'), logList);
 bottomGrid.append(actionBox, logBox);
 
 function applyHostAction(action: GameAction): GameState {
-  state = applyAction(state, action);
+  const next = applyAction(state, action);
+  if (next === state) return state;
+  state = next;
   saveAutoSavedMatch(state);
   render();
   return state;
@@ -64,21 +58,16 @@ function applyHostAction(action: GameAction): GameState {
 const netSession = createMultiplayerSession({
   getState: () => state,
   onApplyHostAction: applyHostAction,
-  onReceiveRemoteState: (remoteState) => { awaitingRemoteStepAck = false; state = remoteState; render(); },
-  onSessionChange: () => { lobbyModal.refresh(); render(); },
+  onReceiveRemoteState: (remoteState) => { awaitingRemoteStepAck = false; state = remoteState; lobbyModal.refresh(); render(); },
+  onSessionChange: () => renderSessionUi(),
   onError: (msg) => { awaitingRemoteStepAck = false; lobbyModal.showStatus(msg, true); console.warn('[TopShop Net]', msg); },
 });
 (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
-  cancelGuidedWalk();
-  awaitingRemoteStepAck = false;
-  hoveredEndTileId = null;
-  tokensLayerEl.innerHTML = '';
-  state = nextState;
-  currentSetup = nextSetup;
-  saveStoredSetup(nextSetup);
-  saveAutoSavedMatch(state);
+  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; tokensLayerEl.innerHTML = '';
+  state = nextState; currentSetup = nextSetup;
+  saveStoredSetup(nextSetup); saveAutoSavedMatch(state);
   netSession.broadcastHostState(state);
   render();
 }
@@ -169,9 +158,7 @@ function stepGuidedOrAuto(): void {
   }
   if (!netSession.isLocalTurn(state) || awaitingRemoteStepAck) return;
   if (guidedWalkActive) {
-    if (state.phase === 'CHOOSE_DIRECTION' && guidedChoices.length > 0) {
-      return sendStepAction({ type: 'CHOOSE_DIRECTION', direction: guidedChoices.shift()! });
-    }
+    if (state.phase === 'CHOOSE_DIRECTION' && guidedChoices.length > 0) return sendStepAction({ type: 'CHOOSE_DIRECTION', direction: guidedChoices.shift()! });
     if (state.phase === 'STEPPING') return sendStepAction({ type: 'ADVANCE_STEP' });
     return cancelGuidedWalk();
   }
@@ -188,9 +175,7 @@ function scheduleMovementTick(): void {
 
 function dispatch(action: GameAction): void {
   if (!netSession.isLocalTurn(state)) return;
-  cancelGuidedWalk();
-  awaitingRemoteStepAck = false;
-  hoveredEndTileId = null;
+  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null;
   netSession.sendOrApplyAction(action);
 }
 
@@ -200,11 +185,36 @@ bindKeyboardControls({
   onCloseModal: () => { setupModal.close(); lobbyModal.close(); },
 });
 
-function render(): void {
-  const preview = computeMovePreview(state);
-  const canAct = netSession.isLocalTurn(state);
+function syncHeaderAndHud(): void {
   syncTopbar();
   renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken() });
+}
+
+function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencilSpinning()): void {
+  lastRenderedCanAct = canAct;
+  lastRenderedRemoteSpin = remoteSpin;
+  renderActionPanel(actionBox, state, dispatch, {
+    onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
+    readOnly: !canAct,
+    remotePencilSpinning: remoteSpin,
+    onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning),
+  });
+}
+
+function renderSessionUi(): void {
+  lobbyModal.refresh();
+  syncHeaderAndHud();
+  const canAct = netSession.isLocalTurn(state);
+  const remoteSpin = netSession.isRemotePencilSpinning();
+  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
+    renderActionBox(canAct, remoteSpin);
+    scheduleMovementTick();
+  }
+}
+
+function render(): void {
+  const preview = computeMovePreview(state);
+  syncHeaderAndHud();
   renderBoard(boardEl, state, {
     preview,
     onSelectNextStep: (opt) => dispatch(state.phase === 'CHOOSE_DIRECTION' && opt.direction ? { type: 'CHOOSE_DIRECTION', direction: opt.direction } : { type: 'ADVANCE_STEP' }),
@@ -222,12 +232,7 @@ function render(): void {
     const activeEl = boardEl.querySelector<HTMLElement>(`[data-tile-id="${getActivePlayer(state).tileId}"]`);
     if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   }
-  renderActionPanel(actionBox, state, dispatch, {
-    onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
-    readOnly: !canAct,
-    remotePencilSpinning: netSession.isRemotePencilSpinning(),
-    onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning),
-  });
+  renderActionBox(netSession.isLocalTurn(state));
   logList.innerHTML = '';
   for (const entry of state.log) logList.appendChild(mk('li', '', entry));
   scheduleMovementTick();

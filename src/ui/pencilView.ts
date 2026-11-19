@@ -51,7 +51,7 @@ export function renderPencilPanel(
   const decelDurationMs = isSlow ? 80 : 320;
 
   let spinPhase: 'idle' | 'spinning' | 'stopping' = 'idle';
-  let angleDeg = ((Math.abs(state.seed) % FACE_COUNT) * FACE_ANGLE) % 360;
+  let angleDeg = (((state.turnNumber * 3 + state.activePlayerIndex) % FACE_COUNT) * FACE_ANGLE) % 360;
   let lastFrameTs = 0;
   let stopStartTs = 0;
   let stopFromAngle = angleDeg;

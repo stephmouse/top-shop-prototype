@@ -9,7 +9,6 @@ import {
   handleRevealEventCard,
   handleSkipEventStore,
 } from './events';
-import { advanceToNextTurn } from './turn';
 import {
   handleAdvanceStep,
   handleCancelMove,
@@ -148,8 +147,6 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return handleBuyRivalItems(state, action.itemIds);
     case 'SELL_SHOP_LIQUIDATE':
       return handleSellShopLiquidate(state, action.shopId);
-    case 'END_TURN':
-      return advanceToNextTurn(state);
     default:
       return state;
   }

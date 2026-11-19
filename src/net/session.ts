@@ -100,9 +100,9 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         return;
       }
       if (raw.type === 'ACTION_REQUEST') {
-        if (curState.phase === 'ESCALATOR_RIDE' || curState.phase === 'ESCALATOR_UNDO') return;
-        syncHostState(callbacks.onApplyHostAction(raw.action));
-        callbacks.onSessionChange();
+        if (raw.seq !== seq || curState.phase === 'ESCALATOR_RIDE' || curState.phase === 'ESCALATOR_UNDO') return;
+        const nextState = callbacks.onApplyHostAction(raw.action);
+        if (nextState !== curState) syncHostState(nextState);
       } else if (raw.type === 'UI_PENCIL_SPIN') {
         remotePencilSpinning = raw.spinning;
         broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning: raw.spinning, activePlayerIndex: curState.activePlayerIndex }, boundToken);
@@ -191,8 +191,12 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     sendOrApplyAction: (action) => {
       const curState = callbacks.getState();
       if (!canClientAct(role, roster, clientToken, curState.activePlayerIndex) || !isValidGameAction(action)) return false;
-      if (role === 'offline') { callbacks.onApplyHostAction(action); return true; }
-      if (role === 'host') { syncHostState(callbacks.onApplyHostAction(action)); return true; }
+      if (role === 'offline') { return callbacks.onApplyHostAction(action) !== curState; }
+      if (role === 'host') {
+        const next = callbacks.onApplyHostAction(action);
+        if (next !== curState) syncHostState(next);
+        return next !== curState;
+      }
       if (!hostConn?.open) { callbacks.onError?.('Not connected to host.'); return false; }
       hostConn.send({ type: 'ACTION_REQUEST', clientToken, seq, action } satisfies ClientToHostMessage);
       return true;

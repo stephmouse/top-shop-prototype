@@ -106,6 +106,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
       stageSelect.value = stageId;
       stageSelect.disabled = isGuest;
       setupBtn.disabled = isGuest;
+      saveBtn.disabled = isGuest;
       loadBtn.disabled = isGuest || !hasSavedMatch;
       for (const btn of newMatchBtns) btn.disabled = isGuest;
 

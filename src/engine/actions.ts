@@ -22,8 +22,7 @@ export type GameAction =
   | { type: 'DELIVER_ITEMS'; shopId: string; order: Record<string, number> }
   | { type: 'SKIP_DELIVER' }
   | { type: 'BUY_RIVAL_ITEMS'; itemIds: string[] }
-  | { type: 'SELL_SHOP_LIQUIDATE'; shopId: string }
-  | { type: 'END_TURN' };
+  | { type: 'SELL_SHOP_LIQUIDATE'; shopId: string };
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -73,7 +72,6 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
     case 'CLOSE_BANK_MENU':
     case 'SKIP_SHOP_SLOT':
     case 'SKIP_DELIVER':
-    case 'END_TURN':
       return true;
     case 'RESOLVE_ELEVATOR':
       return typeof raw.ride === 'boolean';
@@ -121,5 +119,5 @@ export function redactStateForClient(state: GameState): GameState {
       eventChoices: state.eventChoices.map((_, idx) => `hidden_${idx}`),
     };
   }
-  return state;
+  return { ...state, seed: 0 };
 }
