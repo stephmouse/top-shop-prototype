@@ -5,8 +5,10 @@ import { getActivePlayer } from './engine/helpers';
 import { computeMovePreview } from './engine/movePreview';
 import { applyAction, createInitialGameState } from './engine/state';
 import type { GameState } from './engine/types';
+import type { ConnectedPeerInfo } from './net/protocol';
 import { createMultiplayerSession } from './net/session';
 import { renderActionPanel } from './ui/actionPanel';
+import { createAvatarModal } from './ui/avatarModal';
 import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
 import { createFxOverlay } from './ui/fxOverlay';
 import { bindKeyboardControls } from './ui/keyboard';
@@ -89,26 +91,29 @@ const saveCurrentMatch = () => {
   return env;
 };
 
+const avatarModal = createAvatarModal();
 const setupModal = createSetupModal({
-  initialSetup: currentSetup,
-  onStartMatch: startMatchFromSetup,
-  onSaveMatch: saveCurrentMatch,
-  onLoadMatch: loadSavedState,
+  initialSetup: currentSetup, onStartMatch: startMatchFromSetup, onSaveMatch: saveCurrentMatch, onLoadMatch: loadSavedState,
+  onEditAvatar: (idx, cur, col, onSave) => avatarModal.open(cur, col, `Customize Player ${idx + 1} Standee`, onSave),
 });
 
-const addPlayerSlotForPeer = (peer: { clientToken: string; name: string; color: string }) => {
+const addPlayerSlotForPeer = (peer: ConnectedPeerInfo) => {
   if (netSession.getRole() !== 'host' || state.players.length >= 4) return;
-  const players = [...state.players.map(({ name, color, isBot }) => ({ name, color, isBot })), { name: peer.name, color: peer.color, isBot: false }];
+  const peerImg = netSession.getCustomAvatars()[peer.clientToken];
+  const players = [
+    ...state.players.map(({ name, color, isBot, avatar }) => ({ name, color, isBot, avatar })),
+    { name: peer.name, color: peer.color, isBot: false, ...(peer.avatar ? { avatar: peerImg ? { ...peer.avatar, customImage: peerImg } : peer.avatar } : {}) },
+  ];
   startMatchFromSetup({ ...currentSetup, players });
   netSession.assignSeat(state.players.length - 1, peer.clientToken);
   lobbyModal.showStatus(`Added Player ${state.players.length} slot for ${peer.name}.`);
 };
 
 const lobbyModal = createLobbyModal({
-  netSession,
-  getState: () => state,
-  getDefaultProfile: () => ({ name: currentSetup.players[1]?.name ?? 'Guest', color: currentSetup.players[1]?.color ?? PLAYER_COLORS[1]! }),
+  netSession, getState: () => state,
+  getDefaultProfile: () => ({ name: currentSetup.players[1]?.name ?? 'Guest', color: currentSetup.players[1]?.color ?? PLAYER_COLORS[1]!, avatar: currentSetup.players[1]?.avatar }),
   onAddPlayerSlot: addPlayerSlotForPeer,
+  onEditAvatar: (cur, col, onSave) => avatarModal.open(cur, col, 'Customize Guest Standee', onSave),
 });
 const openSetup = () => { lobbyModal.close(); setupModal.open(currentSetup); };
 
@@ -141,7 +146,7 @@ const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
 };
 
 setupModal.el.addEventListener('click', () => syncTopbar());
-shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, setupModal.el, lobbyModal.el);
+shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, setupModal.el, lobbyModal.el, avatarModal.el);
 root.appendChild(shell);
 
 const clearStepTimer = () => { if (stepTimer !== null) { window.clearTimeout(stepTimer); stepTimer = null; } };
@@ -183,34 +188,29 @@ function dispatch(action: GameAction): void {
 
 bindKeyboardControls({
   getState: () => state, getActionBox: () => actionBox, dispatch, isMovingPhase,
-  isModalOpen: () => setupModal.isOpen() || lobbyModal.isOpen(),
-  onCloseModal: () => { setupModal.close(); lobbyModal.close(); },
+  isModalOpen: () => avatarModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
+  onCloseModal: () => { if (avatarModal.isOpen()) return avatarModal.close(); setupModal.close(); lobbyModal.close(); },
 });
 
 function syncHeaderAndHud(): void {
   syncTopbar();
-  renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken() });
+  renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken(), customAvatars: netSession.getCustomAvatars() });
 }
 
 function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencilSpinning()): void {
-  lastRenderedCanAct = canAct;
-  lastRenderedRemoteSpin = remoteSpin;
+  lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin;
   renderActionPanel(actionBox, state, dispatch, {
     onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
-    readOnly: !canAct,
-    remotePencilSpinning: remoteSpin,
+    readOnly: !canAct, remotePencilSpinning: remoteSpin,
     onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning),
   });
 }
 
 function renderSessionUi(): void {
-  lobbyModal.refresh();
-  syncHeaderAndHud();
-  const canAct = netSession.isLocalTurn(state);
-  const remoteSpin = netSession.isRemotePencilSpinning();
+  lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
+  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
   if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
-    renderActionBox(canAct, remoteSpin);
-    scheduleMovementTick();
+    renderActionBox(canAct, remoteSpin); scheduleMovementTick();
   }
 }
 
@@ -229,7 +229,7 @@ function render(): void {
     onHoverEndTarget: (tileId) => { hoveredEndTileId = tileId; drawRoutes(preview); },
   });
   drawRoutes(preview);
-  renderTokensOverlay(tokensLayerEl, boardEl, state);
+  renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
   fxOverlay.playStateDiff(prevRenderedState, state);
   prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
@@ -240,7 +240,7 @@ function render(): void {
   scheduleMovementTick();
 }
 
-window.addEventListener('resize', () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state); });
+window.addEventListener('resize', () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); });
 render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();
 if (roomParam) lobbyModal.open(roomParam);

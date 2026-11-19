@@ -1,3 +1,4 @@
+import { stripAvatarCustomImage } from '../config/avatarTypes';
 import { PENCIL_FACES, SHOP_RULES } from '../config/balance';
 import type { GameState, HorizontalDir, PencilFace, VerticalDir } from './types';
 
@@ -112,12 +113,17 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
 }
 
 export function redactStateForClient(state: GameState): GameState {
+  const hasCustomImg = state.players.some((p) => p.avatar?.customImage !== undefined);
+  const players = hasCustomImg
+    ? state.players.map((p) => (p.avatar ? { ...p, avatar: stripAvatarCustomImage(p.avatar) } : p))
+    : state.players;
   if (state.phase === 'EVENT_PICK' && (state.revealedEventSlot ?? null) === null) {
     return {
       ...state,
       seed: 0,
+      players,
       eventChoices: state.eventChoices.map((_, idx) => `hidden_${idx}`),
     };
   }
-  return { ...state, seed: 0 };
+  return { ...state, seed: 0, players };
 }

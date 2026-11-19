@@ -1,3 +1,4 @@
+import { sanitizeAvatarSpec } from '../config/avatarTypes';
 import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
 import { DEFAULT_STAGE_ID, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
@@ -39,14 +40,7 @@ function resolveStageId(rawStageId: unknown): StageId {
 }
 
 function getStorage(): Storage | null {
-  try {
-    if (typeof window !== 'undefined' && window.localStorage) {
-      return window.localStorage;
-    }
-  } catch {
-    return null;
-  }
-  return null;
+  try { return typeof window !== 'undefined' ? window.localStorage : null; } catch { return null; }
 }
 
 export function createDefaultMatchSetup(
@@ -58,6 +52,7 @@ export function createDefaultMatchSetup(
     name: `Player ${idx + 1}`,
     color: PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
     isBot: false,
+    avatar: sanitizeAvatarSpec(undefined, idx),
   }));
   return {
     stageId: resolveStageId(stageId),
@@ -79,7 +74,7 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
       typeof p.color === 'string' && HEX_COLOR_RE.test(p.color)
         ? p.color.toLowerCase()
         : PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
-    return { name, color, isBot: Boolean(p.isBot) };
+    return { name, color, isBot: Boolean(p.isBot), avatar: sanitizeAvatarSpec(p.avatar, idx) };
   });
 
   const rawCfg = isRecord(raw.config) ? raw.config : {};
@@ -97,7 +92,9 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
 export function extractSetupFromState(state: GameState): MatchSetupData {
   const sanitized = sanitizeMatchSetup({
     stageId: state.mapId,
-    players: state.players.map((p) => ({ name: p.name, color: p.color, isBot: p.isBot })),
+    players: state.players.map((p, idx) => ({
+      name: p.name, color: p.color, isBot: p.isBot, avatar: sanitizeAvatarSpec(p.avatar, idx),
+    })),
     config: state.config,
   });
   return sanitized ?? createDefaultMatchSetup();

@@ -1,12 +1,40 @@
+import { isValidCustomImageDataUrl, sanitizeAvatarSpec, stripAvatarCustomImage } from '../config/avatarTypes';
+import type { AvatarSpec } from '../config/avatarTypes';
 import { computePlayerNetWorth } from '../engine/helpers';
 import type { GameState } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { NetRole, RoomRoster } from '../net/protocol';
+import { createAvatarElement, getAvatarRenderKey } from './avatarSvg';
 
 export interface HudNetInfo {
   role: NetRole;
   roster: RoomRoster | null;
   myClientToken: string;
+  customAvatars?: Readonly<Record<string, string>>;
+}
+
+export function resolvePlayerAvatar(
+  state: GameState,
+  playerIdx: number,
+  roster?: RoomRoster | null,
+  customAvatars?: Readonly<Record<string, string>>
+): AvatarSpec {
+  const player = state.players[playerIdx];
+  const seatAvatar = sanitizeAvatarSpec(player?.avatar, playerIdx);
+  const ownerToken = roster?.seatOwners[playerIdx];
+  if (ownerToken && ownerToken !== HOST_TOKEN) {
+    const peer = roster?.peers.find((p) => p.clientToken === ownerToken);
+    if (peer) {
+      const base = peer.avatar ? sanitizeAvatarSpec(peer.avatar, playerIdx) : stripAvatarCustomImage(seatAvatar)!;
+      const remoteImg = customAvatars?.[ownerToken];
+      return isValidCustomImageDataUrl(remoteImg)
+        ? { ...base, customImage: remoteImg }
+        : stripAvatarCustomImage(base)!;
+    }
+  }
+  if (isValidCustomImageDataUrl(seatAvatar.customImage)) return seatAvatar;
+  const hostImg = player ? customAvatars?.[player.id] : undefined;
+  return isValidCustomImageDataUrl(hostImg) ? { ...seatAvatar, customImage: hostImg } : seatAvatar;
 }
 
 export function getTokenBodyElement(tokensLayer: HTMLElement, playerId: string): HTMLElement | undefined {
@@ -24,7 +52,9 @@ export function getTokenBodyElement(tokensLayer: HTMLElement, playerId: string):
 export function renderTokensOverlay(
   tokensLayer: HTMLElement,
   boardGrid: HTMLElement,
-  state: GameState
+  state: GameState,
+  roster?: RoomRoster | null,
+  customAvatars?: Readonly<Record<string, string>>
 ): void {
   const activeIds = new Set(state.players.filter((p) => !p.isBankrupt).map((p) => p.id));
 
@@ -57,8 +87,8 @@ export function renderTokensOverlay(
     const slotIdx = slotCounters[player.tileId] ?? 0;
     slotCounters[player.tileId] = slotIdx + 1;
 
-    const x = tileEl.offsetLeft + 8 + (slotIdx % 4) * 21;
-    const y = tileEl.offsetTop + tileEl.offsetHeight - 28 - Math.floor(slotIdx / 4) * 20;
+    const x = tileEl.offsetLeft + 5 + (slotIdx % 4) * 22;
+    const y = tileEl.offsetTop + tileEl.offsetHeight - 31 - Math.floor(slotIdx / 4) * 24;
 
     let token = tokenByPlayerId.get(player.id);
     const isNew = !token;
@@ -79,8 +109,21 @@ export function renderTokensOverlay(
     token.className = `token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
     token.style.transform = `translate(${x}px, ${y}px)`;
 
-    bodyEl.style.backgroundColor = player.color;
-    bodyEl.textContent = String(idx + 1);
+    bodyEl.style.borderColor = player.color;
+    bodyEl.style.backgroundColor = '#141b29';
+    const avSpec = resolvePlayerAvatar(state, idx, roster, customAvatars);
+    const avKey = `${getAvatarRenderKey(avSpec, player.color)}|${idx}`;
+    if (bodyEl.dataset?.avatarKey !== avKey) {
+      if (bodyEl.dataset) bodyEl.dataset.avatarKey = avKey;
+      bodyEl.innerHTML = '';
+      bodyEl.appendChild(createAvatarElement(avSpec, player.color));
+      const pip = document.createElement('span');
+      pip.className = 'token-pip';
+      pip.style.backgroundColor = player.color;
+      pip.textContent = String(idx + 1);
+      bodyEl.appendChild(pip);
+    }
+
     const fxCls = (bodyEl.className || '').split(/\s+/).filter((c) => c.startsWith('fx-'));
     const dirCls =
       player.horizontalDir === 'left' ? ['dir-left'] : player.horizontalDir === 'right' ? ['dir-right'] : [];
@@ -111,10 +154,14 @@ export function renderPlayersHud(container: HTMLElement, state: GameState, netIn
     head.className = 'player-card-head';
     const nameWrap = document.createElement('span');
     nameWrap.className = 'player-card-namewrap';
+    const hudAv = document.createElement('span');
+    hudAv.className = 'hud-avatar';
+    hudAv.style.borderColor = player.color;
+    hudAv.appendChild(createAvatarElement(resolvePlayerAvatar(state, idx, netInfo?.roster, netInfo?.customAvatars), player.color));
     const nameSpan = document.createElement('span');
     nameSpan.style.color = player.color;
     nameSpan.textContent = `P${idx + 1} ${player.name}`;
-    nameWrap.appendChild(nameSpan);
+    nameWrap.append(hudAv, nameSpan);
 
     if (netInfo && netInfo.role !== 'offline' && netInfo.roster) {
       const isMine = canClientAct(netInfo.role, netInfo.roster, netInfo.myClientToken, idx);

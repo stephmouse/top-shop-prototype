@@ -1,3 +1,4 @@
+import type { AvatarSpec } from '../config/avatarTypes';
 import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
 import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
@@ -32,6 +33,7 @@ export interface PlayerSetupInput {
   name: string;
   color?: string;
   isBot?: boolean;
+  avatar?: AvatarSpec;
 }
 
 export function createInitialGameState(
@@ -48,6 +50,7 @@ export function createInitialGameState(
     id: `p_${idx + 1}`,
     name: input.name.trim() || `Player ${idx + 1}`,
     color: input.color || PLAYER_COLORS[idx % PLAYER_COLORS.length] || '#ffffff',
+    ...(input.avatar ? { avatar: input.avatar } : {}),
     cash: config.startingCash,
     points: 0,
     tileId: startTileId,

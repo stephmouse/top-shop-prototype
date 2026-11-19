@@ -1,3 +1,5 @@
+import { isValidAvatarSpec, isValidCustomImageDataUrl } from '../config/avatarTypes';
+import type { AvatarSpec } from '../config/avatarTypes';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
 import type { GameState } from '../engine/types';
@@ -17,6 +19,7 @@ export interface ConnectedPeerInfo {
   peerId: string;
   name: string;
   color: string;
+  avatar?: AvatarSpec;
   connected: boolean;
 }
 
@@ -27,7 +30,7 @@ export interface RoomRoster {
 }
 
 export type ClientToHostMessage =
-  | { type: 'HELLO'; clientToken: string; name: string; color: string }
+  | { type: 'HELLO'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
   | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean };
 
@@ -35,6 +38,7 @@ export type HostToClientMessage =
   | { type: 'WELCOME'; seq: number; roster: RoomRoster; state: GameState }
   | { type: 'STATE_SYNC'; seq: number; roster: RoomRoster; state: GameState; pencilSpinning: boolean }
   | { type: 'ROSTER_SYNC'; roster: RoomRoster }
+  | { type: 'AVATAR_SYNC'; avatars: Record<string, string> }
   | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number }
   | { type: 'ERROR'; message: string };
 
@@ -175,18 +179,40 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
       isShortStr(p.name, 40) &&
       typeof p.color === 'string' &&
       HEX_COLOR_RE.test(p.color) &&
+      (p.avatar === undefined || isValidAvatarSpec(p.avatar)) &&
       typeof p.connected === 'boolean'
   );
 }
 
 export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
   if (!isRecord(raw) || !isShortStr(raw.clientToken, 64) || typeof raw.type !== 'string') return false;
-  if (raw.type === 'HELLO') return isShortStr(raw.name, 40) && typeof raw.color === 'string' && HEX_COLOR_RE.test(raw.color);
+  if (raw.type === 'HELLO') {
+    return (
+      isShortStr(raw.name, 40) &&
+      typeof raw.color === 'string' &&
+      HEX_COLOR_RE.test(raw.color) &&
+      (raw.avatar === undefined || isValidAvatarSpec(raw.avatar))
+    );
+  }
   if (raw.type === 'ACTION_REQUEST') {
     return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 && isValidGameAction(raw.action);
   }
   if (raw.type === 'UI_PENCIL_SPIN') return typeof raw.spinning === 'boolean';
   return false;
+}
+
+function isValidAvatarMap(raw: unknown): raw is Record<string, string> {
+  if (!isRecord(raw)) return false;
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_ROOM_PEERS + 6) return false;
+  return entries.every(
+    ([key, val]) =>
+      isShortStr(key, 64) &&
+      key !== '__proto__' &&
+      key !== 'constructor' &&
+      key !== 'prototype' &&
+      isValidCustomImageDataUrl(val)
+  );
 }
 
 export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
@@ -204,6 +230,7 @@ export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
     );
   }
   if (raw.type === 'ROSTER_SYNC') return isValidRoster(raw.roster);
+  if (raw.type === 'AVATAR_SYNC') return isValidAvatarMap(raw.avatars);
   if (raw.type === 'UI_PENCIL_SPIN') {
     return typeof raw.spinning === 'boolean' && typeof raw.activePlayerIndex === 'number' && Number.isInteger(raw.activePlayerIndex);
   }

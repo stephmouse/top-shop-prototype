@@ -1,14 +1,18 @@
+import { sanitizeAvatarSpec } from '../config/avatarTypes';
+import type { AvatarSpec } from '../config/avatarTypes';
 import type { GameState } from '../engine/types';
 import { normalizeRoomCode } from '../net/protocol';
 import type { ConnectedPeerInfo } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
+import { createAvatarElement } from './avatarSvg';
 import { addLobbySection, mk, mkBtn, renderActiveRoomView } from './lobbyRoomView';
 
 export interface LobbyModalOptions {
   netSession: MultiplayerSession;
   getState: () => GameState;
-  getDefaultProfile: () => { name: string; color: string };
+  getDefaultProfile: () => { name: string; color: string; avatar?: AvatarSpec };
   onAddPlayerSlot?: (peer: ConnectedPeerInfo) => void;
+  onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
 }
 
 export interface LobbyModalController {
@@ -31,7 +35,8 @@ function mkCodeInput(value: string, maxLength: number, placeholder: string, onCo
 }
 
 export function createLobbyModal(options: LobbyModalOptions): LobbyModalController {
-  const profile = { ...options.getDefaultProfile() };
+  const defProf = options.getDefaultProfile();
+  const profile = { name: defProf.name, color: defProf.color, avatar: sanitizeAvatarSpec(defProf.avatar, 1) };
   let draftHostCode = '';
   let draftJoinCode = '';
   let visible = false;
@@ -72,11 +77,19 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
   function renderOfflineView(): void {
     const profileSec = addLobbySection('Your Guest Profile (When Joining)');
     const profileRow = mk('div', 'setup-player-row');
+    const avatarBtn = Object.assign(mk('button', 'setup-avatar-btn'), { type: 'button' as const, title: 'Customize Guest Standee' });
+    avatarBtn.style.borderColor = profile.color;
+    avatarBtn.appendChild(createAvatarElement(profile.avatar, profile.color));
+    const openCustomize = () => options.onEditAvatar?.(profile.avatar, profile.color, (next) => {
+      profile.avatar = next; renderBody();
+    });
+    avatarBtn.addEventListener('click', openCustomize);
     const nameInput = Object.assign(mk('input', 'setup-input'), { type: 'text', value: profile.name, maxLength: 18, placeholder: 'Your Name' });
     nameInput.addEventListener('input', () => { profile.name = nameInput.value.trim() || 'Guest'; });
     const colorInput = Object.assign(mk('input', 'setup-color-picker'), { type: 'color', value: profile.color });
-    colorInput.addEventListener('input', () => { profile.color = colorInput.value; });
-    profileRow.append(nameInput, colorInput);
+    colorInput.addEventListener('input', () => { profile.color = colorInput.value; avatarBtn.style.borderColor = colorInput.value; });
+    colorInput.addEventListener('change', () => renderBody());
+    profileRow.append(avatarBtn, nameInput, colorInput, mkBtn('Customize', openCustomize));
     profileSec.appendChild(profileRow);
 
     const hostSec = addLobbySection('Host a Private Room');

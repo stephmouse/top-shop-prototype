@@ -1,16 +1,14 @@
+import { sanitizeAvatarSpec } from '../config/avatarTypes';
+import type { AvatarSpec } from '../config/avatarTypes';
 import { PLAYER_COLORS } from '../config/balance';
 import { getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import { formatCalendarDate } from '../engine/eventDraw';
 import type { GameState } from '../engine/types';
+import { createAvatarElement } from './avatarSvg';
 import {
-  clearManualMatchSlot,
-  createDefaultMatchSetup,
-  downloadSetupConfigJson,
-  loadManualMatchSlot,
-  parseSetupConfigJson,
-  sanitizeMatchSetup,
-  saveStoredSetup,
+  clearManualMatchSlot, createDefaultMatchSetup, downloadSetupConfigJson,
+  loadManualMatchSlot, parseSetupConfigJson, sanitizeMatchSetup, saveStoredSetup,
 } from './persistence';
 import type { MatchSetupData, SavedMatchEnvelope } from './persistence';
 
@@ -19,6 +17,7 @@ export interface SetupModalOptions {
   onStartMatch: (setup: MatchSetupData) => void;
   onSaveMatch: () => SavedMatchEnvelope;
   onLoadMatch: (state: GameState) => void;
+  onEditAvatar?: (idx: number, current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
 }
 
 export interface SetupModalController {
@@ -126,6 +125,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
         name: prev?.name ?? `Player ${idx + 1}`,
         color: prev?.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
         isBot: prev?.isBot ?? false,
+        avatar: sanitizeAvatarSpec(prev?.avatar, idx),
       };
     });
     draft = sanitizeMatchSetup({ ...draft, players: nextPlayers }) ?? draft;
@@ -138,26 +138,27 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     draft.players.forEach((player, idx) => {
       const row = Object.assign(document.createElement('div'), { className: 'setup-player-row' });
       const tag = Object.assign(document.createElement('span'), { className: 'setup-player-tag', textContent: `P${idx + 1}` });
-      const nameInput = Object.assign(document.createElement('input'), {
-        className: 'setup-input', type: 'text', maxLength: 20, value: player.name,
-      });
+      const pColor = player.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
+      const avatarSpec = sanitizeAvatarSpec(player.avatar, idx);
+      const avatarBtn = Object.assign(document.createElement('button'), { type: 'button' as const, className: 'setup-avatar-btn', title: 'Customize Standee' });
+      avatarBtn.style.borderColor = pColor;
+      avatarBtn.appendChild(createAvatarElement(avatarSpec, pColor));
+      avatarBtn.addEventListener('click', () => options.onEditAvatar?.(idx, avatarSpec, pColor, (nextAv) => {
+        draft.players[idx] = { ...draft.players[idx]!, avatar: nextAv }; renderPlayersList();
+      }));
+      const nameInput = Object.assign(document.createElement('input'), { className: 'setup-input', type: 'text', maxLength: 20, value: player.name });
       nameInput.addEventListener('input', () => { draft.players[idx] = { ...draft.players[idx]!, name: nameInput.value }; });
-      const colorInput = Object.assign(document.createElement('input'), {
-        className: 'setup-color-picker', type: 'color', value: player.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
-      });
-      colorInput.addEventListener('input', () => { draft.players[idx] = { ...draft.players[idx]!, color: colorInput.value }; });
+      const colorInput = Object.assign(document.createElement('input'), { className: 'setup-color-picker', type: 'color', value: pColor });
+      colorInput.addEventListener('input', () => { draft.players[idx] = { ...draft.players[idx]!, color: colorInput.value }; avatarBtn.style.borderColor = colorInput.value; });
       colorInput.addEventListener('change', () => renderPlayersList());
       const swatches = Object.assign(document.createElement('div'), { className: 'setup-swatches' });
       for (const hex of PLAYER_COLORS) {
-        const sw = Object.assign(document.createElement('button'), {
-          type: 'button', title: hex,
-          className: `color-swatch${colorInput.value.toLowerCase() === hex ? ' is-selected' : ''}`,
-        });
+        const sw = Object.assign(document.createElement('button'), { type: 'button', title: hex, className: `color-swatch${colorInput.value.toLowerCase() === hex ? ' is-selected' : ''}` });
         sw.style.backgroundColor = hex;
         sw.addEventListener('click', () => { draft.players[idx] = { ...draft.players[idx]!, color: hex }; renderPlayersList(); });
         swatches.appendChild(sw);
       }
-      row.append(tag, nameInput, colorInput, swatches);
+      row.append(tag, avatarBtn, nameInput, colorInput, swatches);
       playersList.appendChild(row);
     });
   }

@@ -1,3 +1,4 @@
+import type { AvatarSpec } from '../config/avatarTypes';
 import type {
   BankRewardDef,
   BankRewardEffect,
@@ -96,6 +97,7 @@ export interface Player {
   id: string;
   name: string;
   color: string;
+  avatar?: AvatarSpec;
   cash: number;
   points: number;
   tileId: string;

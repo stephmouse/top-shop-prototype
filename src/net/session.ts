@@ -1,8 +1,11 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
+import { stripAvatarCustomImage } from '../config/avatarTypes';
+import type { AvatarSpec } from '../config/avatarTypes';
 import { isValidGameAction, redactStateForClient } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
 import type { GameState } from '../engine/types';
+import { createAvatarSyncStore } from './avatarSync';
 import {
   assignSeatOwner, canClientAct, createDefaultRoster, generateRoomCode, getOrCreateClientToken,
   getOrCreateGuestToken, HEX_COLOR_RE, HOST_TOKEN, isValidClientMessage, isValidHostMessage,
@@ -24,11 +27,12 @@ export interface MultiplayerSession {
   getClientToken: () => string;
   getSeq: () => number;
   getRoomCode: () => string | null;
+  getCustomAvatars: () => Record<string, string>;
   isRemotePencilSpinning: () => boolean;
   isLocalTurn: (state: GameState) => boolean;
   shouldTickEscalator: () => boolean;
   hostRoom: (customCode?: string) => Promise<string>;
-  joinRoom: (roomCode: string, profile: { name: string; color: string }) => Promise<void>;
+  joinRoom: (roomCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }) => Promise<void>;
   sendOrApplyAction: (action: GameAction) => boolean;
   broadcastHostState: (nextState: GameState) => void;
   notifyPencilSpin: (spinning: boolean) => void;
@@ -38,44 +42,34 @@ export interface MultiplayerSession {
 }
 
 export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks): MultiplayerSession {
-  let clientToken = getOrCreateClientToken();
-  let role: NetRole = 'offline';
-  let roomCode: string | null = null;
-  let seq = 0;
-  let roster: RoomRoster | null = null;
-  let remotePencilSpinning = false;
-  let peer: Peer | null = null;
-  let hostConn: DataConnection | null = null;
-  const connByToken = new Map<string, DataConnection>();
-  let generation = 0;
-  let openConns = 0;
+  let clientToken = getOrCreateClientToken(), role: NetRole = 'offline', roomCode: string | null = null;
+  let seq = 0, generation = 0, openConns = 0, remotePencilSpinning = false;
+  let roster: RoomRoster | null = null, peer: Peer | null = null, hostConn: DataConnection | null = null;
+  const connByToken = new Map<string, DataConnection>(), avatarSync = createAvatarSyncStore();
 
   function cleanup(): void {
-    generation++;
-    openConns = 0;
+    generation++; openConns = 0;
     for (const c of connByToken.values()) c.close();
-    connByToken.clear();
-    hostConn?.close();
-    peer?.destroy();
-    hostConn = null;
-    peer = null;
-    role = 'offline';
-    roomCode = null;
-    roster = null;
-    seq = 0;
-    remotePencilSpinning = false;
+    connByToken.clear(); avatarSync.clear(); hostConn?.close(); peer?.destroy();
+    hostConn = null; peer = null; role = 'offline'; roomCode = null; roster = null; seq = 0; remotePencilSpinning = false;
   }
 
   function broadcastToGuests(msg: HostToClientMessage, excludeToken?: string): void {
     for (const [token, conn] of connByToken.entries()) if (token !== excludeToken && conn.open) conn.send(msg);
   }
 
+  function syncAvatars(forceTarget?: DataConnection): void {
+    const { map, changed } = avatarSync.refreshHostMap(callbacks.getState(), roster);
+    if (changed) broadcastToGuests({ type: 'AVATAR_SYNC', avatars: map });
+    else if (forceTarget?.open && Object.keys(map).length > 0) forceTarget.send({ type: 'AVATAR_SYNC', avatars: map });
+  }
+
   function syncHostState(nextState: GameState): void {
     if (role !== 'host' || !roster) return;
     roster = resizeRosterSeats(roster, nextState.players.length);
-    seq++;
-    remotePencilSpinning = false;
+    seq++; remotePencilSpinning = false;
     broadcastToGuests({ type: 'STATE_SYNC', seq, roster, state: redactStateForClient(nextState), pencilSpinning: false });
+    syncAvatars();
   }
 
   function attachGuestConnection(conn: DataConnection, gen: number, onRelease: () => void): void {
@@ -96,9 +90,15 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         const prev = connByToken.get(boundToken);
         if (prev && prev !== conn) prev.close();
         connByToken.set(boundToken, conn);
-        roster = upsertPeerInRoster(roster, { clientToken: raw.clientToken, peerId: conn.peer, name: raw.name, color: raw.color, connected: true });
+        avatarSync.setPeerImage(boundToken, raw.avatar?.customImage);
+        const peerAvatar = stripAvatarCustomImage(raw.avatar);
+        roster = upsertPeerInRoster(roster, {
+          clientToken: raw.clientToken, peerId: conn.peer, name: raw.name, color: raw.color,
+          ...(peerAvatar ? { avatar: peerAvatar } : {}), connected: true,
+        });
         conn.send({ type: 'WELCOME', seq, roster, state: redactStateForClient(callbacks.getState()) });
         broadcastToGuests({ type: 'ROSTER_SYNC', roster }, boundToken);
+        syncAvatars(conn);
         callbacks.onSessionChange();
         return;
       }
@@ -126,11 +126,9 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       const existing = roster.peers.find((p) => p.clientToken === boundToken);
       if (!existing) return;
       roster = upsertPeerInRoster(roster, { ...existing, connected: false }, false);
-      broadcastToGuests({ type: 'ROSTER_SYNC', roster });
-      callbacks.onSessionChange();
+      broadcastToGuests({ type: 'ROSTER_SYNC', roster }); callbacks.onSessionChange();
     };
-    conn.on('close', handleDrop);
-    conn.on('error', handleDrop);
+    conn.on('close', handleDrop); conn.on('error', handleDrop);
   }
 
   function hostRoom(customCode?: string): Promise<string> {
@@ -140,6 +138,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     if (code.length < 4) return Promise.reject(new Error('Room code must be at least 4 characters.'));
     role = 'host'; roomCode = code; seq = 1;
     roster = createDefaultRoster(code, callbacks.getState().players.length);
+    avatarSync.refreshHostMap(callbacks.getState(), roster);
 
     return new Promise<string>((resolve, reject) => {
       let settled = false;
@@ -160,7 +159,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     });
   }
 
-  function joinRoom(rawCode: string, profile: { name: string; color: string }): Promise<void> {
+  function joinRoom(rawCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }): Promise<void> {
     cleanup();
     const gen = generation;
     const code = normalizeRoomCode(rawCode);
@@ -180,7 +179,9 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         if (gen !== generation) return;
         const conn = (hostConn = p.connect(roomCodeToPeerId(code), { reliable: true }));
         const safeColor = HEX_COLOR_RE.test(profile.color) ? profile.color : '#3498db';
-        conn.on('open', () => { if (gen === generation) conn.send({ type: 'HELLO', clientToken, name: profile.name || 'Guest', color: safeColor } satisfies ClientToHostMessage); });
+        conn.on('open', () => {
+          if (gen === generation) conn.send({ type: 'HELLO', clientToken, name: profile.name || 'Guest', color: safeColor, ...(profile.avatar ? { avatar: profile.avatar } : {}) } satisfies ClientToHostMessage);
+        });
         conn.on('data', (raw) => {
           if (gen !== generation || !isValidHostMessage(raw)) return;
           if (raw.type === 'WELCOME' || raw.type === 'STATE_SYNC') {
@@ -189,6 +190,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
             if (!settled) { settled = true; clearTimeout(timer); resolve(); }
             callbacks.onReceiveRemoteState(raw.state, raw.seq);
           } else if (raw.type === 'ROSTER_SYNC') { roster = raw.roster; callbacks.onSessionChange(); }
+          else if (raw.type === 'AVATAR_SYNC') { avatarSync.setRemoteMap(raw.avatars); callbacks.onSessionChange(); }
           else if (raw.type === 'UI_PENCIL_SPIN') { remotePencilSpinning = raw.spinning; callbacks.onSessionChange(); }
           else if (raw.type === 'ERROR') { if (!settled) fail(raw.message); else callbacks.onError?.(raw.message); }
         });
@@ -201,7 +203,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
 
   return {
     getRole: () => role, getRoster: () => roster, getClientToken: () => clientToken,
-    getSeq: () => seq, getRoomCode: () => roomCode, isRemotePencilSpinning: () => remotePencilSpinning,
+    getSeq: () => seq, getRoomCode: () => roomCode, getCustomAvatars: () => avatarSync.getMap(), isRemotePencilSpinning: () => remotePencilSpinning,
     isLocalTurn: (state) => canClientAct(role, roster, clientToken, state.activePlayerIndex),
     shouldTickEscalator: () => role !== 'guest',
     hostRoom, joinRoom,
@@ -209,11 +211,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       const curState = callbacks.getState();
       if (!canClientAct(role, roster, clientToken, curState.activePlayerIndex) || !isValidGameAction(action)) return false;
       if (role === 'offline') { return callbacks.onApplyHostAction(action) !== curState; }
-      if (role === 'host') {
-        const next = callbacks.onApplyHostAction(action);
-        if (next !== curState) syncHostState(next);
-        return next !== curState;
-      }
+      if (role === 'host') { const next = callbacks.onApplyHostAction(action); if (next !== curState) syncHostState(next); return next !== curState; }
       if (!hostConn?.open) { callbacks.onError?.('Not connected to host.'); return false; }
       hostConn.send({ type: 'ACTION_REQUEST', clientToken, seq, action } satisfies ClientToHostMessage);
       return true;
@@ -233,9 +231,9 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     },
     kickPeer: (targetToken) => {
       if (role !== 'host' || !roster) return;
-      connByToken.get(targetToken)?.close(); connByToken.delete(targetToken);
+      connByToken.get(targetToken)?.close(); connByToken.delete(targetToken); avatarSync.removePeerImage(targetToken);
       roster = removePeerFromRoster(roster, targetToken);
-      broadcastToGuests({ type: 'ROSTER_SYNC', roster }); callbacks.onSessionChange();
+      broadcastToGuests({ type: 'ROSTER_SYNC', roster }); syncAvatars(); callbacks.onSessionChange();
     },
     disconnect: () => { cleanup(); callbacks.onSessionChange(); },
   };
