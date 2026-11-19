@@ -93,7 +93,7 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     profileSec.appendChild(profileRow);
 
     const hostSec = addLobbySection('Host a Private Room');
-    hostSec.appendChild(mk('div', 'setup-muted', 'Mix local couch seats and online friends across P1–P4. Share the room code after hosting.'));
+    hostSec.appendChild(mk('div', 'setup-muted', 'Mix local couch seats and online friends across P1–P6. Share the room code after hosting.'));
     const hostRow = mk('div', 'setup-player-row');
     const hostInput = mkCodeInput(draftHostCode, 8, 'Custom code (blank = random 6 chars)', (c) => { draftHostCode = c; });
     const triggerHost = () => runConnect(

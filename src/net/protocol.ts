@@ -1,5 +1,6 @@
 import { isValidAvatarSpec, isValidCustomImageDataUrl } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
+import { MAX_PLAYERS, MIN_PLAYERS } from '../config/balance';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
 import type { GameState } from '../engine/types';
@@ -87,7 +88,7 @@ export function getOrCreateGuestToken(roomCode: string, guestName: string): stri
 }
 
 export function createDefaultRoster(roomCode: string, playerCount: number): RoomRoster {
-  const count = Math.max(2, Math.min(6, Math.round(playerCount)));
+  const count = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(playerCount)));
   return {
     roomCode: normalizeRoomCode(roomCode),
     seatOwners: Array.from({ length: count }, () => HOST_TOKEN),
@@ -96,7 +97,7 @@ export function createDefaultRoster(roomCode: string, playerCount: number): Room
 }
 
 export function resizeRosterSeats(roster: RoomRoster, playerCount: number): RoomRoster {
-  const count = Math.max(2, Math.min(6, Math.round(playerCount)));
+  const count = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(playerCount)));
   const seatOwners = Array.from({ length: count }, (_, idx) => roster.seatOwners[idx] ?? HOST_TOKEN);
   return { ...roster, seatOwners };
 }
@@ -168,7 +169,7 @@ function isShortStr(val: unknown, maxLen = 64): val is string {
 
 function isValidRoster(raw: unknown): raw is RoomRoster {
   if (!isRecord(raw) || !isShortStr(raw.roomCode, 16)) return false;
-  if (!Array.isArray(raw.seatOwners) || raw.seatOwners.length < 2 || raw.seatOwners.length > 6) return false;
+  if (!Array.isArray(raw.seatOwners) || raw.seatOwners.length < MIN_PLAYERS || raw.seatOwners.length > MAX_PLAYERS) return false;
   if (!raw.seatOwners.every((s) => isShortStr(s, 64))) return false;
   if (!Array.isArray(raw.peers) || raw.peers.length > MAX_ROOM_PEERS) return false;
   return raw.peers.every(
@@ -204,7 +205,7 @@ export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
 function isValidAvatarMap(raw: unknown): raw is Record<string, string> {
   if (!isRecord(raw)) return false;
   const entries = Object.entries(raw);
-  if (entries.length > MAX_ROOM_PEERS + 6) return false;
+  if (entries.length > MAX_ROOM_PEERS + MAX_PLAYERS) return false;
   return entries.every(
     ([key, val]) =>
       isShortStr(key, 64) &&

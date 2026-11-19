@@ -1,5 +1,5 @@
 import { sanitizeAvatarSpec } from '../config/avatarTypes';
-import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
+import { DEFAULT_MATCH_CONFIG, MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS } from '../config/balance';
 import { DEFAULT_STAGE_ID, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { PlayerSetupInput } from '../engine/state';
@@ -47,7 +47,7 @@ export function createDefaultMatchSetup(
   playerCount = 2,
   stageId: StageId = DEFAULT_STAGE_ID
 ): MatchSetupData {
-  const count = Math.max(2, Math.min(6, Math.round(playerCount)));
+  const count = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(playerCount)));
   const players: PlayerSetupInput[] = Array.from({ length: count }, (_, idx) => ({
     name: `Player ${idx + 1}`,
     color: PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
@@ -66,7 +66,7 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
 
   const stageId = resolveStageId(raw.stageId ?? raw.mapId);
   const rawPlayers = Array.isArray(raw.players) ? raw.players : [];
-  const validCount = rawPlayers.length >= 2 && rawPlayers.length <= 6;
+  const validCount = rawPlayers.length >= MIN_PLAYERS && rawPlayers.length <= MAX_PLAYERS;
   const players: PlayerSetupInput[] = (validCount ? rawPlayers : [null, null]).map((entry, idx) => {
     const p = isRecord(entry) ? entry : {};
     const name = typeof p.name === 'string' && p.name.trim() ? p.name.trim() : `Player ${idx + 1}`;
@@ -112,7 +112,7 @@ export function isValidGameState(raw: unknown): raw is GameState {
   if (typeof raw.totalMonths !== 'number' || !Number.isFinite(raw.totalMonths)) return false;
   if (typeof raw.phase !== 'string') return false;
   if (!isRecord(raw.config) || typeof raw.config.targetAssets !== 'number') return false;
-  if (!Array.isArray(raw.players) || raw.players.length < 2) return false;
+  if (!Array.isArray(raw.players) || raw.players.length < MIN_PLAYERS || raw.players.length > MAX_PLAYERS) return false;
   if (
     typeof raw.activePlayerIndex !== 'number' ||
     !Number.isInteger(raw.activePlayerIndex) ||

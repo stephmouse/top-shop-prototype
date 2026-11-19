@@ -94,7 +94,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
 
   const newMatchBtns: HTMLButtonElement[] = [];
-  for (const count of [2, 3, 4]) {
+  for (const count of [2, 3, 4, 5, 6]) {
     const btn = makeButton(`New ${count}P`, () => options.onNewMatch(count));
     newMatchBtns.push(btn);
     controls.appendChild(btn);

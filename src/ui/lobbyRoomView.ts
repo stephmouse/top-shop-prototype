@@ -1,3 +1,4 @@
+import { MAX_PLAYERS } from '../config/balance';
 import type { GameState } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
@@ -69,9 +70,9 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
 
   if (role === 'host' && waitingPeers.length > 0) {
     const waitSec = addLobbySection('Waiting Spectators (No Seat)', 'lobby-waiting-banner');
-    if (state.players.length >= 4) {
+    if (state.players.length >= MAX_PLAYERS) {
       const names = waitingPeers.map((p) => p.name).join(', ');
-      waitSec.appendChild(mk('div', 'setup-muted', `${names} joined as a spectator (maximum 4 player slots reached). You can reassign any seat below.`));
+      waitSec.appendChild(mk('div', 'setup-muted', `${names} joined as a spectator (maximum ${MAX_PLAYERS} player slots reached). You can reassign any seat below.`));
     } else {
       for (const peer of waitingPeers) {
         const row = mk('div', 'lobby-peer-row');

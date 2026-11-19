@@ -42,9 +42,8 @@ const MODAL_TEMPLATE = `
     <div class="setup-row-between">
       <h3 class="setup-section-title">Players</h3>
       <div class="setup-count-group" data-role="counts">
-        <button type="button" data-count="2">2 Players</button>
-        <button type="button" data-count="3">3 Players</button>
-        <button type="button" data-count="4">4 Players</button>
+        <button type="button" data-count="2">2P</button><button type="button" data-count="3">3P</button><button type="button" data-count="4">4P</button>
+        <button type="button" data-count="5">5P</button><button type="button" data-count="6">6P</button>
       </div>
     </div>
     <div class="setup-players-list" data-role="players-list"></div>

@@ -45,7 +45,7 @@ export const SPECIES_BACK_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> = 
     sh(circ(15, 16, 5), 'innerEar'), sh(circ(49, 16, 5), 'innerEar'),
   ],
   dragon: [
-    sh('M 21 17 L 12 4 L 25 14 Z', 'gold', 'dark', 1.5), sh('M 43 17 L 52 4 L 39 14 Z', 'gold', 'dark', 1.5),
+    sh('M 21 17 L 12 4 L 25 14 Z', 'secondary', 'dark', 1.5), sh('M 43 17 L 52 4 L 39 14 Z', 'secondary', 'dark', 1.5),
     sh('M 15 24 L 6 22 L 14 31 Z', 'secondary', 'dark', 1.4), sh('M 49 24 L 58 22 L 50 31 Z', 'secondary', 'dark', 1.4),
   ],
   kangaroo: [

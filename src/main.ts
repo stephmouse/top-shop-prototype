@@ -1,4 +1,4 @@
-import { PLAYER_COLORS } from './config/balance';
+import { MAX_PLAYERS, PLAYER_COLORS } from './config/balance';
 import type { StageId } from './config/maps';
 import type { DirectionChoice, GameAction } from './engine/actions';
 import { getActivePlayer } from './engine/helpers';
@@ -98,7 +98,7 @@ const setupModal = createSetupModal({
 });
 
 const addPlayerSlotForPeer = (peer: ConnectedPeerInfo) => {
-  if (netSession.getRole() !== 'host' || state.players.length >= 4) return;
+  if (netSession.getRole() !== 'host' || state.players.length >= MAX_PLAYERS) return;
   const peerImg = netSession.getCustomAvatars()[peer.clientToken];
   const players = [
     ...state.players.map(({ name, color, isBot, avatar }) => ({ name, color, isBot, avatar })),
