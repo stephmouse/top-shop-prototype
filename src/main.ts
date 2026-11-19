@@ -229,7 +229,8 @@ function render(): void {
   drawRoutes(preview);
   renderTokensOverlay(tokensLayerEl, boardEl, state);
   if (boardStageEl.scrollWidth > boardStageEl.clientWidth) {
-    const activeEl = boardEl.querySelector<HTMLElement>(`[data-tile-id="${getActivePlayer(state).tileId}"]`);
+    const activeTileId = getActivePlayer(state).tileId;
+    const activeEl = Array.from(boardEl.children).find((el) => (el as HTMLElement).dataset.tileId === activeTileId) as HTMLElement | undefined;
     if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   }
   renderActionBox(netSession.isLocalTurn(state));

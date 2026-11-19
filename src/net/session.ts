@@ -5,8 +5,8 @@ import type { GameAction } from '../engine/actions';
 import type { GameState } from '../engine/types';
 import {
   assignSeatOwner, canClientAct, createDefaultRoster, generateRoomCode, getOrCreateClientToken,
-  getOrCreateGuestToken, HOST_TOKEN, isValidClientMessage, isValidHostMessage, normalizeRoomCode,
-  removePeerFromRoster, resizeRosterSeats, roomCodeToPeerId, upsertPeerInRoster,
+  getOrCreateGuestToken, HEX_COLOR_RE, HOST_TOKEN, isValidClientMessage, isValidHostMessage,
+  MAX_ROOM_PEERS, normalizeRoomCode, removePeerFromRoster, resizeRosterSeats, roomCodeToPeerId, upsertPeerInRoster,
 } from './protocol';
 import type { ClientToHostMessage, HostToClientMessage, NetRole, RoomRoster } from './protocol';
 
@@ -48,9 +48,11 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
   let hostConn: DataConnection | null = null;
   const connByToken = new Map<string, DataConnection>();
   let generation = 0;
+  let openConns = 0;
 
   function cleanup(): void {
     generation++;
+    openConns = 0;
     for (const c of connByToken.values()) c.close();
     connByToken.clear();
     hostConn?.close();
@@ -76,13 +78,20 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     broadcastToGuests({ type: 'STATE_SYNC', seq, roster, state: redactStateForClient(nextState), pencilSpinning: false });
   }
 
-  function attachGuestConnection(conn: DataConnection, gen: number): void {
+  function attachGuestConnection(conn: DataConnection, gen: number, onRelease: () => void): void {
     let boundToken: string | null = null;
+    let released = false;
+    const release = () => { if (!released) { released = true; onRelease(); } };
     conn.on('data', (raw) => {
       if (gen !== generation || role !== 'host' || !roster) return;
       if (!isValidClientMessage(raw)) { conn.open && conn.send({ type: 'ERROR', message: 'Malformed action payload.' }); return; }
       if (raw.type === 'HELLO') {
         if (boundToken !== null && boundToken !== raw.clientToken) return;
+        const knownPeer = roster.peers.some((p) => p.clientToken === raw.clientToken);
+        if (!knownPeer && roster.peers.length >= MAX_ROOM_PEERS) {
+          conn.open && conn.send({ type: 'ERROR', message: 'Room is full.' });
+          conn.close(); release(); return;
+        }
         boundToken = raw.clientToken;
         const prev = connByToken.get(boundToken);
         if (prev && prev !== conn) prev.close();
@@ -110,7 +119,9 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       }
     });
     const handleDrop = () => {
-      if (gen !== generation || !boundToken || !roster || connByToken.get(boundToken) !== conn) return;
+      if (gen !== generation) return;
+      release();
+      if (!boundToken || !roster || connByToken.get(boundToken) !== conn) return;
       connByToken.delete(boundToken);
       const existing = roster.peers.find((p) => p.clientToken === boundToken);
       if (!existing) return;
@@ -135,7 +146,12 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       const timer = setTimeout(() => { if (!settled && gen === generation) { settled = true; cleanup(); reject(new Error('Timed out creating room.')); callbacks.onSessionChange(); } }, 15000);
       const p = (peer = new Peer(roomCodeToPeerId(code)));
       p.on('open', () => { if (gen === generation && !settled) { settled = true; clearTimeout(timer); callbacks.onSessionChange(); resolve(code); } });
-      p.on('connection', (conn) => { if (gen === generation) attachGuestConnection(conn, gen); });
+      p.on('connection', (conn) => {
+        if (gen !== generation) return;
+        if (openConns >= MAX_ROOM_PEERS * 2) { conn.close(); return; }
+        openConns++;
+        attachGuestConnection(conn, gen, () => { openConns = Math.max(0, openConns - 1); });
+      });
       p.on('error', (err) => {
         const msg = err.message || 'PeerJS host error.';
         if (!settled) { settled = true; clearTimeout(timer); cleanup(); reject(new Error(msg)); } else callbacks.onError?.(msg);
@@ -163,7 +179,8 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       p.on('open', () => {
         if (gen !== generation) return;
         const conn = (hostConn = p.connect(roomCodeToPeerId(code), { reliable: true }));
-        conn.on('open', () => { if (gen === generation) conn.send({ type: 'HELLO', clientToken, name: profile.name || 'Guest', color: profile.color || '#3498db' } satisfies ClientToHostMessage); });
+        const safeColor = HEX_COLOR_RE.test(profile.color) ? profile.color : '#3498db';
+        conn.on('open', () => { if (gen === generation) conn.send({ type: 'HELLO', clientToken, name: profile.name || 'Guest', color: safeColor } satisfies ClientToHostMessage); });
         conn.on('data', (raw) => {
           if (gen !== generation || !isValidHostMessage(raw)) return;
           if (raw.type === 'WELCOME' || raw.type === 'STATE_SYNC') {

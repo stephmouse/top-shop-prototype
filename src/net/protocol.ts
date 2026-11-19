@@ -7,6 +7,8 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const PEER_ID_PREFIX = 'topshop-v1-';
 export const HOST_TOKEN = 'HOST';
 export const CLIENT_TOKEN_STORAGE_KEY = 'top_shop_client_token_v1';
+export const MAX_ROOM_PEERS = 8;
+export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export type NetRole = 'offline' | 'host' | 'guest';
 
@@ -164,7 +166,7 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
   if (!isRecord(raw) || !isShortStr(raw.roomCode, 16)) return false;
   if (!Array.isArray(raw.seatOwners) || raw.seatOwners.length < 2 || raw.seatOwners.length > 6) return false;
   if (!raw.seatOwners.every((s) => isShortStr(s, 64))) return false;
-  if (!Array.isArray(raw.peers) || raw.peers.length > 16) return false;
+  if (!Array.isArray(raw.peers) || raw.peers.length > MAX_ROOM_PEERS) return false;
   return raw.peers.every(
     (p) =>
       isRecord(p) &&
@@ -172,13 +174,14 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
       typeof p.peerId === 'string' &&
       isShortStr(p.name, 40) &&
       typeof p.color === 'string' &&
+      HEX_COLOR_RE.test(p.color) &&
       typeof p.connected === 'boolean'
   );
 }
 
 export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
   if (!isRecord(raw) || !isShortStr(raw.clientToken, 64) || typeof raw.type !== 'string') return false;
-  if (raw.type === 'HELLO') return isShortStr(raw.name, 40) && typeof raw.color === 'string';
+  if (raw.type === 'HELLO') return isShortStr(raw.name, 40) && typeof raw.color === 'string' && HEX_COLOR_RE.test(raw.color);
   if (raw.type === 'ACTION_REQUEST') {
     return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 && isValidGameAction(raw.action);
   }

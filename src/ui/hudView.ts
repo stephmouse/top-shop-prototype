@@ -23,12 +23,23 @@ export function renderTokensOverlay(
     }
   }
 
+  const tileById = new Map<string, HTMLElement>();
+  for (const child of Array.from(boardGrid.children)) {
+    const el = child as HTMLElement;
+    if (el.dataset.tileId) tileById.set(el.dataset.tileId, el);
+  }
+  const tokenByPlayerId = new Map<string, HTMLElement>();
+  for (const child of Array.from(tokensLayer.children)) {
+    const el = child as HTMLElement;
+    if (el.dataset.playerId) tokenByPlayerId.set(el.dataset.playerId, el);
+  }
+
   const slotCounters: Record<string, number> = {};
 
   state.players.forEach((player, idx) => {
     if (player.isBankrupt) return;
 
-    const tileEl = boardGrid.querySelector<HTMLElement>(`[data-tile-id="${player.tileId}"]`);
+    const tileEl = tileById.get(player.tileId);
     if (!tileEl) return;
 
     const slotIdx = slotCounters[player.tileId] ?? 0;
@@ -37,7 +48,7 @@ export function renderTokensOverlay(
     const x = tileEl.offsetLeft + 8 + (slotIdx % 4) * 21;
     const y = tileEl.offsetTop + tileEl.offsetHeight - 28 - Math.floor(slotIdx / 4) * 20;
 
-    let token = tokensLayer.querySelector<HTMLElement>(`[data-player-id="${player.id}"]`);
+    let token = tokenByPlayerId.get(player.id);
     const isNew = !token;
     if (!token) {
       token = document.createElement('span');
