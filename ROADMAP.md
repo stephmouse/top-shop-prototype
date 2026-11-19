@@ -12,8 +12,11 @@
 
 ## Next Vertical Slices (Recommended Order)
 1. **Online P2P Multiplayer & GitHub Pages Deploy:**
-   - Add `vite.config.ts` (`base: './'`) and `.github/workflows/deploy.yml` for GitHub Pages.
-   - Wrap `applyAction` over WebRTC (`Trystero` or `PeerJS`) with host-authoritative state sync and seat assignment.
+   - **Architecture Decisions:** Host-authoritative Star topology (`PeerJS` WebRTC), private 6-char room codes + persistent `clientToken` reconnects, hybrid Local + Online multi-seat control (e.g., 2 local players + remote friends), preserved client-side 3D pencil skill-stop (with curse validation + live spin broadcast), and Host-authoritative `ACTION_REQUEST` / monotonic `seq` `STATE_SYNC` packets.
+   - **Slice A — Engine 2-Step Event Reveal & Action Validator:** Add `REVEAL_EVENT_CARD` / `revealedEventSlot` so hidden card flips sync across all screens and cannot be re-rolled on refresh; add runtime `isValidGameAction` validator in `src/engine/`.
+   - **Slice B — WebRTC Transport (`src/net/`):** `PeerJS` host/guest manager, `clientToken` seat registry, hidden-card scrubbing (`hidden_0..2`) in `STATE_SYNC` before reveal, Host-only escalator ticking, and seq-gated click-to-walk stepping.
+   - **Slice C — Multiplayer Lobby & Spectator UI (`src/ui/`):** Room Code host/join modal (`?room=` invite link), per-seat Local vs Online assignment + kick/reassign controls, live connection pills, and Spectator read-only lock when `localSeatIndices` doesn't own the active turn.
+   - **Slice D — GitHub Pages Deploy:** Add `vite.config.ts` (`base: './'`) and `.github/workflows/deploy.yml` for automated builds and hosting.
 
 ## Future / Optional (Maybe Later)
 - **AI Bot Players:** Heuristic bot controller in `src/engine/bot.ts` (auto-picks direction toward unowned/own stores, buys/delivers/redeems points) for solo play.
