@@ -1,4 +1,4 @@
-import { DEFAULT_STAGE_ID } from './config/maps';
+import { PLAYER_COLORS } from './config/balance';
 import type { StageId } from './config/maps';
 import type { DirectionChoice, GameAction } from './engine/actions';
 import { getActivePlayer } from './engine/helpers';
@@ -8,7 +8,13 @@ import type { GameState } from './engine/types';
 import { renderActionPanel } from './ui/actionPanel';
 import { renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
 import { bindKeyboardControls } from './ui/keyboard';
+import {
+  extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot, loadStoredSetup,
+  sanitizeMatchSetup, saveAutoSavedMatch, saveManualMatchSlot, saveStoredSetup,
+} from './ui/persistence';
+import type { MatchSetupData } from './ui/persistence';
 import { renderRouteOverlay } from './ui/routeOverlay';
+import { createSetupModal } from './ui/setupModal';
 import { createTopbar } from './ui/topbar';
 
 const root = document.getElementById('app');
@@ -20,69 +26,71 @@ let hoveredEndTileId: string | null = null;
 let stepTimer: number | null = null;
 let guidedWalkActive = false;
 let guidedChoices: DirectionChoice[] = [];
-let selectedStageId: StageId = DEFAULT_STAGE_ID;
-let selectedPlayerCount = 2;
 
-function buildPlayers(count: number) {
-  return Array.from({ length: count }, (_, idx) => ({ name: `Player ${idx + 1}` }));
-}
+const autoSaved = loadAutoSavedMatch();
+let currentSetup: MatchSetupData = autoSaved ? extractSetupFromState(autoSaved) : loadStoredSetup();
+let state: GameState =
+  autoSaved ??
+  createInitialGameState(currentSetup.players, currentSetup.config, Date.now() & 0xffffff, currentSetup.stageId);
 
-function createMatchState(count: number, stageId: StageId): GameState {
-  return createInitialGameState(buildPlayers(count), {}, Date.now() & 0xffffff, stageId);
-}
+const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, textContent = '') =>
+  Object.assign(document.createElement(tag), { className, textContent });
 
-let state: GameState = createMatchState(selectedPlayerCount, selectedStageId);
-
-const shell = document.createElement('div');
-shell.className = 'app-shell';
-
-const hudEl = document.createElement('section');
-hudEl.className = 'hud-row';
-
-const boardStageEl = document.createElement('section');
-boardStageEl.className = 'board-stage';
-const boardEl = document.createElement('div');
-boardEl.className = 'board-grid';
+const shell = mk('div', 'app-shell');
+const hudEl = mk('section', 'hud-row');
+const boardStageEl = mk('section', 'board-stage');
+const boardEl = mk('div', 'board-grid');
 const routeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 routeSvgEl.setAttribute('class', 'route-layer');
-const tokensLayerEl = document.createElement('div');
-tokensLayerEl.className = 'tokens-layer';
-boardStageEl.appendChild(boardEl);
-boardStageEl.appendChild(routeSvgEl);
-boardStageEl.appendChild(tokensLayerEl);
+const tokensLayerEl = mk('div', 'tokens-layer');
+boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl);
 
-const bottomGrid = document.createElement('section');
-bottomGrid.className = 'bottom-grid';
+const bottomGrid = mk('section', 'bottom-grid');
+const actionBox = mk('div', 'panel-box');
+const logBox = mk('div', 'panel-box');
+const logList = mk('ol', 'log-list');
+logBox.append(mk('h3', 'panel-title', 'Match Log'), logList);
+bottomGrid.append(actionBox, logBox);
 
-const actionBox = document.createElement('div');
-actionBox.className = 'panel-box';
-
-const logBox = document.createElement('div');
-logBox.className = 'panel-box';
-const logTitle = document.createElement('h3');
-logTitle.className = 'panel-title';
-logTitle.textContent = 'Match Log';
-const logList = document.createElement('ol');
-logList.className = 'log-list';
-logBox.appendChild(logTitle);
-logBox.appendChild(logList);
-
-bottomGrid.appendChild(actionBox);
-bottomGrid.appendChild(logBox);
-
-function startNewMatch(count: number, stageId: StageId): void {
+function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
   cancelGuidedWalk();
+  hoveredEndTileId = null;
   tokensLayerEl.innerHTML = '';
-  selectedPlayerCount = count;
-  selectedStageId = stageId;
-  state = createMatchState(count, stageId);
+  state = nextState;
+  currentSetup = nextSetup;
+  saveStoredSetup(nextSetup);
+  saveAutoSavedMatch(state);
   render();
 }
+
+function startMatchFromSetup(setup: MatchSetupData): void {
+  const clean = sanitizeMatchSetup(setup) ?? currentSetup;
+  const fresh = createInitialGameState(clean.players, clean.config, Date.now() & 0xffffff, clean.stageId);
+  commitMatchState(fresh, clean);
+}
+
+function loadSavedState(savedState: GameState): void {
+  commitMatchState(savedState, extractSetupFromState(savedState));
+}
+
+function saveCurrentMatch() {
+  const env = saveManualMatchSlot(state);
+  setupModal.refreshSaveStatus();
+  topbar.sync(state.mapId as StageId, true);
+  return env;
+}
+
+const setupModal = createSetupModal({
+  initialSetup: currentSetup,
+  onStartMatch: startMatchFromSetup,
+  onSaveMatch: saveCurrentMatch,
+  onLoadMatch: loadSavedState,
+});
 
 const topbar = createTopbar({
   initialShowRoutes: showRoutes,
   initialAutoStep: autoStepEnabled,
-  initialStageId: selectedStageId,
+  initialStageId: state.mapId as StageId,
   onToggleRoutes: (show) => {
     showRoutes = show;
     renderRouteOverlay(routeSvgEl, boardEl, state, computeMovePreview(state), showRoutes, hoveredEndTileId);
@@ -91,14 +99,28 @@ const topbar = createTopbar({
     autoStepEnabled = enabled;
     scheduleMovementTick();
   },
-  onSelectStage: (stageId) => startNewMatch(selectedPlayerCount, stageId),
-  onNewMatch: (count) => startNewMatch(count, selectedStageId),
+  onSelectStage: (stageId) => startMatchFromSetup({ ...currentSetup, stageId }),
+  onOpenSetup: () => setupModal.open(currentSetup),
+  onSaveMatch: saveCurrentMatch,
+  onLoadMatch: () => {
+    const slot = loadManualMatchSlot();
+    if (slot) loadSavedState(slot.state);
+  },
+  onNewMatch: (count) => {
+    const players = Array.from({ length: count }, (_, idx) => ({
+      name: currentSetup.players[idx]?.name ?? `Player ${idx + 1}`,
+      color: currentSetup.players[idx]?.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
+      isBot: currentSetup.players[idx]?.isBot ?? false,
+    }));
+    startMatchFromSetup({ ...currentSetup, players });
+  },
 });
 
-shell.appendChild(topbar);
-shell.appendChild(hudEl);
-shell.appendChild(boardStageEl);
-shell.appendChild(bottomGrid);
+setupModal.el.addEventListener('click', () => {
+  topbar.sync(state.mapId as StageId, Boolean(loadManualMatchSlot()));
+});
+
+shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, setupModal.el);
 root.appendChild(shell);
 
 function clearStepTimer(): void {
@@ -123,33 +145,24 @@ function isMovingPhase(phase: GameState['phase']): boolean {
   );
 }
 
+function commitAction(action: GameAction): void {
+  state = applyAction(state, action);
+  saveAutoSavedMatch(state);
+  render();
+}
+
 function stepGuidedOrAuto(): void {
   if (state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') {
-    state = applyAction(state, { type: 'ADVANCE_STEP' });
-    render();
-    return;
+    return commitAction({ type: 'ADVANCE_STEP' });
   }
-
   if (guidedWalkActive) {
     if (state.phase === 'CHOOSE_DIRECTION' && guidedChoices.length > 0) {
-      const nextDir = guidedChoices.shift()!;
-      state = applyAction(state, { type: 'CHOOSE_DIRECTION', direction: nextDir });
-      render();
-      return;
+      return commitAction({ type: 'CHOOSE_DIRECTION', direction: guidedChoices.shift()! });
     }
-    if (state.phase === 'STEPPING') {
-      state = applyAction(state, { type: 'ADVANCE_STEP' });
-      render();
-      return;
-    }
-    cancelGuidedWalk();
-    return;
+    if (state.phase === 'STEPPING') return commitAction({ type: 'ADVANCE_STEP' });
+    return cancelGuidedWalk();
   }
-
-  if (autoStepEnabled && state.phase === 'STEPPING') {
-    state = applyAction(state, { type: 'ADVANCE_STEP' });
-    render();
-  }
+  if (autoStepEnabled && state.phase === 'STEPPING') commitAction({ type: 'ADVANCE_STEP' });
 }
 
 function scheduleMovementTick(): void {
@@ -164,16 +177,13 @@ function scheduleMovementTick(): void {
     state.phase === 'ESCALATOR_RIDE' ||
     state.phase === 'ESCALATOR_UNDO' ||
     (autoStepEnabled && state.phase === 'STEPPING');
-  if (shouldTick) {
-    stepTimer = window.setTimeout(stepGuidedOrAuto, 210);
-  }
+  if (shouldTick) stepTimer = window.setTimeout(stepGuidedOrAuto, 210);
 }
 
 function dispatch(action: GameAction): void {
   cancelGuidedWalk();
   hoveredEndTileId = null;
-  state = applyAction(state, action);
-  render();
+  commitAction(action);
 }
 
 bindKeyboardControls({
@@ -181,20 +191,22 @@ bindKeyboardControls({
   getActionBox: () => actionBox,
   dispatch,
   isMovingPhase,
+  isModalOpen: () => setupModal.isOpen(),
+  onCloseModal: () => setupModal.close(),
 });
 
 function render(): void {
   const preview = computeMovePreview(state);
+  topbar.sync(state.mapId as StageId, Boolean(loadManualMatchSlot()));
   renderPlayersHud(hudEl, state);
   renderBoard(boardEl, state, {
     preview,
-    onSelectNextStep: (opt) => {
-      if (state.phase === 'CHOOSE_DIRECTION' && opt.direction) {
-        dispatch({ type: 'CHOOSE_DIRECTION', direction: opt.direction });
-      } else {
-        dispatch({ type: 'ADVANCE_STEP' });
-      }
-    },
+    onSelectNextStep: (opt) =>
+      dispatch(
+        state.phase === 'CHOOSE_DIRECTION' && opt.direction
+          ? { type: 'CHOOSE_DIRECTION', direction: opt.direction }
+          : { type: 'ADVANCE_STEP' }
+      ),
     onSelectEndTarget: (target) => {
       cancelGuidedWalk();
       hoveredEndTileId = null;
@@ -210,22 +222,16 @@ function render(): void {
   renderRouteOverlay(routeSvgEl, boardEl, state, preview, showRoutes, hoveredEndTileId);
   renderTokensOverlay(tokensLayerEl, boardEl, state);
   if (boardStageEl.scrollWidth > boardStageEl.clientWidth) {
-    const activeTileId = getActivePlayer(state).tileId;
-    const activeTileEl = boardEl.querySelector<HTMLElement>(`[data-tile-id="${activeTileId}"]`);
-    if (activeTileEl) {
-      const targetLeft =
-        activeTileEl.offsetLeft - boardStageEl.clientWidth / 2 + activeTileEl.offsetWidth / 2;
+    const activeEl = boardEl.querySelector<HTMLElement>(`[data-tile-id="${getActivePlayer(state).tileId}"]`);
+    if (activeEl) {
+      const targetLeft = activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2;
       boardStageEl.scrollTo({ left: Math.max(0, targetLeft), behavior: 'smooth' });
     }
   }
-  renderActionPanel(actionBox, state, dispatch);
+  renderActionPanel(actionBox, state, dispatch, () => setupModal.open(currentSetup));
 
   logList.innerHTML = '';
-  for (const entry of state.log) {
-    const li = document.createElement('li');
-    li.textContent = entry;
-    logList.appendChild(li);
-  }
+  for (const entry of state.log) logList.appendChild(mk('li', '', entry));
 
   scheduleMovementTick();
 }
@@ -236,3 +242,4 @@ window.addEventListener('resize', () => {
 });
 
 render();
+if (!autoSaved) setupModal.open(currentSetup);

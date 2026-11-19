@@ -26,6 +26,7 @@ import type { GameState, MatchConfig, Player } from './types';
 
 export interface PlayerSetupInput {
   name: string;
+  color?: string;
   isBot?: boolean;
 }
 
@@ -42,7 +43,7 @@ export function createInitialGameState(
   const players: Player[] = playerInputs.map((input, idx) => ({
     id: `p_${idx + 1}`,
     name: input.name.trim() || `Player ${idx + 1}`,
-    color: PLAYER_COLORS[idx % PLAYER_COLORS.length] ?? '#ffffff',
+    color: input.color || PLAYER_COLORS[idx % PLAYER_COLORS.length] || '#ffffff',
     cash: config.startingCash,
     points: 0,
     tileId: startTileId,

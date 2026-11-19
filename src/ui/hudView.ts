@@ -34,11 +34,11 @@ export function renderTokensOverlay(
     if (!token) {
       token = document.createElement('span');
       token.dataset.playerId = player.id;
-      token.style.backgroundColor = player.color;
       token.textContent = String(idx + 1);
-      token.title = player.name;
     }
 
+    token.style.backgroundColor = player.color;
+    token.title = player.name;
     token.className = `token token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
     token.style.transform = `translate(${x}px, ${y}px)`;
     if (isNew) {
@@ -64,9 +64,12 @@ export function renderPlayersHud(container: HTMLElement, state: GameState): void
 
     const head = document.createElement('div');
     head.className = 'player-card-head';
-    head.innerHTML = `<span style="color:${player.color}">P${idx + 1} ${player.name}</span><span>${
-      player.isBankrupt ? 'BANKRUPT' : `Pts: ${player.points}`
-    }</span>`;
+    const nameSpan = document.createElement('span');
+    nameSpan.style.color = player.color;
+    nameSpan.textContent = `P${idx + 1} ${player.name}`;
+    const ptsSpan = document.createElement('span');
+    ptsSpan.textContent = player.isBankrupt ? 'BANKRUPT' : `Pts: ${player.points}`;
+    head.append(nameSpan, ptsSpan);
 
     const stats = document.createElement('div');
     const tags: string[] = [];

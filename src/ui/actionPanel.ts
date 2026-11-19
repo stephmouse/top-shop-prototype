@@ -46,7 +46,8 @@ function appendUndoControls(
 export function renderActionPanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  onOpenSetup?: () => void
 ): void {
   container.innerHTML = '';
   const active = getActivePlayer(state);
@@ -57,7 +58,7 @@ export function renderActionPanel(
   const saleTag = state.globalSale
     ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
     : '';
-  heading.textContent = `${dateTag} · Turn ${state.turnNumber} — ${active.name} (${state.phase})${saleTag}`;
+  heading.textContent = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}`;
   container.appendChild(heading);
 
   const stack = document.createElement('div');
@@ -189,5 +190,8 @@ export function renderActionPanel(
     const msg = document.createElement('strong');
     msg.textContent = `Winner: ${winner?.name ?? 'Unknown'}!`;
     stack.appendChild(msg);
+    if (onOpenSetup) {
+      stack.appendChild(makeBtn('Match Setup / New Match', onOpenSetup, { primary: true }));
+    }
   }
 }

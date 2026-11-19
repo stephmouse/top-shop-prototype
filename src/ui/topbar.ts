@@ -8,10 +8,26 @@ export interface TopbarOptions {
   onToggleRoutes: (show: boolean) => void;
   onToggleAutoStep: (enabled: boolean) => void;
   onSelectStage: (stageId: StageId) => void;
+  onOpenSetup: () => void;
+  onSaveMatch: () => void;
+  onLoadMatch: () => void;
   onNewMatch: (playerCount: number) => void;
 }
 
-export function createTopbar(options: TopbarOptions): HTMLElement {
+export interface TopbarController {
+  el: HTMLElement;
+  sync: (stageId: StageId, hasSavedMatch: boolean) => void;
+}
+
+function makeButton(label: string, onClick: () => void, primary = false): HTMLButtonElement {
+  const btn = document.createElement('button');
+  btn.textContent = label;
+  if (primary) btn.className = 'primary';
+  btn.addEventListener('click', onClick);
+  return btn;
+}
+
+export function createTopbar(options: TopbarOptions): TopbarController {
   const topbar = document.createElement('header');
   topbar.className = 'topbar';
 
@@ -27,8 +43,7 @@ export function createTopbar(options: TopbarOptions): HTMLElement {
   routesCheckbox.type = 'checkbox';
   routesCheckbox.checked = options.initialShowRoutes;
   routesCheckbox.addEventListener('change', () => options.onToggleRoutes(routesCheckbox.checked));
-  routesLabel.appendChild(routesCheckbox);
-  routesLabel.append(' Routes');
+  routesLabel.append(routesCheckbox, ' Routes');
   controls.appendChild(routesLabel);
 
   const autoStepLabel = document.createElement('label');
@@ -36,8 +51,7 @@ export function createTopbar(options: TopbarOptions): HTMLElement {
   autoStepCheckbox.type = 'checkbox';
   autoStepCheckbox.checked = options.initialAutoStep;
   autoStepCheckbox.addEventListener('change', () => options.onToggleAutoStep(autoStepCheckbox.checked));
-  autoStepLabel.appendChild(autoStepCheckbox);
-  autoStepLabel.append(' Auto-Move');
+  autoStepLabel.append(autoStepCheckbox, ' Auto-Move');
   controls.appendChild(autoStepLabel);
 
   const stageSelect = document.createElement('select');
@@ -52,14 +66,30 @@ export function createTopbar(options: TopbarOptions): HTMLElement {
   stageSelect.addEventListener('change', () => options.onSelectStage(stageSelect.value as StageId));
   controls.appendChild(stageSelect);
 
+  let saveTimer: number | null = null;
+  const setupBtn = makeButton('Match Setup', options.onOpenSetup, true);
+  const saveBtn = makeButton('Save', () => {
+    options.onSaveMatch();
+    saveBtn.textContent = 'Saved!';
+    if (saveTimer !== null) window.clearTimeout(saveTimer);
+    saveTimer = window.setTimeout(() => {
+      saveBtn.textContent = 'Save';
+      saveTimer = null;
+    }, 1500);
+  });
+  const loadBtn = makeButton('Load', options.onLoadMatch);
+  controls.append(setupBtn, saveBtn, loadBtn);
+
   for (const count of [2, 3, 4]) {
-    const btn = document.createElement('button');
-    btn.textContent = `New ${count}P`;
-    btn.addEventListener('click', () => options.onNewMatch(count));
-    controls.appendChild(btn);
+    controls.appendChild(makeButton(`New ${count}P`, () => options.onNewMatch(count)));
   }
 
-  topbar.appendChild(title);
-  topbar.appendChild(controls);
-  return topbar;
+  topbar.append(title, controls);
+  return {
+    el: topbar,
+    sync: (stageId, hasSavedMatch) => {
+      stageSelect.value = stageId;
+      loadBtn.disabled = !hasSavedMatch;
+    },
+  };
 }

@@ -7,6 +7,8 @@ export interface KeyboardBindOptions {
   getActionBox: () => HTMLElement;
   dispatch: (action: GameAction) => void;
   isMovingPhase: (phase: GameState['phase']) => boolean;
+  isModalOpen?: () => boolean;
+  onCloseModal?: () => void;
 }
 
 function keyToDirection(key: string): DirectionChoice | null {
@@ -37,8 +39,18 @@ export function bindKeyboardControls({
   getActionBox,
   dispatch,
   isMovingPhase,
+  isModalOpen,
+  onCloseModal,
 }: KeyboardBindOptions): void {
   window.addEventListener('keydown', (e) => {
+    if (isModalOpen?.()) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onCloseModal?.();
+      }
+      return;
+    }
+
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
