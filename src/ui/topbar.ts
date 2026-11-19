@@ -1,5 +1,13 @@
 import { OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
+import type { NetRole } from '../net/protocol';
+
+export interface TopbarNetInfo {
+  role: NetRole;
+  roomCode: string | null;
+  peerCount: number;
+  waitingCount?: number;
+}
 
 export interface TopbarOptions {
   initialShowRoutes: boolean;
@@ -9,6 +17,7 @@ export interface TopbarOptions {
   onToggleAutoStep: (enabled: boolean) => void;
   onSelectStage: (stageId: StageId) => void;
   onOpenSetup: () => void;
+  onOpenLobby: () => void;
   onSaveMatch: () => void;
   onLoadMatch: () => void;
   onNewMatch: (playerCount: number) => void;
@@ -16,7 +25,7 @@ export interface TopbarOptions {
 
 export interface TopbarController {
   el: HTMLElement;
-  sync: (stageId: StageId, hasSavedMatch: boolean) => void;
+  sync: (stageId: StageId, hasSavedMatch: boolean, netInfo?: TopbarNetInfo) => void;
 }
 
 function makeButton(label: string, onClick: () => void, primary = false): HTMLButtonElement {
@@ -68,6 +77,8 @@ export function createTopbar(options: TopbarOptions): TopbarController {
 
   let saveTimer: number | null = null;
   const setupBtn = makeButton('Match Setup', options.onOpenSetup, true);
+  const onlineBtn = makeButton('Online Lobby', options.onOpenLobby);
+  onlineBtn.className = 'topbar-online-btn';
   const saveBtn = makeButton('Save', () => {
     options.onSaveMatch();
     saveBtn.textContent = 'Saved!';
@@ -78,18 +89,38 @@ export function createTopbar(options: TopbarOptions): TopbarController {
     }, 1500);
   });
   const loadBtn = makeButton('Load', options.onLoadMatch);
-  controls.append(setupBtn, saveBtn, loadBtn);
+  controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
 
+  const newMatchBtns: HTMLButtonElement[] = [];
   for (const count of [2, 3, 4]) {
-    controls.appendChild(makeButton(`New ${count}P`, () => options.onNewMatch(count)));
+    const btn = makeButton(`New ${count}P`, () => options.onNewMatch(count));
+    newMatchBtns.push(btn);
+    controls.appendChild(btn);
   }
 
   topbar.append(title, controls);
   return {
     el: topbar,
-    sync: (stageId, hasSavedMatch) => {
+    sync: (stageId, hasSavedMatch, netInfo) => {
+      const isGuest = netInfo?.role === 'guest';
       stageSelect.value = stageId;
-      loadBtn.disabled = !hasSavedMatch;
+      stageSelect.disabled = isGuest;
+      setupBtn.disabled = isGuest;
+      loadBtn.disabled = isGuest || !hasSavedMatch;
+      for (const btn of newMatchBtns) btn.disabled = isGuest;
+
+      if (netInfo?.role === 'host') {
+        const waiting = netInfo.waitingCount ?? 0;
+        const waitSuffix = waiting > 0 ? ` · +${waiting} waiting` : '';
+        onlineBtn.textContent = `Online: ${netInfo.roomCode ?? ''} (Host · ${netInfo.peerCount}G${waitSuffix})`;
+        onlineBtn.className = `topbar-online-btn is-online${waiting > 0 ? ' has-waiting' : ''}`;
+      } else if (isGuest) {
+        onlineBtn.textContent = `Online: ${netInfo.roomCode ?? ''} (Guest)`;
+        onlineBtn.className = 'topbar-online-btn is-online';
+      } else {
+        onlineBtn.textContent = 'Online Lobby';
+        onlineBtn.className = 'topbar-online-btn';
+      }
     },
   };
 }

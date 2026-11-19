@@ -3,7 +3,12 @@ import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { GameAction } from './actions';
 import { handleRedeemBankReward } from './bank';
-import { handlePickEventCard, handleResolveEventStore, handleSkipEventStore } from './events';
+import {
+  handlePickEventCard,
+  handleResolveEventStore,
+  handleRevealEventCard,
+  handleSkipEventStore,
+} from './events';
 import { advanceToNextTurn } from './turn';
 import {
   handleAdvanceStep,
@@ -87,6 +92,7 @@ export function createInitialGameState(
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
     eventChoices: [],
+    revealedEventSlot: null,
     eventStorePrompt: null,
     globalSale: null,
     elevatorLock: null,
@@ -116,6 +122,8 @@ export function applyAction(state: GameState, action: GameAction): GameState {
       return handleCancelMove(state);
     case 'RESOLVE_ELEVATOR':
       return handleResolveElevator(state, action.ride);
+    case 'REVEAL_EVENT_CARD':
+      return handleRevealEventCard(state, action.slotIndex);
     case 'PICK_EVENT_CARD':
       return handlePickEventCard(state, action.cardId);
     case 'RESOLVE_EVENT_STORE':

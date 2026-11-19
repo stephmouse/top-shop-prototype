@@ -175,6 +175,7 @@ export interface GameState {
   deliverPreferredShopId: string | null;
   deliveredShopIdsThisTurn: string[];
   eventChoices: string[];
+  revealedEventSlot: number | null;
   eventStorePrompt: EventStorePrompt | null;
   globalSale: GlobalSaleState | null;
   elevatorLock: ElevatorLockState | null;

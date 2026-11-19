@@ -7,9 +7,6 @@ import type { EventCardDef, GameState, Shop } from '../engine/types';
 
 type DispatchFn = (action: GameAction) => void;
 
-let revealedKey: string | null = null;
-let chosenCardId: string | null = null;
-
 function formatCardTags(def: EventCardDef, baseCash: number): { scaledTag: string; ptsTag: string } {
   const scaledTag =
     def.effect.kind === 'cash_gift_scaled' ||
@@ -31,20 +28,17 @@ export function renderEventPickPanel(
   dispatch: DispatchFn
 ): void {
   container.innerHTML = '';
-  const currentKey = `${state.turnNumber}:${state.activePlayerIndex}:${state.seed}:${state.eventChoices.join(',')}`;
-  if (revealedKey !== currentKey) {
-    revealedKey = null;
-    chosenCardId = null;
-  }
+  const revealedSlot = state.revealedEventSlot ?? null;
+  const chosenCardId = revealedSlot !== null ? (state.eventChoices[revealedSlot] ?? null) : null;
 
   const header = Object.assign(document.createElement('div'), { className: 'event-pick-header' });
   const grid = Object.assign(document.createElement('div'), { className: 'event-cards-grid' });
   const baseCash = computeEventBaseCash(state.totalMonths);
   const pickedDef = chosenCardId ? EVENT_CARDS.find((c) => c.id === chosenCardId) : undefined;
 
-  if (!chosenCardId || !pickedDef) {
+  if (revealedSlot === null || !chosenCardId || !pickedDef) {
     header.appendChild(mkSpan('', 'Choose 1 of 3 face-down Event Cards'));
-    state.eventChoices.forEach((cardId, idx) => {
+    state.eventChoices.forEach((_cardId, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'event-card-btn is-facedown';
@@ -53,20 +47,11 @@ export function renderEventPickPanel(
         mkSpan('event-card-emblem', '?'),
         mkSpan('event-card-desc', 'Click to Flip')
       );
-      btn.addEventListener('click', () => {
-        revealedKey = currentKey;
-        chosenCardId = cardId;
-        renderEventPickPanel(container, state, dispatch);
-      });
+      btn.addEventListener('click', () => dispatch({ type: 'REVEAL_EVENT_CARD', slotIndex: idx }));
       grid.appendChild(btn);
     });
   } else {
-    const commitPick = () => {
-      const cardId = chosenCardId!;
-      revealedKey = null;
-      chosenCardId = null;
-      dispatch({ type: 'PICK_EVENT_CARD', cardId });
-    };
+    const commitPick = () => dispatch({ type: 'PICK_EVENT_CARD', cardId: chosenCardId });
     const { scaledTag, ptsTag } = formatCardTags(pickedDef, baseCash);
     header.appendChild(mkSpan('', `${pickedDef.name}: ${pickedDef.description}${scaledTag} (${ptsTag})`));
     const applyBtn = Object.assign(document.createElement('button'), {
@@ -78,10 +63,10 @@ export function renderEventPickPanel(
     applyBtn.addEventListener('click', commitPick);
     header.appendChild(applyBtn);
 
-    for (const cardId of state.eventChoices) {
+    state.eventChoices.forEach((cardId, idx) => {
       const def = EVENT_CARDS.find((c) => c.id === cardId);
-      if (!def) continue;
-      const isPicked = cardId === chosenCardId;
+      if (!def) return;
+      const isPicked = idx === revealedSlot;
       const tags = formatCardTags(def, baseCash);
       const cardBtn = document.createElement('button');
       cardBtn.type = 'button';
@@ -94,7 +79,7 @@ export function renderEventPickPanel(
       );
       if (isPicked) cardBtn.addEventListener('click', commitPick);
       grid.appendChild(cardBtn);
-    }
+    });
   }
 
   container.append(header, grid);

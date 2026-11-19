@@ -86,6 +86,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
       pendingUndoSnapshot: null,
       phase: 'EVENT_PICK',
       eventChoices: drawn.ids,
+      revealedEventSlot: null,
       log: appendLog(rolledState, `${player.name} rolled E (Event)!`),
     };
   }

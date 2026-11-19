@@ -16,7 +16,7 @@ import {
 } from './shops';
 import type { EventCardDef, GameState } from './types';
 
-export { handleResolveEventStore, handleSkipEventStore } from './eventStore';
+export { handleResolveEventStore, handleRevealEventCard, handleSkipEventStore } from './eventStore';
 export type { EventCardDef };
 
 export function computeEventBaseCash(totalMonths: number): number {
@@ -29,6 +29,8 @@ function activeCount(state: GameState): number {
 
 export function handlePickEventCard(state: GameState, cardId: string): GameState {
   if (state.phase !== 'EVENT_PICK' || !state.eventChoices.includes(cardId)) return state;
+  const revealed = state.revealedEventSlot ?? null;
+  if (revealed !== null && state.eventChoices[revealed] !== cardId) return state;
   const card = EVENT_CARDS.find((c) => c.id === cardId);
   if (!card) return state;
 
@@ -56,6 +58,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
     globalSale,
     elevatorLock,
     eventChoices: [],
+    revealedEventSlot: null,
     hadBranchChoiceThisTurn: false,
     moveHistory: [],
     pendingUndoSnapshot: null,
@@ -197,7 +200,12 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
     case 'draw_another': {
       const drawn = drawThreeEventIds(state, seed);
       seed = drawn.nextSeed;
-      return { ...nextBase('Draw another card!'), eventChoices: drawn.ids, phase: 'EVENT_PICK' };
+      return {
+        ...nextBase('Draw another card!'),
+        eventChoices: drawn.ids,
+        revealedEventSlot: null,
+        phase: 'EVENT_PICK',
+      };
     }
 
     case 'go_steps':

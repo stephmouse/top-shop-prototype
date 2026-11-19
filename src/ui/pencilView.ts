@@ -29,10 +29,17 @@ function getFacesForPlayer(state: GameState): readonly PencilFace[] {
   return PENCIL_FACES;
 }
 
+export interface PencilPanelOptions {
+  readOnly?: boolean;
+  remoteSpinning?: boolean;
+  onSpinChange?: (spinning: boolean) => void;
+}
+
 export function renderPencilPanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  options: PencilPanelOptions = {}
 ): void {
   cancelActiveAnimation();
 
@@ -168,6 +175,21 @@ export function renderPencilPanel(
     }
   };
 
+  if (options.readOnly) {
+    primaryBtn.disabled = true;
+    quickBtn.disabled = true;
+    if (options.remoteSpinning) {
+      spinPhase = 'spinning';
+      lastFrameTs = 0;
+      stage.classList.add('is-spinning');
+      primaryBtn.textContent = 'Spinning...';
+      activeRafId = requestAnimationFrame(tick);
+    } else {
+      primaryBtn.textContent = 'Waiting for Roll...';
+    }
+    return;
+  }
+
   primaryBtn.addEventListener('click', () => {
     if (spinPhase === 'idle') {
       spinPhase = 'spinning';
@@ -175,6 +197,7 @@ export function renderPencilPanel(
       stage.classList.add('is-spinning');
       primaryBtn.textContent = isSlow ? 'Instant Stop (Space)' : 'Stop Pencil (Space)';
       quickBtn.disabled = true;
+      options.onSpinChange?.(true);
       activeRafId = requestAnimationFrame(tick);
     } else if (spinPhase === 'spinning') {
       spinPhase = 'stopping';

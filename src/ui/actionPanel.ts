@@ -41,12 +41,21 @@ function appendUndoControls(
   stack.appendChild(makeBtn(resetLabel, () => dispatch({ type: 'CANCEL_MOVE' }), { disabled: !canUndo }));
 }
 
+export interface ActionPanelViewOptions {
+  onOpenSetup?: () => void;
+  readOnly?: boolean;
+  remotePencilSpinning?: boolean;
+  onPencilSpinChange?: (spinning: boolean) => void;
+}
+
 export function renderActionPanel(
   container: HTMLElement,
   state: GameState,
   dispatch: DispatchFn,
-  onOpenSetup?: () => void
+  viewOptionsOrSetup?: ActionPanelViewOptions | (() => void)
 ): void {
+  const viewOptions: ActionPanelViewOptions =
+    typeof viewOptionsOrSetup === 'function' ? { onOpenSetup: viewOptionsOrSetup } : (viewOptionsOrSetup ?? {});
   container.innerHTML = '';
   const active = getActivePlayer(state);
 
@@ -56,15 +65,36 @@ export function renderActionPanel(
   const saleTag = state.globalSale
     ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
     : '';
-  heading.textContent = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}`;
+  const waitTag = viewOptions.readOnly && state.phase !== 'GAME_OVER' ? ` · Waiting for ${active.name}...` : '';
+  heading.textContent = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}${waitTag}`;
   container.appendChild(heading);
 
   const stack = document.createElement('div');
   stack.className = 'action-stack';
   container.appendChild(stack);
+  renderActionPanelBody(stack, state, dispatch, viewOptions);
+
+  if (viewOptions.readOnly && state.phase !== 'GAME_OVER') {
+    for (const el of Array.from(stack.querySelectorAll<HTMLButtonElement | HTMLSelectElement | HTMLInputElement>('button, select, input'))) {
+      el.disabled = true;
+    }
+  }
+}
+
+function renderActionPanelBody(
+  stack: HTMLElement,
+  state: GameState,
+  dispatch: DispatchFn,
+  viewOptions: ActionPanelViewOptions
+): void {
+  const active = getActivePlayer(state);
 
   if (state.phase === 'ROLL_PENCIL') {
-    renderPencilPanel(stack, state, dispatch);
+    renderPencilPanel(stack, state, dispatch, {
+      readOnly: viewOptions.readOnly,
+      remoteSpinning: viewOptions.remotePencilSpinning,
+      onSpinChange: viewOptions.onPencilSpinChange,
+    });
     return;
   }
 
@@ -161,8 +191,8 @@ export function renderActionPanel(
     const msg = document.createElement('strong');
     msg.textContent = `Winner: ${winner?.name ?? 'Unknown'}!`;
     stack.appendChild(msg);
-    if (onOpenSetup) {
-      stack.appendChild(makeBtn('Match Setup / New Match', onOpenSetup, { primary: true }));
+    if (viewOptions.onOpenSetup) {
+      stack.appendChild(makeBtn('Match Setup / New Match', viewOptions.onOpenSetup, { primary: true }));
     }
   }
 }

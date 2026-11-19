@@ -155,6 +155,7 @@ export function advanceToNextTurn(state: GameState): GameState {
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
     eventChoices: [],
+    revealedEventSlot: null,
     eventStorePrompt: null,
     log,
   };

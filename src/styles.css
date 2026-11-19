@@ -680,3 +680,115 @@ button.primary:hover:not(:disabled) {
   color: var(--muted);
   line-height: 1.35;
 }
+
+.topbar-online-btn.is-online {
+  background: #173a2b;
+  border-color: #2ea043;
+  color: #c5f7d0;
+}
+
+.player-card-namewrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.net-seat-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #141b27;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.net-seat-badge.is-you {
+  background: #1f4f8c;
+  border-color: #58a6ff;
+  color: #e6f2ff;
+}
+
+.net-seat-badge.is-host {
+  background: #33274d;
+  border-color: #8957e5;
+  color: #e5d8ff;
+}
+
+.net-seat-badge.is-online {
+  background: #173a2b;
+  border-color: #2ea043;
+  color: #b7f5c4;
+}
+
+.net-seat-badge.is-offline {
+  background: #3b1e22;
+  border-color: #e74c3c;
+  color: #ffc5bf;
+}
+
+.lobby-body {
+  display: grid;
+  gap: 12px;
+}
+
+.lobby-code-pill {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 6px;
+  background: #0d1017;
+  border: 1px solid #4b6999;
+  color: #f2cc60;
+}
+
+.lobby-seat-row,
+.lobby-peer-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #0d1017;
+  border: 1px solid var(--border);
+}
+
+.lobby-seat-info {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.lobby-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid #ffffff44;
+  flex-shrink: 0;
+}
+
+.lobby-seat-select {
+  width: auto;
+  min-width: 190px;
+}
+
+.topbar-online-btn.has-waiting {
+  border-color: #d29922;
+  background: #382c12;
+  color: #fce3a6;
+}
+
+.lobby-waiting-banner {
+  border-color: #d29922;
+  background: #231e12;
+}
+

@@ -115,6 +115,18 @@ export function handleResolveEventStore(
   return state;
 }
 
+export function handleRevealEventCard(state: GameState, slotIndex: number): GameState {
+  if (state.phase !== 'EVENT_PICK') return state;
+  if ((state.revealedEventSlot ?? null) !== null) return state;
+  if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex >= state.eventChoices.length) {
+    return state;
+  }
+  return {
+    ...state,
+    revealedEventSlot: slotIndex,
+  };
+}
+
 export function handleSkipEventStore(state: GameState): GameState {
   if (state.phase !== 'EVENT_PICK_STORE' || !state.eventStorePrompt || state.eventStorePrompt.forced) {
     return state;
