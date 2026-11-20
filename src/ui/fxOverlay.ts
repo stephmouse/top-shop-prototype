@@ -136,6 +136,9 @@ export function createFxOverlay(
       } else if (ev.type === 'points_delta') {
         const sign = ev.amount > 0 ? '+' : '-';
         spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), `${sign}${Math.abs(ev.amount)} pts`, 'is-pts', bumpStack(ev.tileId));
+      } else if (ev.type === 'chirp_equipped') {
+        triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-celebrate', 520);
+        spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), 'Chirp-Chirp!', 'is-payday', bumpStack(ev.tileId));
       } else if (ev.type === 'shop_changed') {
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), SHOP_FX_CLASS[ev.kind], 650);
       }

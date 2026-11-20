@@ -22,6 +22,7 @@ function readInitialMute(): boolean {
 export function createSoundFx(): SoundFxController {
   let muted = readInitialMute();
   let ctx: AudioContext | null = null;
+  let chirpAlt = false;
 
   function ensureContext(): AudioContext | null {
     if (muted || typeof window === 'undefined') return null;
@@ -60,6 +61,22 @@ export function createSoundFx(): SoundFxController {
   const playArp = (notes: number[], type: OscillatorType = 'triangle', step = 0.065, dur = 0.14) =>
     notes.forEach((f, idx) => tone(f, dur, type, idx * step));
 
+  function playChirpStep(): void {
+    chirpAlt = !chirpAlt;
+    const f1 = chirpAlt ? 1250 : 1350;
+    const t1 = chirpAlt ? 2250 : 2400;
+    const f2 = chirpAlt ? 1480 : 1580;
+    const t2 = chirpAlt ? 2550 : 2720;
+    tone(f1, 0.042, 'sine', 0, t1, 0.052);
+    tone(f2, 0.048, 'sine', 0.055, t2, 0.052);
+  }
+
+  function playChirpEquip(): void {
+    tone(1250, 0.05, 'sine', 0, 2150, 0.055);
+    tone(1450, 0.05, 'sine', 0.07, 2450, 0.055);
+    tone(1650, 0.05, 'sine', 0.14, 2800, 0.055);
+  }
+
   function setMuted(next: boolean): void {
     muted = next;
     try {
@@ -78,10 +95,13 @@ export function createSoundFx(): SoundFxController {
     const shop = events.find((e) => e.type === 'shop_changed');
 
     if (moved && !payday) {
-      if (moved.kind === 'step') tone(440, 0.045, 'triangle', 0, 520, 0.045);
-      else if (moved.kind === 'escalator') tone(392, 0.11, 'sine', 0, 587, 0.05);
+      if (moved.kind === 'step') {
+        if (moved.chirp) playChirpStep();
+        else tone(440, 0.045, 'triangle', 0, 520, 0.045);
+      } else if (moved.kind === 'escalator') tone(392, 0.11, 'sine', 0, 587, 0.05);
       else if (moved.kind === 'elevator') playArp([659, 880], 'sine', 0.09, 0.18);
     }
+    if (events.some((e) => e.type === 'chirp_equipped')) playChirpEquip();
 
     if (payday) {
       playArp([523, 659, 784, 1046], 'triangle', 0.06, 0.16);

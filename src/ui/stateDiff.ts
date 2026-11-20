@@ -1,10 +1,11 @@
 import type { GameState, Shop } from '../engine/types';
 
 export type VisualEvent =
-  | { type: 'player_moved'; playerId: string; fromTileId: string; toTileId: string; kind: 'step' | 'escalator' | 'elevator' }
+  | { type: 'player_moved'; playerId: string; fromTileId: string; toTileId: string; kind: 'step' | 'escalator' | 'elevator'; chirp?: boolean }
   | { type: 'bank_payday'; playerId: string; tileId: string; isExact: boolean }
   | { type: 'cash_delta'; playerId: string; tileId: string; amount: number; reason: 'payday' | 'gain' | 'loss'; isHurt: boolean }
   | { type: 'points_delta'; playerId: string; tileId: string; amount: number }
+  | { type: 'chirp_equipped'; playerId: string; tileId: string }
   | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked' };
 
 function sumStock(shop: Shop): number {
@@ -40,6 +41,7 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
         fromTileId: pp.tileId,
         toTileId: np.tileId,
         kind: classifyMoveKind(prev, pp.tileId),
+        ...(np.chirpSandals ? { chirp: true } : {}),
       });
     }
 
@@ -69,6 +71,9 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
     const ptsDiff = np.points - pp.points;
     if (ptsDiff !== 0) {
       events.push({ type: 'points_delta', playerId: np.id, tileId: np.tileId, amount: ptsDiff });
+    }
+    if (!pp.chirpSandals && np.chirpSandals) {
+      events.push({ type: 'chirp_equipped', playerId: np.id, tileId: np.tileId });
     }
   }
 
