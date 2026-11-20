@@ -27,7 +27,7 @@ const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
 
 let autoStepEnabled = false, showRoutes = true, guidedWalkActive = false, awaitingRemoteStepAck = false;
-let hoveredEndTileId: string | null = null, stepTimer: number | null = null;
+let hoveredEndTileId: string | null = null, stepTimer: number | null = null, ackTimer: number | null = null;
 let guidedChoices: DirectionChoice[] = [];
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
 let prevRenderedState: GameState | null = null;
@@ -56,18 +56,20 @@ bottomGrid.append(actionBox, logBox);
 function applyHostAction(action: GameAction): GameState {
   const next = applyAction(state, action);
   if (next === state) return state;
-  state = next;
-  saveAutoSavedMatch(state);
-  render();
-  return state;
+  state = next; saveAutoSavedMatch(state); render(); return state;
 }
 
 const netSession = createMultiplayerSession({
   getState: () => state,
   onApplyHostAction: applyHostAction,
-  onReceiveRemoteState: (remoteState) => { awaitingRemoteStepAck = false; state = remoteState; lobbyModal.refresh(); render(); },
+  onReceiveRemoteState: (remoteState) => { clearAckTimer(); awaitingRemoteStepAck = false; state = remoteState; lobbyModal.refresh(); render(); },
+  onSyncHostState: (synced) => { state = synced; saveAutoSavedMatch(state); render(); },
   onSessionChange: () => renderSessionUi(),
-  onError: (msg) => { awaitingRemoteStepAck = false; lobbyModal.showStatus(msg, true); console.warn('[TopShop Net]', msg); },
+  onError: (msg) => {
+    clearAckTimer(); awaitingRemoteStepAck = false;
+    if (netSession.getRole() === 'offline' && !lobbyModal.isOpen()) { setupModal.close(); lobbyModal.open(); }
+    lobbyModal.showStatus(msg, true); console.warn('[TopShop Net]', msg);
+  },
 });
 (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
@@ -84,12 +86,7 @@ const startMatchFromSetup = (setup: MatchSetupData) => {
   commitMatchState(createInitialGameState(clean.players, clean.config, Date.now() & 0xffffff, clean.stageId), clean);
 };
 const loadSavedState = (saved: GameState) => commitMatchState(saved, extractSetupFromState(saved));
-const saveCurrentMatch = () => {
-  const env = saveManualMatchSlot(state);
-  setupModal.refreshSaveStatus();
-  syncTopbar(true);
-  return env;
-};
+const saveCurrentMatch = () => { const env = saveManualMatchSlot(state); setupModal.refreshSaveStatus(); syncTopbar(true); return env; };
 
 const avatarModal = createAvatarModal();
 const setupModal = createSetupModal({
@@ -150,13 +147,18 @@ shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, setupModal.el, lobbyMod
 root.appendChild(shell);
 
 const clearStepTimer = () => { if (stepTimer !== null) { window.clearTimeout(stepTimer); stepTimer = null; } };
-const cancelGuidedWalk = () => { clearStepTimer(); guidedWalkActive = false; guidedChoices = []; };
+const clearAckTimer = () => { if (ackTimer !== null) { window.clearTimeout(ackTimer); ackTimer = null; } };
+const cancelGuidedWalk = () => { clearStepTimer(); clearAckTimer(); guidedWalkActive = false; guidedChoices = []; };
 const isMovingPhase = (phase: GameState['phase']) =>
   phase === 'STEPPING' || phase === 'ESCALATOR_RIDE' || phase === 'ESCALATOR_UNDO' || phase === 'CHOOSE_DIRECTION';
 
 const sendStepAction = (action: GameAction) => {
-  if (netSession.getRole() === 'guest') awaitingRemoteStepAck = true;
-  if (!netSession.sendOrApplyAction(action)) awaitingRemoteStepAck = false;
+  clearAckTimer();
+  if (netSession.getRole() === 'guest') {
+    awaitingRemoteStepAck = true;
+    ackTimer = window.setTimeout(() => { awaitingRemoteStepAck = false; scheduleMovementTick(); }, 2500);
+  }
+  if (!netSession.sendOrApplyAction(action)) { clearAckTimer(); awaitingRemoteStepAck = false; }
 };
 
 function stepGuidedOrAuto(): void {
@@ -196,7 +198,6 @@ function syncHeaderAndHud(): void {
   syncTopbar();
   renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken(), customAvatars: netSession.getCustomAvatars() });
 }
-
 function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencilSpinning()): void {
   lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin;
   renderActionPanel(actionBox, state, dispatch, {
@@ -205,13 +206,10 @@ function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencil
     onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning),
   });
 }
-
 function renderSessionUi(): void {
   lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
   const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
-  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
-    renderActionBox(canAct, remoteSpin); scheduleMovementTick();
-  }
+  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') { renderActionBox(canAct, remoteSpin); scheduleMovementTick(); }
 }
 
 function render(): void {
@@ -222,25 +220,21 @@ function render(): void {
     onSelectNextStep: (opt) => dispatch(state.phase === 'CHOOSE_DIRECTION' && opt.direction ? { type: 'CHOOSE_DIRECTION', direction: opt.direction } : { type: 'ADVANCE_STEP' }),
     onSelectEndTarget: (target) => {
       if (!netSession.isLocalTurn(state)) return;
-      cancelGuidedWalk(); hoveredEndTileId = null;
-      guidedChoices = [...target.queuedChoices]; guidedWalkActive = true;
-      stepGuidedOrAuto();
+      cancelGuidedWalk(); hoveredEndTileId = null; guidedChoices = [...target.queuedChoices]; guidedWalkActive = true; stepGuidedOrAuto();
     },
     onHoverEndTarget: (tileId) => { hoveredEndTileId = tileId; drawRoutes(preview); },
   });
-  drawRoutes(preview);
-  renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  fxOverlay.playStateDiff(prevRenderedState, state);
-  prevRenderedState = state;
+  drawRoutes(preview); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
+  fxOverlay.playStateDiff(prevRenderedState, state); prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   renderActionBox(netSession.isLocalTurn(state));
-  logList.innerHTML = '';
-  for (const entry of state.log) logList.appendChild(mk('li', '', entry));
+  logList.innerHTML = ''; for (const entry of state.log) logList.appendChild(mk('li', '', entry));
   scheduleMovementTick();
 }
 
 window.addEventListener('resize', () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); });
+window.addEventListener('beforeunload', (e) => { if (netSession.getRole() !== 'offline') { e.preventDefault(); e.returnValue = ''; } });
 render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();
 if (roomParam) lobbyModal.open(roomParam);

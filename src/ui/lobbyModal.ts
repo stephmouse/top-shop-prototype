@@ -1,11 +1,47 @@
 import { sanitizeAvatarSpec } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
 import type { GameState } from '../engine/types';
-import { normalizeRoomCode } from '../net/protocol';
+import { HEX_COLOR_RE, normalizeRoomCode } from '../net/protocol';
 import type { ConnectedPeerInfo } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
 import { createAvatarElement } from './avatarSvg';
 import { addLobbySection, mk, mkBtn, renderActiveRoomView } from './lobbyRoomView';
+
+export const GUEST_PROFILE_STORAGE_KEY = 'top_shop_guest_profile_v1';
+
+interface GuestProfile { name: string; color: string; avatar: AvatarSpec; }
+
+function getLocalStore(): Storage | null {
+  try { return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null; } catch { return null; }
+}
+
+function loadGuestProfile(fallback: { name: string; color: string; avatar?: AvatarSpec }): GuestProfile {
+  const def: GuestProfile = {
+    name: fallback.name.trim().slice(0, 18) || 'Guest',
+    color: HEX_COLOR_RE.test(fallback.color) ? fallback.color : '#3498db',
+    avatar: sanitizeAvatarSpec(fallback.avatar, 1),
+  };
+  const store = getLocalStore();
+  if (!store) return def;
+  try {
+    const rawText = store.getItem(GUEST_PROFILE_STORAGE_KEY);
+    if (!rawText) return def;
+    const raw: unknown = JSON.parse(rawText);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return def;
+    const r = raw as Record<string, unknown>;
+    return {
+      name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 18) : def.name,
+      color: typeof r.color === 'string' && HEX_COLOR_RE.test(r.color) ? r.color : def.color,
+      avatar: sanitizeAvatarSpec(r.avatar, 1),
+    };
+  } catch { return def; }
+}
+
+function saveGuestProfile(prof: GuestProfile): void {
+  const store = getLocalStore();
+  if (!store) return;
+  try { store.setItem(GUEST_PROFILE_STORAGE_KEY, JSON.stringify(prof)); } catch { /* Ignore quota errors */ }
+}
 
 export interface LobbyModalOptions {
   netSession: MultiplayerSession;
@@ -35,8 +71,7 @@ function mkCodeInput(value: string, maxLength: number, placeholder: string, onCo
 }
 
 export function createLobbyModal(options: LobbyModalOptions): LobbyModalController {
-  const defProf = options.getDefaultProfile();
-  const profile = { name: defProf.name, color: defProf.color, avatar: sanitizeAvatarSpec(defProf.avatar, 1) };
+  const profile = loadGuestProfile(options.getDefaultProfile());
   let draftHostCode = '';
   let draftJoinCode = '';
   let visible = false;
@@ -81,14 +116,14 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     avatarBtn.style.borderColor = profile.color;
     avatarBtn.appendChild(createAvatarElement(profile.avatar, profile.color));
     const openCustomize = () => options.onEditAvatar?.(profile.avatar, profile.color, (next) => {
-      profile.avatar = next; renderBody();
+      profile.avatar = next; saveGuestProfile(profile); renderBody();
     });
     avatarBtn.addEventListener('click', openCustomize);
     const nameInput = Object.assign(mk('input', 'setup-input'), { type: 'text', value: profile.name, maxLength: 18, placeholder: 'Your Name' });
-    nameInput.addEventListener('input', () => { profile.name = nameInput.value.trim() || 'Guest'; });
+    nameInput.addEventListener('input', () => { profile.name = nameInput.value.trim() || 'Guest'; saveGuestProfile(profile); });
     const colorInput = Object.assign(mk('input', 'setup-color-picker'), { type: 'color', value: profile.color });
-    colorInput.addEventListener('input', () => { profile.color = colorInput.value; avatarBtn.style.borderColor = colorInput.value; });
-    colorInput.addEventListener('change', () => renderBody());
+    colorInput.addEventListener('input', () => { profile.color = colorInput.value; avatarBtn.style.borderColor = colorInput.value; saveGuestProfile(profile); });
+    colorInput.addEventListener('change', () => { profile.color = colorInput.value; saveGuestProfile(profile); renderBody(); });
     profileRow.append(avatarBtn, nameInput, colorInput, mkBtn('Customize', openCustomize));
     profileSec.appendChild(profileRow);
 
@@ -107,11 +142,14 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     const joinSec = addLobbySection('Join a Room');
     const joinRow = mk('div', 'setup-player-row');
     const joinInput = mkCodeInput(draftJoinCode, 12, 'Enter Room Code (e.g. 7K9P2M)', (c) => { draftJoinCode = c; });
-    const triggerJoin = () => runConnect(
-      `Joining room ${draftJoinCode || '...'}...`,
-      () => options.netSession.joinRoom(draftJoinCode, profile),
-      () => `Connected to room ${options.netSession.getRoomCode() ?? draftJoinCode}!`
-    );
+    const triggerJoin = () => {
+      saveGuestProfile(profile);
+      runConnect(
+        `Joining room ${draftJoinCode || '...'}...`,
+        () => options.netSession.joinRoom(draftJoinCode, profile),
+        () => `Connected to room ${options.netSession.getRoomCode() ?? draftJoinCode}!`
+      );
+    };
     joinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !busy) triggerJoin(); });
     joinRow.append(joinInput, mkBtn(busy ? 'Connecting...' : 'Join Room', triggerJoin, 'primary', busy));
     joinSec.appendChild(joinRow);

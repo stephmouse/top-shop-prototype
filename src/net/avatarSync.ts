@@ -1,6 +1,32 @@
 import { isValidCustomImageDataUrl } from '../config/avatarTypes';
 import type { GameState } from '../engine/types';
+import { HEX_COLOR_RE, HOST_TOKEN } from './protocol';
 import type { RoomRoster } from './protocol';
+
+export const PEER_ICE_CONFIG: RTCConfiguration = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' },
+  ],
+};
+
+export function applyPeerSeatProfiles(state: GameState, roster: RoomRoster | null): GameState {
+  if (!roster) return state;
+  let changed = false;
+  const players = state.players.map((player, idx) => {
+    const ownerToken = roster.seatOwners[idx];
+    if (!ownerToken || ownerToken === HOST_TOKEN) return player;
+    const peer = roster.peers.find((p) => p.clientToken === ownerToken);
+    if (!peer) return player;
+    const nextName = peer.name.trim() || player.name;
+    const nextColor = HEX_COLOR_RE.test(peer.color) ? peer.color : player.color;
+    if (nextName === player.name && nextColor === player.color) return player;
+    changed = true;
+    return { ...player, name: nextName, color: nextColor };
+  });
+  return changed ? { ...state, players } : state;
+}
 
 export interface AvatarSyncStore {
   clear: () => void;
