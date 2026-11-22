@@ -88,6 +88,7 @@ button.primary:hover:not(:disabled) {
 }
 
 .board-grid {
+  width: max(100%, calc(var(--board-cols, 11) * 104px + (var(--board-cols, 11) - 1) * 6px + 22px));
   display: grid;
   grid-template-columns: repeat(11, minmax(104px, 1fr));
   grid-auto-rows: 114px;

@@ -7,7 +7,8 @@ import { randomInt } from './rng';
 import { resumeAfterPostAction } from './shops';
 import type { GameState, Player } from './types';
 
-export { canRedeemBankReward } from './bankEligibility';
+export { canRedeemBankReward, getBankRewardTargets } from './bankEligibility';
+export type { BankRewardTargetList } from './bankEligibility';
 
 export function handleRedeemBankReward(
   state: GameState,
@@ -109,9 +110,9 @@ export function handleRedeemBankReward(
         return resumeAfterPostAction(makeState(`${rival.name} cash -> $${nextCash}.`));
       }
       players = players.map((p) =>
-        p.id === active.id || p.isBankrupt
+        p.id === active.id || p.isBankrupt || p.cash <= 0
           ? p
-          : { ...p, cash: Math.max(0, Math.floor((p.cash * eff.numerator) / eff.denominator)) }
+          : { ...p, cash: Math.floor((p.cash * eff.numerator) / eff.denominator) }
       );
       return resumeAfterPostAction(makeState("Rivals' cash reduced."));
     }

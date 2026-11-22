@@ -233,7 +233,9 @@ function render(): void {
   scheduleMovementTick();
 }
 
-window.addEventListener('resize', () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); });
+const syncBoardOverlays = () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); };
+window.addEventListener('resize', syncBoardOverlays);
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncBoardOverlays).observe(boardEl);
 window.addEventListener('beforeunload', (e) => { if (netSession.getRole() !== 'offline') { e.preventDefault(); e.returnValue = ''; } });
 render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();

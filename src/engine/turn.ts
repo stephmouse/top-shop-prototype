@@ -6,8 +6,9 @@ export function checkVictory(state: GameState): string | null {
   const activePlayers = state.players.filter((p) => !p.isBankrupt);
   const bankruptCount = state.players.length - activePlayers.length;
 
-  if (bankruptCount >= state.config.bankruptLimit && activePlayers.length > 0) {
-    const sorted = [...activePlayers].sort(
+  if (bankruptCount >= state.config.bankruptLimit || activePlayers.length <= 1) {
+    const pool = activePlayers.length > 0 ? activePlayers : state.players;
+    const sorted = [...pool].sort(
       (a, b) => computePlayerNetWorth(state, b.id) - computePlayerNetWorth(state, a.id)
     );
     return sorted[0]?.id ?? null;
@@ -106,7 +107,7 @@ export function advanceToNextTurn(state: GameState): GameState {
   }
 
   const incoming = nextPlayers[nextIndex];
-  if (incoming) {
+  if (incoming && !incoming.isBankrupt) {
     let hDir = incoming.horizontalDir;
     let vDir = incoming.verticalDir;
     if (incoming.unlockDirNextTurn) {
@@ -160,7 +161,12 @@ export function advanceToNextTurn(state: GameState): GameState {
     log,
   };
 
-  if (!state.config.finishRoundOnWin || isRoundBoundary) {
+  const activePlayers = candidateState.players.filter((p) => !p.isBankrupt);
+  const bankruptCount = candidateState.players.length - activePlayers.length;
+  const bankruptcyEnded =
+    activePlayers.length <= 1 || bankruptCount >= candidateState.config.bankruptLimit;
+
+  if (bankruptcyEnded || !state.config.finishRoundOnWin || isRoundBoundary) {
     const winnerId = checkVictory(candidateState);
     if (winnerId) {
       const winner = candidateState.players.find((p) => p.id === winnerId);

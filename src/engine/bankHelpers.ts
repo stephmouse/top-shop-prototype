@@ -14,9 +14,8 @@ export function resolveTargetRival(
 ): Player | undefined {
   const active = state.players[state.activePlayerIndex]!;
   const rivals = state.players.filter((p) => p.id !== active.id && !p.isBankrupt && predicate(p));
-  if (preferredId) {
-    const exact = rivals.find((p) => p.id === preferredId);
-    if (exact) return exact;
+  if (preferredId !== undefined) {
+    return rivals.find((p) => p.id === preferredId);
   }
   return rivals[0];
 }
@@ -30,9 +29,8 @@ export function resolveTargetRivalShop(
   const shops = Object.values(state.shops).filter(
     (s) => s.ownerId !== null && s.ownerId !== active.id && predicate(s)
   );
-  if (preferredShopId) {
-    const exact = shops.find((s) => s.id === preferredShopId);
-    if (exact) return exact;
+  if (preferredShopId !== undefined) {
+    return shops.find((s) => s.id === preferredShopId);
   }
   return shops[0];
 }
@@ -46,9 +44,8 @@ export function resolveTargetOwnShop(
   const shops = Object.values(state.shops).filter(
     (s) => s.ownerId === active.id && predicate(s)
   );
-  if (preferredShopId) {
-    const exact = shops.find((s) => s.id === preferredShopId);
-    if (exact) return exact;
+  if (preferredShopId !== undefined) {
+    return shops.find((s) => s.id === preferredShopId);
   }
   return shops[0];
 }

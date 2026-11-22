@@ -81,3 +81,50 @@ export function createAvatarSyncStore(): AvatarSyncStore {
     },
   };
 }
+
+export const HOST_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000] as const;
+const TRANSIENT_PEER_ERRORS = new Set(['network', 'disconnected', 'server-error', 'socket-error', 'socket-closed']);
+
+export function isTransientSignalingError(err: { type?: string } | null | undefined): boolean {
+  return typeof err?.type === 'string' && TRANSIENT_PEER_ERRORS.has(err.type);
+}
+
+export interface ReconnectBackoff {
+  schedule: () => void;
+  reset: () => void;
+  cancel: () => void;
+  isExhausted: () => boolean;
+  getAttempts: () => number;
+}
+
+export function createReconnectBackoff(
+  onAttempt: () => void,
+  onExhausted: () => void,
+  delays: readonly number[] = HOST_RECONNECT_DELAYS_MS
+): ReconnectBackoff {
+  let attempts = 0;
+  let exhausted = false;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const cancel = () => {
+    if (timer !== null) { clearTimeout(timer); timer = null; }
+  };
+
+  return {
+    cancel,
+    reset: () => { cancel(); attempts = 0; exhausted = false; },
+    isExhausted: () => exhausted,
+    getAttempts: () => attempts,
+    schedule: () => {
+      if (timer !== null || exhausted) return;
+      if (attempts >= delays.length) {
+        exhausted = true;
+        onExhausted();
+        return;
+      }
+      const delay = delays[attempts]!;
+      attempts++;
+      timer = setTimeout(() => { timer = null; onAttempt(); }, delay);
+    },
+  };
+}

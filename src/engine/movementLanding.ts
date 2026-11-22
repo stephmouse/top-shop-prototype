@@ -173,6 +173,7 @@ export function handleResolveElevator(state: GameState, ride: boolean): GameStat
   const shaftLabel = hasMultiShaft
     ? `Elevator ${currentTile.elevatorShaft === 1 ? 'B' : 'A'}`
     : 'Elevator';
+  const stayedSameFloor = destTile.id === currentTile.id;
   const moved = updateActivePlayer(state, {
     tileId: destTile.id,
     horizontalDir: null,
@@ -182,6 +183,11 @@ export function handleResolveElevator(state: GameState, ride: boolean): GameStat
   return advanceToNextTurn({
     ...moved,
     seed: nextSeed,
-    log: appendLog(moved, `${player.name} rode ${shaftLabel} to ${destTile.floor}F!`),
+    log: appendLog(
+      moved,
+      stayedSameFloor
+        ? `${player.name} rode ${shaftLabel} — stayed on ${destTile.floor}F!`
+        : `${player.name} rode ${shaftLabel} to ${destTile.floor}F!`
+    ),
   });
 }

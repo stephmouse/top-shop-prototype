@@ -60,6 +60,7 @@ function setClassesKeepingFx(el: HTMLElement, baseClasses: string[]): void {
 function mountBoardTiles(container: HTMLElement, state: GameState, cols: number, floors: number, sig: string): BoardDomCache {
   container.innerHTML = '';
   container.style.gridTemplateColumns = `repeat(${cols}, minmax(104px, 1fr))`;
+  container.style.setProperty('--board-cols', String(cols));
 
   const cache: BoardDomCache = { stageSignature: sig, tileRefs: new Map(), nextByTile: new Map(), endByTile: new Map() };
 

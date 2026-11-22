@@ -72,8 +72,8 @@ export function renderRouteOverlay(
   svg.innerHTML = '';
   if (!showRoutes) return;
 
-  const w = boardGrid.offsetWidth;
-  const h = boardGrid.offsetHeight;
+  const w = Math.max(boardGrid.offsetWidth, boardGrid.scrollWidth || 0);
+  const h = Math.max(boardGrid.offsetHeight, boardGrid.scrollHeight || 0);
   if (w === 0 || h === 0) return;
 
   svg.setAttribute('width', String(w));
