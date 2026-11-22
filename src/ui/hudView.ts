@@ -1,8 +1,7 @@
 import { isValidCustomImageDataUrl, sanitizeAvatarSpec, stripAvatarCustomImage } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
-import { computePlayerNetWorth } from '../engine/helpers';
 import type { GameState } from '../engine/types';
-import { canClientAct, HOST_TOKEN } from '../net/protocol';
+import { HOST_TOKEN } from '../net/protocol';
 import type { NetRole, RoomRoster } from '../net/protocol';
 import { createAvatarElement, getAvatarRenderKey } from './avatarSvg';
 
@@ -132,75 +131,5 @@ export function renderTokensOverlay(
     if (isNew) {
       tokensLayer.appendChild(token);
     }
-  });
-}
-
-export function renderPlayersHud(container: HTMLElement, state: GameState, netInfo?: HudNetInfo): void {
-  container.innerHTML = '';
-
-  state.players.forEach((player, idx) => {
-    const isActive = idx === state.activePlayerIndex;
-    const card = document.createElement('div');
-    card.className = `player-card${isActive ? ' is-active' : ''}`;
-    card.style.borderColor = isActive ? player.color : '';
-
-    const netWorth = computePlayerNetWorth(state, player.id);
-    const hArrow =
-      player.horizontalDir === 'left' ? '←' : player.horizontalDir === 'right' ? '→' : '?';
-    const vArrow =
-      player.verticalDir === 'up' ? '↑' : player.verticalDir === 'down' ? '↓' : '?';
-
-    const head = document.createElement('div');
-    head.className = 'player-card-head';
-    const nameWrap = document.createElement('span');
-    nameWrap.className = 'player-card-namewrap';
-    const hudAv = document.createElement('span');
-    hudAv.className = 'hud-avatar';
-    hudAv.style.borderColor = player.color;
-    hudAv.appendChild(createAvatarElement(resolvePlayerAvatar(state, idx, netInfo?.roster, netInfo?.customAvatars), player.color));
-    const nameSpan = document.createElement('span');
-    nameSpan.style.color = player.color;
-    nameSpan.textContent = `P${idx + 1} ${player.name}`;
-    nameWrap.append(hudAv, nameSpan);
-
-    if (netInfo && netInfo.role !== 'offline' && netInfo.roster) {
-      const isMine = canClientAct(netInfo.role, netInfo.roster, netInfo.myClientToken, idx);
-      const ownerToken = netInfo.roster.seatOwners[idx] ?? HOST_TOKEN;
-      const peer = netInfo.roster.peers.find((p) => p.clientToken === ownerToken);
-      const badge = document.createElement('span');
-      if (isMine) {
-        badge.className = 'net-seat-badge is-you';
-        badge.textContent = 'YOU';
-      } else if (ownerToken === HOST_TOKEN) {
-        badge.className = 'net-seat-badge is-host';
-        badge.textContent = 'HOST';
-      } else if (peer) {
-        badge.className = `net-seat-badge ${peer.connected ? 'is-online' : 'is-offline'}`;
-        badge.textContent = peer.connected ? peer.name : `${peer.name} (DC)`;
-      }
-      if (badge.textContent) nameWrap.appendChild(badge);
-    }
-
-    const ptsSpan = document.createElement('span');
-    ptsSpan.textContent = player.isBankrupt ? 'BANKRUPT' : `Pts: ${player.points}`;
-    head.append(nameWrap, ptsSpan);
-
-    const stats = document.createElement('div');
-    const tags: string[] = [];
-    if (player.doubleNextPayday) tags.push('2xPay');
-    if (player.skipNextPayday) tags.push('NoPay');
-    if (player.doublePriceTurns > 0) tags.push(`2x$${player.doublePriceTurns}T`);
-    if (player.pencilTurnsLeft > 0 && player.pencilMode !== 'normal') {
-      tags.push(`Pencil:${player.pencilMode}(${player.pencilTurnsLeft}T)`);
-    }
-    if (player.blockDeliveryTurns > 0) tags.push(`NoDeliv(${player.blockDeliveryTurns}T)`);
-    if (player.blockNewStoreTurns > 0) tags.push(`NoOpen(${player.blockNewStoreTurns}T)`);
-    if (player.chirpSandals) tags.push('Chirp');
-    const tagSuffix = tags.length > 0 ? ` | [${tags.join(', ')}]` : '';
-    stats.textContent = `Cash: $${player.cash} | Net: $${netWorth} | Dir: ${hArrow} ${vArrow}${tagSuffix}`;
-
-    card.appendChild(head);
-    card.appendChild(stats);
-    container.appendChild(card);
   });
 }

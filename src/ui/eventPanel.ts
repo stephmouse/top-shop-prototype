@@ -4,6 +4,12 @@ import { computeEventBaseCash } from '../engine/events';
 import { computeShopAssetValue, getActivePlayer } from '../engine/helpers';
 import { getAllowedStoreTypeIds } from '../engine/shops';
 import type { EventCardDef, GameState, Shop } from '../engine/types';
+import {
+  getEligibleEventEmptySlots,
+  getEventSelectedShopId,
+  handleEventSellPickClick,
+  setEventSelectedShopId,
+} from './boardPickState';
 
 type DispatchFn = (action: GameAction) => void;
 
@@ -95,84 +101,110 @@ function formatLoc(state: GameState, shop: Shop): string {
 export function renderEventStorePanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  onUiChange?: () => void
 ): void {
   const prompt = state.eventStorePrompt;
   if (!prompt) return;
   const active = getActivePlayer(state);
   const list = document.createElement('div');
   list.className = 'card-list';
-
-  if (prompt.mode === 'sell') {
-    const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
-    for (const shop of owned) {
-      const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
-      const payout = Math.floor(computeShopAssetValue(shop) * prompt.multiplier);
-      const btn = document.createElement('button');
-      btn.textContent = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
-      btn.addEventListener('click', () => dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: shop.id }));
-      list.appendChild(btn);
-    }
-  } else {
-    const payer = prompt.payerId
-      ? state.players.find((p) => p.id === prompt.payerId) ?? active
-      : active;
-    const emptySlots = Object.values(state.shops).filter(
-      (s) =>
-        s.ownerId === null &&
-        (prompt.allowOwnedSegment ||
-          !Object.values(state.shops).some(
-            (o) => o.ownerId === active.id && o.segmentId === s.segmentId
-          )) &&
-        getAllowedStoreTypeIds(state, active.id, s.segmentId).some(
-          (id) => (STORE_TYPES[id]?.baseOpenCost ?? Infinity) <= payer.cash
-        )
-    );
-    const slotSelect = document.createElement('select');
-    for (const s of emptySlots) {
-      const opt = document.createElement('option');
-      opt.value = s.id;
-      opt.textContent = `Slot ${formatLoc(state, s)} (${s.segmentId})`;
-      slotSelect.appendChild(opt);
-    }
-    list.appendChild(slotSelect);
-
-    const storeBtns = document.createElement('div');
-    storeBtns.className = 'card-list';
-
-    const rebuildTypes = () => {
-      storeBtns.innerHTML = '';
-      const slot = state.shops[slotSelect.value];
-      if (!slot) return;
-      const allowed = getAllowedStoreTypeIds(state, active.id, slot.segmentId)
-        .map((id) => STORE_TYPES[id])
-        .filter((d): d is NonNullable<typeof d> => Boolean(d))
-        .sort((a, b) => b.baseOpenCost - a.baseOpenCost);
-
-      const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
-      for (const def of allowed) {
-        const btn = document.createElement('button');
-        btn.className = 'primary';
-        btn.disabled = payer.cash < def.baseOpenCost;
-        btn.textContent = `Open ${def.name} at ${formatLoc(state, slot)} ($${def.baseOpenCost}${payerTag})`;
-        btn.addEventListener('click', () =>
-          dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: slot.id, storeTypeId: def.id })
-        );
-        storeBtns.appendChild(btn);
-      }
-    };
-
-    slotSelect.addEventListener('change', rebuildTypes);
-    rebuildTypes();
-    list.appendChild(storeBtns);
-  }
-
-  if (!prompt.forced) {
-    const skip = document.createElement('button');
-    skip.textContent = prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip';
-    skip.addEventListener('click', () => dispatch({ type: 'SKIP_EVENT_STORE' }));
-    list.appendChild(skip);
-  }
-
   container.appendChild(list);
+
+  const render = () => {
+    const notify = () => (onUiChange ? onUiChange() : render());
+    list.innerHTML = '';
+
+    if (prompt.mode === 'sell') {
+      const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
+      const confirmId = getEventSelectedShopId(state);
+      const note = document.createElement('div');
+      note.textContent = `Pick a store to sell at ${prompt.multiplier}x (click below or on map, twice to confirm):`;
+      list.appendChild(note);
+
+      for (const shop of owned) {
+        const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+        const payout = Math.floor(computeShopAssetValue(shop) * prompt.multiplier);
+        const isConfirming = confirmId === shop.id;
+        const btn = document.createElement('button');
+        if (isConfirming) btn.className = 'primary';
+        btn.style.borderLeft = `4px solid ${active.color}`;
+        const baseLabel = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
+        btn.textContent = isConfirming ? `Confirm? ${baseLabel}` : baseLabel;
+        btn.addEventListener('click', () =>
+          handleEventSellPickClick(state, shop.id, dispatch, notify)
+        );
+        list.appendChild(btn);
+      }
+    } else {
+      const payer = prompt.payerId
+        ? state.players.find((p) => p.id === prompt.payerId) ?? active
+        : active;
+      const emptySlots = getEligibleEventEmptySlots(state);
+      const selectedId = getEventSelectedShopId(state);
+      const pickedSlot = selectedId ? emptySlots.find((s) => s.id === selectedId) : undefined;
+
+      if (pickedSlot) {
+        const backBtn = document.createElement('button');
+        backBtn.textContent = '← Back to Empty Lots';
+        backBtn.addEventListener('click', () => {
+          setEventSelectedShopId(state, null);
+          notify();
+        });
+        list.appendChild(backBtn);
+
+        const slotNote = document.createElement('div');
+        slotNote.textContent = `Pick store type to open at ${formatLoc(state, pickedSlot)} (${pickedSlot.segmentId}):`;
+        list.appendChild(slotNote);
+
+        const allowed = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
+          .map((id) => STORE_TYPES[id])
+          .filter((d): d is NonNullable<typeof d> => Boolean(d))
+          .sort((a, b) => b.baseOpenCost - a.baseOpenCost);
+
+        const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
+        for (const def of allowed) {
+          const btn = document.createElement('button');
+          btn.className = 'primary';
+          btn.disabled = payer.cash < def.baseOpenCost;
+          btn.textContent = `Open ${def.name} at ${formatLoc(state, pickedSlot)} ($${def.baseOpenCost}${payerTag})`;
+          btn.addEventListener('click', () => {
+            setEventSelectedShopId(state, null);
+            dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: pickedSlot.id, storeTypeId: def.id });
+          });
+          list.appendChild(btn);
+        }
+      } else {
+        setEventSelectedShopId(state, null);
+        const pickNote = document.createElement('div');
+        pickNote.textContent =
+          emptySlots.length > 0
+            ? 'Pick an empty lot (below or on the map):'
+            : 'No eligible empty lots available.';
+        list.appendChild(pickNote);
+
+        for (const s of emptySlots) {
+          const btn = document.createElement('button');
+          btn.textContent = `Slot ${formatLoc(state, s)} (${s.segmentId}) → Pick Store Type`;
+          btn.addEventListener('click', () => {
+            setEventSelectedShopId(state, s.id);
+            notify();
+          });
+          list.appendChild(btn);
+        }
+      }
+    }
+
+    if (!prompt.forced) {
+      const skip = document.createElement('button');
+      skip.textContent = prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip';
+      skip.addEventListener('click', () => {
+        setEventSelectedShopId(state, null);
+        dispatch({ type: 'SKIP_EVENT_STORE' });
+      });
+      list.appendChild(skip);
+    }
+  };
+
+  render();
 }

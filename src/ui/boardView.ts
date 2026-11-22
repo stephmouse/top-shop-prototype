@@ -2,6 +2,7 @@ import type { StoreIconId } from '../config/storeVisuals';
 import { getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import type { GameState, Tile } from '../engine/types';
+import type { BoardShopPickSpec } from './boardPickState';
 import {
   computeChainAdjacency,
   createStoreIconSvg,
@@ -9,10 +10,12 @@ import {
   updateShopShelf,
 } from './storeTileView';
 
-export { renderPlayersHud, renderTokensOverlay } from './hudView';
+export { renderTokensOverlay } from './hudView';
+export { renderPlayersHud } from './playerCardView';
 
 export interface BoardInteractionOptions {
   preview: MovePreview;
+  shopPick?: BoardShopPickSpec | null;
   onSelectNextStep: (option: MoveOption) => void;
   onSelectEndTarget: (target: EndTarget) => void;
   onHoverEndTarget?: (tileId: string | null) => void;
@@ -121,12 +124,14 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
       cell.addEventListener('click', () => {
         const inter = cache.currentInteraction;
         if (!inter) return;
+        const pick = inter.shopPick;
+        if (pick) {
+          if (tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId)) pick.onSelectShop(tile.shopSlotId);
+          return;
+        }
         const end = cache.endByTile.get(tile.id);
         if (end) inter.onSelectEndTarget(end);
-        else {
-          const next = cache.nextByTile.get(tile.id);
-          if (next) inter.onSelectNextStep(next);
-        }
+        else { const next = cache.nextByTile.get(tile.id); if (next) inter.onSelectNextStep(next); }
       });
       cell.addEventListener('mouseenter', () => {
         if (cache.endByTile.has(tile.id)) cache.currentInteraction?.onHoverEndTarget?.(tile.id);
@@ -166,6 +171,7 @@ export function renderBoard(
   cache.endByTile = new Map((interaction?.preview.endTargets ?? []).map((target) => [target.tileId, target]));
 
   const activePlayer = getActivePlayer(state);
+  const pick = interaction?.shopPick;
 
   for (const tile of tileValues) {
     const ref = cache.tileRefs.get(tile.id);
@@ -175,6 +181,8 @@ export function renderBoard(
     const isActiveTile = activePlayer.tileId === tile.id;
     const nextOpt = cache.nextByTile.get(tile.id);
     const endTarget = cache.endByTile.get(tile.id);
+    const pickTarget = Boolean(pick && tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId));
+    const pickSelected = Boolean(pickTarget && tile.shopSlotId === pick?.selectedShopId);
     const content = formatTileContent(state, tile, hasMultiShaft);
     const { chainLeft, chainRight } = computeChainAdjacency(state, tile, content.shop);
 
@@ -182,6 +190,9 @@ export function renderBoard(
     if (isActiveTile) classes.push('active-tile');
     if (nextOpt && !endTarget) classes.push('tile--next-step');
     if (endTarget) classes.push('tile--end-target');
+    if (pickTarget) classes.push('tile--pick-target');
+    if (pickSelected) classes.push('tile--pick-selected');
+    if (pick && !pickTarget) classes.push('tile--pick-dim');
     if (content.isOwned) classes.push('is-owned');
     if (content.isVacantShop) classes.push('is-vacant');
     if (content.isClosed) classes.push('is-closed');
@@ -205,13 +216,17 @@ export function renderBoard(
       ref.lastIconId = content.iconId;
     }
 
-    const badge = endTarget
-      ? ['tile-badge badge-land', 'LAND']
-      : nextOpt
-        ? ['tile-badge badge-step', nextOpt.direction ? nextOpt.direction.toUpperCase() : 'STEP']
-        : content.isClosed
-          ? ['tile-badge badge-closed', 'CLOSED']
-          : null;
+    const badge = pickSelected
+      ? ['tile-badge badge-confirm', pick!.selectedBadgeText]
+      : pickTarget
+        ? ['tile-badge badge-pick', pick!.badgeText]
+        : endTarget
+          ? ['tile-badge badge-land', 'LAND']
+          : nextOpt
+            ? ['tile-badge badge-step', nextOpt.direction ? nextOpt.direction.toUpperCase() : 'STEP']
+            : content.isClosed
+              ? ['tile-badge badge-closed', 'CLOSED']
+              : null;
     badgeEl.hidden = !badge;
     if (badge) { badgeEl.className = badge[0]!; badgeEl.textContent = badge[1]!; }
 

@@ -77,6 +77,15 @@ export function createSoundFx(): SoundFxController {
     tone(1650, 0.05, 'sine', 0.14, 2800, 0.055);
   }
 
+  function playLiquidateAlert(): void {
+    tone(311, 0.11, 'sawtooth', 0, 294, 0.034);
+    tone(155, 0.11, 'triangle', 0, 147, 0.045);
+    tone(277, 0.11, 'sawtooth', 0.12, 262, 0.034);
+    tone(138, 0.11, 'triangle', 0.12, 131, 0.045);
+    tone(233, 0.26, 'sawtooth', 0.24, 147, 0.038);
+    tone(116, 0.26, 'triangle', 0.24, 73, 0.05);
+  }
+
   function setMuted(next: boolean): void {
     muted = next;
     try {
@@ -91,6 +100,7 @@ export function createSoundFx(): SoundFxController {
 
     const moved = events.find((e) => e.type === 'player_moved');
     const payday = events.find((e) => e.type === 'bank_payday');
+    const liquidate = events.find((e) => e.type === 'liquidate_forced');
     const cash = events.find((e) => e.type === 'cash_delta');
     const shop = events.find((e) => e.type === 'shop_changed');
 
@@ -105,6 +115,8 @@ export function createSoundFx(): SoundFxController {
 
     if (payday) {
       playArp([523, 659, 784, 1046], 'triangle', 0.06, 0.16);
+    } else if (liquidate) {
+      playLiquidateAlert();
     } else if (cash) {
       if (cash.amount > 0 && !shop) playArp([880, 1175], 'sine', 0.06, 0.12);
       else if (cash.isHurt) tone(240, 0.18, 'triangle', 0, 145, 0.06);

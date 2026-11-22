@@ -6,7 +6,8 @@ export type VisualEvent =
   | { type: 'cash_delta'; playerId: string; tileId: string; amount: number; reason: 'payday' | 'gain' | 'loss'; isHurt: boolean }
   | { type: 'points_delta'; playerId: string; tileId: string; amount: number }
   | { type: 'chirp_equipped'; playerId: string; tileId: string }
-  | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked' };
+  | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked' }
+  | { type: 'liquidate_forced'; playerId: string; tileId: string };
 
 function sumStock(shop: Shop): number {
   let total = 0;
@@ -93,6 +94,13 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'closed' });
     } else if (ns.ownerId && sumStock(ns) > sumStock(ps)) {
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'restocked' });
+    }
+  }
+
+  if (prev.phase !== 'LIQUIDATE_ASSETS' && next.phase === 'LIQUIDATE_ASSETS') {
+    const active = next.players[next.activePlayerIndex];
+    if (active) {
+      events.push({ type: 'liquidate_forced', playerId: active.id, tileId: active.tileId });
     }
   }
 

@@ -10,6 +10,7 @@ import { createMultiplayerSession } from './net/session';
 import { renderActionPanel } from './ui/actionPanel';
 import { createAvatarModal } from './ui/avatarModal';
 import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
+import { buildBoardShopPick } from './ui/boardPickState';
 import { createFxOverlay } from './ui/fxOverlay';
 import { bindKeyboardControls } from './ui/keyboard';
 import {
@@ -198,25 +199,18 @@ function syncHeaderAndHud(): void {
   syncTopbar();
   renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken(), customAvatars: netSession.getCustomAvatars() });
 }
+const refreshPickUi = () => { const canAct = netSession.isLocalTurn(state); paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct); };
 function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencilSpinning()): void {
   lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin;
   renderActionPanel(actionBox, state, dispatch, {
     onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
     readOnly: !canAct, remotePencilSpinning: remoteSpin,
-    onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning),
+    onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning), onUiChange: refreshPickUi,
   });
 }
-function renderSessionUi(): void {
-  lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
-  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') { renderActionBox(canAct, remoteSpin); scheduleMovementTick(); }
-}
-
-function render(): void {
-  const preview = computeMovePreview(state);
-  syncHeaderAndHud();
+function paintBoard(preview = computeMovePreview(state), canAct = netSession.isLocalTurn(state)): void {
   renderBoard(boardEl, state, {
-    preview,
+    preview, shopPick: canAct ? buildBoardShopPick(state, dispatch, refreshPickUi) : null,
     onSelectNextStep: (opt) => dispatch(state.phase === 'CHOOSE_DIRECTION' && opt.direction ? { type: 'CHOOSE_DIRECTION', direction: opt.direction } : { type: 'ADVANCE_STEP' }),
     onSelectEndTarget: (target) => {
       if (!netSession.isLocalTurn(state)) return;
@@ -224,11 +218,23 @@ function render(): void {
     },
     onHoverEndTarget: (tileId) => { hoveredEndTileId = tileId; drawRoutes(preview); },
   });
-  drawRoutes(preview); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
+}
+function renderSessionUi(): void {
+  lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
+  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
+  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
+    paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin); scheduleMovementTick();
+  }
+}
+
+function render(): void {
+  const preview = computeMovePreview(state), canAct = netSession.isLocalTurn(state);
+  syncHeaderAndHud(); paintBoard(preview, canAct); drawRoutes(preview);
+  renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
   fxOverlay.playStateDiff(prevRenderedState, state); prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
-  renderActionBox(netSession.isLocalTurn(state));
+  renderActionBox(canAct);
   logList.innerHTML = ''; for (const entry of state.log) logList.appendChild(mk('li', '', entry));
   scheduleMovementTick();
 }

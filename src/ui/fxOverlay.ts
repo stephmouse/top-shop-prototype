@@ -141,6 +141,8 @@ export function createFxOverlay(
         spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), 'Chirp-Chirp!', 'is-payday', bumpStack(ev.tileId));
       } else if (ev.type === 'shop_changed') {
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), SHOP_FX_CLASS[ev.kind], 650);
+      } else if (ev.type === 'liquidate_forced') {
+        triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-shake', 420);
       }
     }
   }

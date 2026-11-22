@@ -46,6 +46,7 @@ export interface ActionPanelViewOptions {
   readOnly?: boolean;
   remotePencilSpinning?: boolean;
   onPencilSpinChange?: (spinning: boolean) => void;
+  onUiChange?: () => void;
 }
 
 export function renderActionPanel(
@@ -154,12 +155,12 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'EVENT_PICK_STORE') {
-    renderEventStorePanel(stack, state, dispatch);
+    renderEventStorePanel(stack, state, dispatch, viewOptions.onUiChange);
     return;
   }
 
   if (state.phase === 'BANK_MENU') {
-    renderBankPanel(stack, state, dispatch);
+    renderBankPanel(stack, state, dispatch, viewOptions.onUiChange);
     return;
   }
 
@@ -170,7 +171,7 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'SHOP_DELIVER') {
-    renderDeliverPanel(stack, state, dispatch);
+    renderDeliverPanel(stack, state, dispatch, viewOptions.onUiChange);
     appendUndoControls(stack, state, dispatch, true);
     return;
   }
@@ -182,7 +183,7 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'LIQUIDATE_ASSETS') {
-    renderLiquidatePanel(stack, state, dispatch);
+    renderLiquidatePanel(stack, state, dispatch, viewOptions.onUiChange);
     return;
   }
 

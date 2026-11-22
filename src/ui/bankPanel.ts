@@ -8,12 +8,16 @@ import {
 import { getActivePlayer } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
 import type { BankRewardDef, GameState, Shop } from '../engine/types';
+import {
+  getBankConfirmShopId,
+  getBankPendingRewardId,
+  handleBankShopPickClick,
+  setBankPendingRewardId,
+} from './boardPickState';
 
 type DispatchFn = (action: GameAction) => void;
 
 let filterUsableOnly = true;
-let pendingRewardId: string | null = null;
-let pendingContextKey = '';
 
 function formatShopOption(state: GameState, shop: Shop, includeOwner: boolean): string {
   const tile = state.tiles[shop.tileId];
@@ -32,6 +36,7 @@ function appendTargetStep(
   reward: BankRewardDef,
   targets: Exclude<BankRewardTargetList, { kind: 'none' }>,
   dispatch: DispatchFn,
+  notify: () => void,
   onBack: () => void
 ): void {
   const backBtn = document.createElement('button');
@@ -45,7 +50,8 @@ function appendTargetStep(
   list.appendChild(summary);
 
   const promptEl = document.createElement('div');
-  promptEl.textContent = targets.prompt;
+  promptEl.textContent =
+    targets.kind === 'shop' ? `${targets.prompt} (click below or on map)` : targets.prompt;
   list.appendChild(promptEl);
 
   const targetsWrap = document.createElement('div');
@@ -60,21 +66,24 @@ function appendTargetStep(
       btn.style.borderLeft = `4px solid ${p.color}`;
       btn.textContent = `${p.name} ($${p.cash} | ${p.points}p | ${pShops} stores)`;
       btn.addEventListener('click', () => {
-        pendingRewardId = null;
+        setBankPendingRewardId(state, null);
         dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetPlayerId: p.id });
       });
       targetsWrap.appendChild(btn);
     }
   } else {
+    const confirmId = getBankConfirmShopId(state);
     for (const s of targets.shops) {
       const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
+      const isConfirming = confirmId === s.id;
       const btn = document.createElement('button');
+      if (isConfirming) btn.className = 'primary';
       if (owner) btn.style.borderLeft = `4px solid ${owner.color}`;
-      btn.textContent = formatShopOption(state, s, targets.includeOwner);
-      btn.addEventListener('click', () => {
-        pendingRewardId = null;
-        dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetShopId: s.id });
-      });
+      const shopLabel = formatShopOption(state, s, targets.includeOwner);
+      btn.textContent = isConfirming ? `Confirm? ${shopLabel}` : shopLabel;
+      btn.addEventListener('click', () =>
+        handleBankShopPickClick(state, reward.id, s.id, dispatch, notify)
+      );
       targetsWrap.appendChild(btn);
     }
   }
@@ -85,20 +94,18 @@ function appendTargetStep(
 export function renderBankPanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  onUiChange?: () => void
 ): void {
   const active = getActivePlayer(state);
-  const contextKey = `${state.turnNumber}|${state.activePlayerIndex}|${active.points}`;
-  if (contextKey !== pendingContextKey) {
-    pendingRewardId = null;
-    pendingContextKey = contextKey;
-  }
 
   const render = () => {
+    const notify = () => (onUiChange ? onUiChange() : render());
     container.innerHTML = '';
     const list = document.createElement('div');
     list.className = 'card-list';
 
+    const pendingRewardId = getBankPendingRewardId(state);
     const pendingReward = pendingRewardId
       ? BANK_REWARDS.find((r) => r.id === pendingRewardId)
       : undefined;
@@ -110,16 +117,22 @@ export function renderBankPanel(
         ? pendingTargets.players.length > 0
         : pendingTargets.shops.length > 0);
 
-    if (pendingReward && pendingTargets && pendingTargets.kind !== 'none' && hasValidTargets && canRedeemBankReward(state, pendingReward)) {
-      appendTargetStep(list, state, pendingReward, pendingTargets, dispatch, () => {
-        pendingRewardId = null;
-        render();
+    if (
+      pendingReward &&
+      pendingTargets &&
+      pendingTargets.kind !== 'none' &&
+      hasValidTargets &&
+      canRedeemBankReward(state, pendingReward)
+    ) {
+      appendTargetStep(list, state, pendingReward, pendingTargets, dispatch, notify, () => {
+        setBankPendingRewardId(state, null);
+        notify();
       });
       container.appendChild(list);
       return;
     }
 
-    pendingRewardId = null;
+    setBankPendingRewardId(state, null);
 
     const headerRow = document.createElement('div');
     headerRow.className = 'action-stack';
@@ -130,7 +143,7 @@ export function renderBankPanel(
     leaveTopBtn.className = 'primary';
     leaveTopBtn.textContent = leaveLabel;
     leaveTopBtn.addEventListener('click', () => {
-      pendingRewardId = null;
+      setBankPendingRewardId(state, null);
       dispatch({ type: 'CLOSE_BANK_MENU' });
     });
     headerRow.appendChild(leaveTopBtn);
@@ -170,11 +183,11 @@ export function renderBankPanel(
         btn.textContent = `[${reward.pointCost} pts] ${reward.label}${noteText}${stepHint}`;
         btn.addEventListener('click', () => {
           if (targets.kind === 'none') {
-            pendingRewardId = null;
+            setBankPendingRewardId(state, null);
             dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id });
           } else {
-            pendingRewardId = reward.id;
-            render();
+            setBankPendingRewardId(state, reward.id);
+            notify();
           }
         });
         rewardsWrap.appendChild(btn);

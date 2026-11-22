@@ -2,7 +2,12 @@ import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { getActivePlayer, getTile } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
-import type { GameState, Shop } from '../engine/types';
+import type { DeliverMode, GameState, Shop } from '../engine/types';
+import {
+  getDeliverSelectedShopId,
+  getDeliverShopSelectionInfo,
+  setDeliverSelectedShopId,
+} from './boardPickState';
 
 export type DispatchFn = (action: GameAction) => void;
 
@@ -24,145 +29,172 @@ export function formatShopLocation(state: GameState, shop: Shop): string {
   return t ? `${t.floor}F:${t.col + 1}` : shop.id;
 }
 
-export function renderDeliverPanel(
-  container: HTMLElement,
+function getModePrompt(deliverMode: DeliverMode | null, deliveredCount: number): string {
+  if (deliverMode === 'own_free') return 'Bank Free Delivery ($0 wholesale cost) — Pick a store (below or on the map):';
+  if (deliverMode === 'rival_paid') return 'Bank Rival Store Delivery — Pick a rival store (below or on the map):';
+  if (deliverMode === 'all_own_paid') return `Bank Deliver to All Own Stores (${deliveredCount} done) — Pick a store (below or on the map):`;
+  return deliverMode === 'own_paid'
+    ? 'Bank Delivery — Pick a store to restock (below or on the map):'
+    : 'Pick a store to restock (below or on the map):';
+}
+
+function getCancelLabel(state: GameState, mode: DeliverMode): string {
+  if (mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.length > 0) return 'Finish Deliveries';
+  return state.deliverMode !== null ? 'Cancel & Return to Bank' : 'Do Not Deliver';
+}
+
+function formatShopLabel(state: GameState, shop: Shop, includeOwner: boolean, landedShopId?: string): string {
+  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+  const owner = shop.ownerId ? state.players.find((p) => p.id === shop.ownerId) : undefined;
+  const ownerTag = includeOwner ? ` (${owner?.name ?? '?'})` : '';
+  const hereTag = state.deliverMode === null && shop.id === landedShopId ? ' (Here)' : '';
+  return `${formatShopLocation(state, shop)} ${def?.name ?? shop.id} L${shop.level} [${getShopTotalStock(shop)}/${STORE_CAPACITY_BY_LEVEL[shop.level]}]${ownerTag}${hereTag}`;
+}
+
+function appendStorePickerStep(
+  root: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  candidateShops: Shop[],
+  mode: DeliverMode,
+  isSelectable: (s: Shop) => boolean,
+  dispatch: DispatchFn,
+  onPickShop: (shopId: string) => void
+): void {
+  const landedShopId = getTile(state, getActivePlayer(state).tileId).shopSlotId;
+  const headerRow = document.createElement('div');
+  headerRow.className = 'action-stack';
+  headerRow.appendChild(
+    makePanelButton(getCancelLabel(state, mode), () => { setDeliverSelectedShopId(state, null); dispatch({ type: 'SKIP_DELIVER' }); }, {
+      primary: !candidateShops.some(isSelectable),
+    })
+  );
+  root.appendChild(headerRow);
+
+  const promptEl = document.createElement('div');
+  promptEl.textContent = getModePrompt(state.deliverMode, state.deliveredShopIdsThisTurn.length);
+  root.appendChild(promptEl);
+
+  const storesWrap = document.createElement('div');
+  storesWrap.className = 'card-list';
+  storesWrap.style.maxHeight = '260px';
+  storesWrap.style.overflowY = 'auto';
+
+  for (const s of candidateShops) {
+    const delivered = mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.includes(s.id);
+    const full = getShopTotalStock(s) >= STORE_CAPACITY_BY_LEVEL[s.level];
+    const suffix = delivered ? ' — Delivered' : full ? ' — Full' : ' → Restock';
+    const label = `${formatShopLabel(state, s, mode === 'rival_paid', landedShopId)}${suffix}`;
+    const btn = makePanelButton(label, () => onPickShop(s.id), { disabled: delivered || full });
+    const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
+    if (owner) btn.style.borderLeft = `4px solid ${owner.color}`;
+    storesWrap.appendChild(btn);
+  }
+  root.appendChild(storesWrap);
+}
+
+function appendRestockStep(
+  root: HTMLElement,
+  state: GameState,
+  shop: Shop,
+  mode: DeliverMode,
+  isFree: boolean,
+  dispatch: DispatchFn,
+  onBack: () => void
 ): void {
   const active = getActivePlayer(state);
-  const mode = state.deliverMode ?? 'own_paid';
-  const isFree = mode === 'own_free';
-  const eligibleShops = Object.values(state.shops).filter((s) => {
-    if (mode === 'rival_paid') {
-      return (
-        s.ownerId !== null &&
-        s.ownerId !== active.id &&
-        getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level]
-      );
-    }
-    if (mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.includes(s.id)) {
-      return false;
-    }
-    return s.ownerId === active.id;
-  });
+  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+  if (!def) return;
 
-  const list = document.createElement('div');
-  list.className = 'card-list';
-
-  if (active.blockDeliveryTurns > 0 || eligibleShops.length === 0) {
-    const msg = document.createElement('div');
-    msg.textContent =
-      active.blockDeliveryTurns > 0
-        ? 'Deliveries are blocked for this turn.'
-        : 'No eligible stores to deliver to.';
-    list.appendChild(msg);
-    list.appendChild(
-      makePanelButton('Skip Delivery', () => dispatch({ type: 'SKIP_DELIVER' }), { primary: true })
-    );
-    container.appendChild(list);
-    return;
-  }
-
-  if (mode !== 'own_paid') {
-    const modeNote = document.createElement('div');
-    modeNote.textContent =
-      mode === 'own_free'
-        ? 'Bank Free Delivery ($0 wholesale cost):'
-        : mode === 'rival_paid'
-          ? 'Bank Rival Store Delivery:'
-          : `Bank Deliver to All Own Stores (${state.deliveredShopIdsThisTurn.length} done):`;
-    list.appendChild(modeNote);
-  }
-
-  const landedTile = getTile(state, active.tileId);
-  const defaultShop =
-    eligibleShops.find((s) => s.id === state.deliverPreferredShopId) ??
-    eligibleShops.find((s) => s.id === landedTile.shopSlotId) ??
-    eligibleShops[0]!;
-
-  const shopSelect = document.createElement('select');
-  for (const s of eligibleShops) {
-    const def = s.storeTypeId ? STORE_TYPES[s.storeTypeId] : undefined;
-    const loc = formatShopLocation(state, s);
-    const owner = state.players.find((p) => p.id === s.ownerId);
-    const ownerTag = mode === 'rival_paid' ? ` (${owner?.name ?? '?'})` : '';
-    const opt = document.createElement('option');
-    opt.value = s.id;
-    opt.textContent = `${loc} ${def?.name ?? s.id} L${s.level} (${getShopTotalStock(s)}/${STORE_CAPACITY_BY_LEVEL[s.level]})${ownerTag}`;
-    if (s.id === defaultShop.id) opt.selected = true;
-    shopSelect.appendChild(opt);
-  }
-  list.appendChild(shopSelect);
+  const landedShopId = getTile(state, active.tileId).shopSlotId;
+  root.appendChild(makePanelButton('← Back to Stores', onBack));
+  const header = document.createElement('div');
+  header.textContent = `${formatShopLabel(state, shop, mode === 'rival_paid', landedShopId)}${isFree ? ' (FREE)' : ''}`;
+  root.appendChild(header);
 
   const itemsWrap = document.createElement('div');
   itemsWrap.className = 'card-list';
   const summaryEl = document.createElement('div');
-  const submitBtn = makePanelButton('Confirm Delivery', () => {}, { primary: true });
-  let order: Record<string, number> = {};
+  const order: Record<string, number> = {};
+  const maxCap = STORE_CAPACITY_BY_LEVEL[shop.level];
+  const currentTotal = getShopTotalStock(shop);
 
-  function rebuildItems(shop: Shop): void {
-    itemsWrap.innerHTML = '';
-    order = {};
-    const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
-    if (!def) return;
+  const submitBtn = makePanelButton(
+    'Confirm Delivery',
+    () => { setDeliverSelectedShopId(state, null); dispatch({ type: 'DELIVER_ITEMS', shopId: shop.id, order }); },
+    { primary: true }
+  );
 
-    const maxCap = STORE_CAPACITY_BY_LEVEL[shop.level];
-    const currentTotal = getShopTotalStock(shop);
-
-    const refreshSummary = () => {
-      let addQty = 0;
-      let cost = 0;
-      for (const [id, q] of Object.entries(order)) {
-        const it = def.items.find((i) => i.id === id);
-        if (it && q > 0) {
-          addQty += q;
-          cost += isFree ? 0 : it.wholesaleCost * q;
-        }
-      }
-      summaryEl.textContent = `Adding ${addQty} (Space left: ${maxCap - currentTotal - addQty}) | Cost: $${cost}${isFree ? ' (FREE)' : ''}`;
-      submitBtn.disabled = addQty === 0 || currentTotal + addQty > maxCap || cost > active.cash;
-    };
-
-    const sortedItems = [...def.items]
-      .filter((item) => item.tier <= shop.level)
-      .sort((a, b) => b.wholesaleCost - a.wholesaleCost);
-
-    for (const item of sortedItems) {
-      const row = document.createElement('div');
-      row.className = 'action-stack';
-      const qtySpan = document.createElement('span');
-      const unitCost = isFree ? 0 : item.wholesaleCost;
-      const updateRow = () => {
-        const q = order[item.id] ?? 0;
-        qtySpan.textContent = `${item.name} ($${unitCost} -> $${item.retailPrice}) [Shelf: ${shop.stock[item.id] ?? 0}] +${q}`;
-        refreshSummary();
-      };
-      row.appendChild(makePanelButton('-', () => { order[item.id] = Math.max(0, (order[item.id] ?? 0) - 1); updateRow(); }));
-      row.appendChild(makePanelButton('+', () => { order[item.id] = (order[item.id] ?? 0) + 1; updateRow(); }));
-      row.appendChild(qtySpan);
-      itemsWrap.appendChild(row);
-      updateRow();
+  const rowUpdaters: Array<(addQty: number, cost: number) => void> = [];
+  const refreshAll = () => {
+    let addQty = 0;
+    let cost = 0;
+    for (const [id, q] of Object.entries(order)) {
+      const it = def.items.find((i) => i.id === id);
+      if (it && q > 0) { addQty += q; cost += isFree ? 0 : it.wholesaleCost * q; }
     }
+    const spaceLeft = Math.max(0, maxCap - currentTotal - addQty);
+    summaryEl.textContent = `Adding ${addQty} (Space left: ${spaceLeft}) | Cost: $${cost}${isFree ? ' (FREE)' : ''} | Cash: $${active.cash}`;
+    submitBtn.disabled = addQty === 0 || currentTotal + addQty > maxCap || cost > active.cash;
+    for (const update of rowUpdaters) update(addQty, cost);
+  };
+
+  const sortedItems = [...def.items].filter((i) => i.tier <= shop.level).sort((a, b) => b.wholesaleCost - a.wholesaleCost);
+  for (const item of sortedItems) {
+    const row = document.createElement('div');
+    row.className = 'action-stack';
+    const unitCost = isFree ? 0 : item.wholesaleCost;
+    const qtySpan = document.createElement('span');
+    const minusBtn = makePanelButton('-', () => { order[item.id] = Math.max(0, (order[item.id] ?? 0) - 1); refreshAll(); });
+    const plusBtn = makePanelButton('+', () => { order[item.id] = (order[item.id] ?? 0) + 1; refreshAll(); });
+
+    rowUpdaters.push((addQty, cost) => {
+      const q = order[item.id] ?? 0;
+      minusBtn.disabled = q === 0;
+      plusBtn.disabled = maxCap - currentTotal - addQty <= 0 || (!isFree && cost + item.wholesaleCost > active.cash);
+      qtySpan.textContent = `${item.name} ($${unitCost} -> $${item.retailPrice}) [Shelf: ${shop.stock[item.id] ?? 0}] +${q}`;
+    });
+    row.append(minusBtn, plusBtn, qtySpan);
+    itemsWrap.appendChild(row);
   }
 
-  shopSelect.addEventListener('change', () => {
-    const nextShop = state.shops[shopSelect.value];
-    if (nextShop) rebuildItems(nextShop);
-  });
-  submitBtn.addEventListener('click', () => {
-    dispatch({ type: 'DELIVER_ITEMS', shopId: shopSelect.value, order });
-  });
+  refreshAll();
+  root.append(itemsWrap, summaryEl, submitBtn);
+}
 
-  rebuildItems(defaultShop);
-  list.appendChild(itemsWrap);
-  list.appendChild(summaryEl);
-  list.appendChild(submitBtn);
-  const cancelLabel =
-    mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.length > 0
-      ? 'Finish Deliveries'
-      : state.deliverMode !== null
-        ? 'Cancel & Return to Bank'
-        : 'Do Not Deliver';
-  list.appendChild(makePanelButton(cancelLabel, () => dispatch({ type: 'SKIP_DELIVER' })));
-  container.appendChild(list);
+export function renderDeliverPanel(
+  container: HTMLElement,
+  state: GameState,
+  dispatch: DispatchFn,
+  onUiChange?: () => void
+): void {
+  const active = getActivePlayer(state);
+  const { mode, isFree, candidateShops, isSelectable } = getDeliverShopSelectionInfo(state);
+
+  const root = document.createElement('div');
+  root.className = 'card-list';
+  container.appendChild(root);
+
+  const render = () => {
+    const notify = () => (onUiChange ? onUiChange() : render());
+    root.innerHTML = '';
+    if (active.blockDeliveryTurns > 0 || candidateShops.length === 0) {
+      setDeliverSelectedShopId(state, null);
+      const msg = document.createElement('div');
+      msg.textContent = active.blockDeliveryTurns > 0 ? 'Deliveries are blocked for this turn.' : 'No eligible stores to deliver to.';
+      root.append(msg, makePanelButton('Skip Delivery', () => { setDeliverSelectedShopId(state, null); dispatch({ type: 'SKIP_DELIVER' }); }, { primary: true }));
+      return;
+    }
+    const selId = getDeliverSelectedShopId(state);
+    const picked = selId ? candidateShops.find((s) => s.id === selId && isSelectable(s)) : undefined;
+    if (picked) {
+      appendRestockStep(root, state, picked, mode, isFree, dispatch, () => { setDeliverSelectedShopId(state, null); notify(); });
+      return;
+    }
+    setDeliverSelectedShopId(state, null);
+    appendStorePickerStep(root, state, candidateShops, mode, isSelectable, dispatch, (id) => {
+      setDeliverSelectedShopId(state, id);
+      notify();
+    });
+  };
+  render();
 }

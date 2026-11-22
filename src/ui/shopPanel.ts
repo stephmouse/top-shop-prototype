@@ -8,6 +8,7 @@ import {
 } from '../engine/helpers';
 import { getAllowedStoreTypeIds } from '../engine/shops';
 import type { GameState } from '../engine/types';
+import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPickState';
 import {
   formatShopLocation,
   makePanelButton,
@@ -140,26 +141,38 @@ export function renderBuyRivalPanel(
 export function renderLiquidatePanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  onUiChange?: () => void
 ): void {
   const active = getActivePlayer(state);
   const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
   const list = document.createElement('div');
   list.className = 'card-list';
-
-  const note = document.createElement('div');
-  note.textContent = `Negative cash ($${active.cash})! Sell stores until cash >= $0:`;
-  list.appendChild(note);
-
-  for (const s of owned) {
-    const def = s.storeTypeId ? STORE_TYPES[s.storeTypeId] : undefined;
-    const loc = formatShopLocation(state, s);
-    const payout = Math.floor(computeShopAssetValue(s) * SHOP_RULES.sellLiquidationRate);
-    list.appendChild(
-      makePanelButton(`Sell ${loc} ${def?.name ?? 'Store'} L${s.level} (+$${payout})`, () =>
-        dispatch({ type: 'SELL_SHOP_LIQUIDATE', shopId: s.id })
-      )
-    );
-  }
   container.appendChild(list);
+
+  const render = () => {
+    const notify = () => (onUiChange ? onUiChange() : render());
+    list.innerHTML = '';
+
+    const note = document.createElement('div');
+    note.textContent = `Negative cash ($${active.cash})! Sell stores until cash >= $0 (click twice to confirm):`;
+    list.appendChild(note);
+
+    const confirmId = getLiquidateConfirmShopId(state);
+    for (const s of owned) {
+      const def = s.storeTypeId ? STORE_TYPES[s.storeTypeId] : undefined;
+      const loc = formatShopLocation(state, s);
+      const payout = Math.floor(computeShopAssetValue(s) * SHOP_RULES.sellLiquidationRate);
+      const isConfirming = confirmId === s.id;
+      const label = `Sell ${loc} ${def?.name ?? 'Store'} L${s.level} (+$${payout})`;
+      const btn = makePanelButton(isConfirming ? `Confirm? ${label}` : label, () =>
+        handleLiquidatePickClick(state, s.id, dispatch, notify),
+        { primary: isConfirming }
+      );
+      btn.style.borderLeft = `4px solid ${active.color}`;
+      list.appendChild(btn);
+    }
+  };
+
+  render();
 }
