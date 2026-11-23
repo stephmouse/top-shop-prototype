@@ -64,8 +64,8 @@ const MODAL_TEMPLATE = `
       <button type="button" data-role="reset">Reset Defaults</button>
     </div>
     <div class="setup-grid">
-      <label class="setup-field"><span class="setup-field-label">Target Assets ($)</span><input class="setup-input" type="number" min="1000" max="1000000" step="500" data-role="target" /></label>
-      <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="500" data-role="cash" /></label>
+      <label class="setup-field"><span class="setup-field-label">Target Assets ($)</span><input class="setup-input" type="number" min="1000" max="1000000" step="100" data-role="target" /></label>
+      <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="100" data-role="cash" /></label>
       <label class="setup-field"><span class="setup-field-label">Bankrupt Limit</span><input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" /></label>
       <label class="setup-field"><span class="setup-field-label">First Turn</span><select class="setup-select" data-role="first-player"></select></label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="finish-round" /> Finish Round on Win</label>
@@ -195,6 +195,13 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     saveSummary.textContent = `Saved Slot: ${stageName} · Turn ${slot.state.turnNumber} (${cal}) · ${slot.state.players.length}P`;
   }
 
+  function formatStageDesc(stageId: StageId): string {
+    const stg = getStageDef(stageId);
+    const start = stg.recommendedStartingCash.toLocaleString();
+    const goal = stg.recommendedTargetAssets.toLocaleString();
+    return `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots · Rec: $${start} start / $${goal} goal`;
+  }
+
   function syncForm(): void {
     const online = options.getOnlineContext?.();
     const isHostOnline = online?.role === 'host' && Boolean(online.roster);
@@ -203,10 +210,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
       onlineNote.textContent = `Online Room ${online.roster.roomCode} active — guest slots are auto-populated and locked.`;
     }
     stageSelect.value = draft.stageId;
-    stageDesc.textContent = (() => {
-      const stg = getStageDef(draft.stageId);
-      return `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots`;
-    })();
+    stageDesc.textContent = formatStageDesc(draft.stageId);
     targetInput.value = String(draft.config.targetAssets);
     cashInput.value = String(draft.config.startingCash);
     bankruptInput.max = String(Math.max(1, draft.players.length - 1));
@@ -239,9 +243,14 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   const close = (): void => { visible = false; backdrop.hidden = true; };
 
   stageSelect.addEventListener('change', () => {
+    captureFormInputs();
     draft.stageId = stageSelect.value as StageId;
     const stg = getStageDef(draft.stageId);
-    stageDesc.textContent = `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots`;
+    draft.config.startingCash = stg.recommendedStartingCash;
+    draft.config.targetAssets = stg.recommendedTargetAssets;
+    cashInput.value = String(stg.recommendedStartingCash);
+    targetInput.value = String(stg.recommendedTargetAssets);
+    stageDesc.textContent = formatStageDesc(draft.stageId);
   });
   for (const btn of countBtns) btn.addEventListener('click', () => resizePlayers(Number(btn.dataset.count)));
   q('open-lobby').addEventListener('click', () => { close(); options.onOpenLobby?.(); });

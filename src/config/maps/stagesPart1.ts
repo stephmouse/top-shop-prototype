@@ -14,6 +14,8 @@ export const STAGES_PART_1: readonly StageDefinition[] = [
     floors: 3,
     shopCount: 24,
     lapSteps: 36,
+    recommendedStartingCash: 3000,
+    recommendedTargetAssets: 10000,
     rows: [
       'T  A4  A4  A4  A4  E0  A5  A5  A5  A5  T',
       'S  A0  A0  A0  A0  E0  A1  A1  A1  A1  S',
@@ -28,6 +30,8 @@ export const STAGES_PART_1: readonly StageDefinition[] = [
     floors: 4,
     shopCount: 27,
     lapSteps: 30,
+    recommendedStartingCash: 3200,
+    recommendedTargetAssets: 12000,
     rows: [
       'T  A10 A10 A10 A10 E0  A9  A9  A9  A9  T',
       'S  A5  A5  A5  =   T   =   A7  A7  A7  S',
@@ -43,6 +47,8 @@ export const STAGES_PART_1: readonly StageDefinition[] = [
     floors: 3,
     shopCount: 36,
     lapSteps: 58,
+    recommendedStartingCash: 3400,
+    recommendedTargetAssets: 14000,
     rows: [
       'T  A8  A8  A8  A8  E0  A9  A9  A9  A9  E1  A7  A7  A7  A7  T',
       'S  A3  A3  A3  A3  E0  A4  A4  A4  A4  E1  A6  A6  A6  A6  S',
@@ -57,6 +63,8 @@ export const STAGES_PART_1: readonly StageDefinition[] = [
     floors: 4,
     shopCount: 32,
     lapSteps: 54,
+    recommendedStartingCash: 3600,
+    recommendedTargetAssets: 16000,
     rows: [
       'T  A8  A8  A8  A8  E0  A10 A10 A10 A10 T',
       'S  A7  A7  A7  A7  E0  A5  A5  A5  A5  S',
@@ -72,6 +80,8 @@ export const STAGES_PART_1: readonly StageDefinition[] = [
     floors: 5,
     shopCount: 36,
     lapSteps: 45,
+    recommendedStartingCash: 3800,
+    recommendedTargetAssets: 18000,
     rows: [
       'T  A10 A10 A10 A10 E0  A9  A9  A9  A9  T',
       'S  A6  A6  A6  =   T   =   A7  A7  A7  S',

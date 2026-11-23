@@ -29,6 +29,8 @@ export interface StageDefinition {
   readonly floors: number;
   readonly shopCount: number;
   readonly lapSteps: number;
+  readonly recommendedStartingCash: number;
+  readonly recommendedTargetAssets: number;
   readonly rows: readonly string[];
 }
 

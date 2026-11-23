@@ -1,6 +1,6 @@
 import { sanitizeAvatarSpec } from '../config/avatarTypes';
 import { DEFAULT_MATCH_CONFIG, MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS } from '../config/balance';
-import { DEFAULT_STAGE_ID, OFFICIAL_STAGES } from '../config/maps';
+import { DEFAULT_STAGE_ID, getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { PlayerSetupInput } from '../engine/state';
 import type { GameState, MatchConfig } from '../engine/types';
@@ -47,6 +47,8 @@ export function createDefaultMatchSetup(
   playerCount = 2,
   stageId: StageId = DEFAULT_STAGE_ID
 ): MatchSetupData {
+  const resolvedStageId = resolveStageId(stageId);
+  const stageDef = getStageDef(resolvedStageId);
   const count = Math.max(MIN_PLAYERS, Math.min(MAX_PLAYERS, Math.round(playerCount)));
   const players: PlayerSetupInput[] = Array.from({ length: count }, (_, idx) => ({
     name: `Player ${idx + 1}`,
@@ -55,9 +57,13 @@ export function createDefaultMatchSetup(
     avatar: sanitizeAvatarSpec(undefined, idx),
   }));
   return {
-    stageId: resolveStageId(stageId),
+    stageId: resolvedStageId,
     players,
-    config: { ...DEFAULT_MATCH_CONFIG },
+    config: {
+      ...DEFAULT_MATCH_CONFIG,
+      startingCash: stageDef.recommendedStartingCash,
+      targetAssets: stageDef.recommendedTargetAssets,
+    },
   };
 }
 
@@ -65,6 +71,7 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
   if (!isRecord(raw)) return null;
 
   const stageId = resolveStageId(raw.stageId ?? raw.mapId);
+  const stageDef = getStageDef(stageId);
   const rawPlayers = Array.isArray(raw.players) ? raw.players : [];
   const validCount = rawPlayers.length >= MIN_PLAYERS && rawPlayers.length <= MAX_PLAYERS;
   const players: PlayerSetupInput[] = (validCount ? rawPlayers : [null, null]).map((entry, idx) => {
@@ -90,8 +97,8 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
         ? rawStarter
         : 0;
   const config: MatchConfig = {
-    targetAssets: clampInt(rawCfg.targetAssets, 1000, 1000000, DEFAULT_MATCH_CONFIG.targetAssets),
-    startingCash: clampInt(rawCfg.startingCash, 500, 500000, DEFAULT_MATCH_CONFIG.startingCash),
+    targetAssets: clampInt(rawCfg.targetAssets, 1000, 1000000, stageDef.recommendedTargetAssets),
+    startingCash: clampInt(rawCfg.startingCash, 500, 500000, stageDef.recommendedStartingCash),
     bankruptLimit: clampInt(rawCfg.bankruptLimit, 1, maxBankrupt, 1),
     finishRoundOnWin: Boolean(rawCfg.finishRoundOnWin),
     showMonthPopup:

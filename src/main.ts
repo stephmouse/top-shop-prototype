@@ -1,4 +1,5 @@
 import { MAX_PLAYERS, PLAYER_COLORS } from './config/balance';
+import { getStageDef } from './config/maps';
 import type { StageId } from './config/maps';
 import type { GameAction } from './engine/actions';
 import { getActivePlayer } from './engine/helpers';
@@ -177,7 +178,14 @@ const topbar = createTopbar({
   onToggleRoutes: (show) => { showRoutes = show; drawRoutes(); },
   onToggleAutoStep: (enabled) => { autoStepEnabled = enabled; moveDriver.scheduleTick(); },
   onToggleSound: (enabled) => soundFx.setMuted(!enabled),
-  onSelectStage: (stageId) => startMatchFromSetup({ ...currentSetup, stageId }),
+  onSelectStage: (stageId) => {
+    const stg = getStageDef(stageId);
+    startMatchFromSetup({
+      ...currentSetup,
+      stageId,
+      config: { ...currentSetup.config, startingCash: stg.recommendedStartingCash, targetAssets: stg.recommendedTargetAssets },
+    });
+  },
   onOpenHome: () => { setupModal.close(); lobbyModal.close(); homeModal.open(); },
   onOpenSetup: openSetup, onOpenLobby: () => openLobby(), onSaveMatch: saveCurrentMatch,
   onLoadMatch: () => { const slot = loadManualMatchSlot(); if (slot) loadSavedState(slot.state); },

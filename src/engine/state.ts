@@ -43,8 +43,13 @@ export function createInitialGameState(
   seed = 1337,
   stageId: StageId = DEFAULT_STAGE_ID
 ): GameState {
-  const config: MatchConfig = { ...DEFAULT_MATCH_CONFIG, ...configOverrides };
   const stageDef = getStageDef(stageId);
+  const config: MatchConfig = {
+    ...DEFAULT_MATCH_CONFIG,
+    startingCash: stageDef.recommendedStartingCash,
+    targetAssets: stageDef.recommendedTargetAssets,
+    ...configOverrides,
+  };
   const { tiles, shops, segmentPools, startTileId } = createStageMap(stageId);
 
   const players: Player[] = playerInputs.map((input, idx) => ({
