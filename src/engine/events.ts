@@ -1,4 +1,5 @@
 import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
+import { WALK_SOUND_META } from '../config/walkSounds';
 import { drawThreeEventIds } from './eventDraw';
 import { applyStockTransform, resetShopSlot } from './eventStore';
 import {
@@ -6,6 +7,7 @@ import {
   clampPoints,
   computeShopAssetValue,
   getActivePlayer,
+  resolveEquippedWalkSound,
 } from './helpers';
 import { randomInt } from './rng';
 import {
@@ -215,9 +217,14 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
         phase: active.horizontalDir === null ? 'CHOOSE_DIRECTION' : 'STEPPING',
       };
 
-    case 'chirp_sandals':
-      players = players.map((p, i) => (i === state.activePlayerIndex ? { ...p, chirpSandals: true } : p));
-      return resumeAfterPostAction(nextBase('Chirp-chirp!'));
+    case 'chirp_sandals': {
+      const resolved = resolveEquippedWalkSound(active.avatar?.walkSound, seed);
+      seed = resolved.nextSeed;
+      players = players.map((p, i) =>
+        i === state.activePlayerIndex ? { ...p, chirpSandals: true, equippedWalkSound: resolved.style } : p
+      );
+      return resumeAfterPostAction(nextBase(WALK_SOUND_META[resolved.style].badgeText));
+    }
 
     case 'elevator_lock':
       elevatorLock = {

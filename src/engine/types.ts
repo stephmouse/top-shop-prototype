@@ -1,4 +1,5 @@
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { WalkSoundStyle } from '../config/walkSounds';
 import type {
   BankRewardDef,
   BankRewardEffect,
@@ -111,10 +112,10 @@ export interface Player {
   doubleNextPayday: boolean;
   skipNextPayday: boolean;
   doublePriceTurns: number;
-  skipNextTurn: boolean;
   unlockDirNextTurn: boolean;
   reverseDirNextTurn: boolean;
   chirpSandals: boolean;
+  equippedWalkSound?: WalkSoundStyle;
   isBankrupt: boolean;
   isBot: boolean;
 }

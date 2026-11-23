@@ -137,7 +137,12 @@ export function isValidGameState(raw: unknown): raw is GameState {
     return false;
   }
   if (!isRecord(raw.tiles) || !isRecord(raw.shops) || !isRecord(raw.segmentPools)) return false;
-  if (!Array.isArray(raw.log)) return false;
+  if (!Array.isArray(raw.log) || !Array.isArray(raw.moveHistory) || !Array.isArray(raw.eventChoices)) return false;
+  if (!Array.isArray(raw.deliveredShopIdsThisTurn)) return false;
+  const tilesObj = raw.tiles;
+  if (!raw.players.every((p) => isRecord(p) && typeof p.id === 'string' && typeof p.tileId === 'string' && Object.prototype.hasOwnProperty.call(tilesObj, p.tileId))) {
+    return false;
+  }
   return true;
 }
 

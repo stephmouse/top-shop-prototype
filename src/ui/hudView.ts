@@ -5,6 +5,19 @@ import { HOST_TOKEN } from '../net/protocol';
 import type { NetRole, RoomRoster } from '../net/protocol';
 import { createAvatarElement, getAvatarRenderKey } from './avatarSvg';
 
+export function getContrastInk(hex: string): '#ffffff' | '#0b0e14' {
+  const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
+  if (!m) return '#0b0e14';
+  const n = parseInt(m[1]!, 16);
+  const brightness = (299 * ((n >> 16) & 255) + 587 * ((n >> 8) & 255) + 114 * (n & 255)) / 1000;
+  return brightness < 140 ? '#ffffff' : '#0b0e14';
+}
+
+export interface TokenMoveHint {
+  kind: 'step' | 'escalator' | 'elevator';
+  durationMs: number;
+}
+
 export interface HudNetInfo {
   role: NetRole;
   roster: RoomRoster | null;
@@ -53,7 +66,8 @@ export function renderTokensOverlay(
   boardGrid: HTMLElement,
   state: GameState,
   roster?: RoomRoster | null,
-  customAvatars?: Readonly<Record<string, string>>
+  customAvatars?: Readonly<Record<string, string>>,
+  moveHints?: ReadonlyMap<string, TokenMoveHint>
 ): void {
   const activeIds = new Set(state.players.filter((p) => !p.isBankrupt).map((p) => p.id));
 
@@ -75,6 +89,10 @@ export function renderTokensOverlay(
     if (el.dataset.playerId) tokenByPlayerId.set(el.dataset.playerId, el);
   }
 
+  const tileCounts: Record<string, number> = {};
+  for (const p of state.players) {
+    if (!p.isBankrupt) tileCounts[p.tileId] = (tileCounts[p.tileId] ?? 0) + 1;
+  }
   const slotCounters: Record<string, number> = {};
 
   state.players.forEach((player, idx) => {
@@ -86,8 +104,9 @@ export function renderTokensOverlay(
     const slotIdx = slotCounters[player.tileId] ?? 0;
     slotCounters[player.tileId] = slotIdx + 1;
 
-    const x = tileEl.offsetLeft + 5 + (slotIdx % 4) * 22;
-    const y = tileEl.offsetTop + tileEl.offsetHeight - 31 - Math.floor(slotIdx / 4) * 24;
+    const crowded = (tileCounts[player.tileId] ?? 0) >= 5;
+    const x = tileEl.offsetLeft + (crowded ? 4 : 5) + (slotIdx % 4) * (crowded ? 21 : 22);
+    const y = tileEl.offsetTop + tileEl.offsetHeight - (crowded ? 25 : 31) - Math.floor(slotIdx / 4) * (crowded ? 19 : 24);
 
     let token = tokenByPlayerId.get(player.id);
     const isNew = !token;
@@ -104,8 +123,16 @@ export function renderTokensOverlay(
       token.appendChild(bodyEl);
     }
 
+    const hint = moveHints?.get(player.id);
+    const moveCls =
+      hint?.kind === 'escalator'
+        ? ' is-escalator-glide'
+        : hint?.kind === 'elevator'
+          ? ' is-elevator-ride'
+          : '';
+    token.style.setProperty?.('--move-dur', `${hint?.durationMs ?? 200}ms`);
     token.title = player.name;
-    token.className = `token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}`;
+    token.className = `token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}${crowded ? ' is-crowded' : ''}${moveCls}`;
     token.style.transform = `translate(${x}px, ${y}px)`;
 
     bodyEl.style.borderColor = player.color;
@@ -119,6 +146,7 @@ export function renderTokensOverlay(
       const pip = document.createElement('span');
       pip.className = 'token-pip';
       pip.style.backgroundColor = player.color;
+      pip.style.color = getContrastInk(player.color);
       pip.textContent = String(idx + 1);
       bodyEl.appendChild(pip);
     }

@@ -66,7 +66,6 @@ export function createInitialGameState(
     doubleNextPayday: false,
     skipNextPayday: false,
     doublePriceTurns: 0,
-    skipNextTurn: false,
     unlockDirNextTurn: false,
     reverseDirNextTurn: false,
     chirpSandals: false,

@@ -61,18 +61,6 @@ function selectEventFromColumn(roll: number, col: EventRubberBandColumn, month: 
   return getSeasonalEventId(month);
 }
 
-export function rollWeightedEventId(
-  state: GameState,
-  seed: number
-): { id: string; nextSeed: number } {
-  const col = getEventRubberBandColumn(state);
-  const { value: roll, nextSeed } = randomInt(seed, 0, EVENT_RUBBER_BAND_CONFIG.rollMax - 1);
-  return {
-    id: selectEventFromColumn(roll, col, state.month),
-    nextSeed,
-  };
-}
-
 function collectColumnPool(col: EventRubberBandColumn, month: number, excluding: string[]): string[] {
   const pool: string[] = [];
   let prev = 0;

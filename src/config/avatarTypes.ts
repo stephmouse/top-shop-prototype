@@ -1,3 +1,6 @@
+import { isValidWalkSoundChoice } from './walkSounds';
+import type { WalkSoundChoice } from './walkSounds';
+
 export const AVATAR_SPECIES = [
   'mouse', 'dragon', 'kangaroo', 'dog', 'wolf', 'fox', 'beaver', 'skunk',
   'cat', 'raccoon', 'horse', 'otter', 'deer', 'frog', 'panda', 'bunny',
@@ -33,6 +36,7 @@ export interface AvatarSpec {
   hair: AvatarHair;
   eyeStyle: AvatarEyeStyle;
   accessory: AvatarAccessory;
+  walkSound?: WalkSoundChoice;
   customImage?: string;
 }
 
@@ -155,6 +159,7 @@ export function isValidAvatarSpec(raw: unknown): raw is AvatarSpec {
     typeof r.secondaryColor === 'string' && HEX_RE.test(r.secondaryColor) &&
     typeof r.eyeColor === 'string' && HEX_RE.test(r.eyeColor) &&
     typeof r.hairColor === 'string' && HEX_RE.test(r.hairColor) &&
+    (r.walkSound === undefined || isValidWalkSoundChoice(r.walkSound)) &&
     (r.customImage === undefined || isValidCustomImageDataUrl(r.customImage))
   );
 }

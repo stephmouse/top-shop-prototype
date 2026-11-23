@@ -409,8 +409,16 @@ button.primary:hover:not(:disabled) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: transform 200ms ease-in-out;
+  transition: transform var(--move-dur, 200ms) ease-in-out;
   will-change: transform;
+}
+
+.token-floating.is-escalator-glide {
+  transition: transform var(--move-dur, 440ms) cubic-bezier(0.35, 0, 0.25, 1);
+}
+
+.token-floating.is-elevator-ride {
+  transition: transform var(--move-dur, 520ms) cubic-bezier(0.45, 0, 0.2, 1);
 }
 
 .token {
@@ -457,6 +465,19 @@ button.primary:hover:not(:disabled) {
   font-weight: 900;
   color: #0b0e14;
   line-height: 1;
+}
+
+.token-floating.is-crowded {
+  width: 23px;
+  height: 23px;
+}
+
+.token-floating.is-crowded .token-pip {
+  width: 11px;
+  height: 11px;
+  font-size: 7px;
+  right: -2px;
+  bottom: -2px;
 }
 
 .hud-avatar {
@@ -1363,10 +1384,18 @@ button.primary:hover:not(:disabled) {
 }
 
 .token-body.fx-hop { animation: fx-hop 210ms ease-out; }
-.token-body.fx-glide { animation: fx-glide 260ms ease-in-out; }
-.token-body.fx-teleport { animation: fx-teleport 420ms ease-in-out; }
+.token-body.fx-glide { animation: fx-glide var(--fx-dur, 440ms) ease-in-out; }
+.token-body.fx-elevator { animation: fx-elevator var(--fx-dur, 520ms) ease-in-out; }
 .token-body.fx-celebrate { animation: fx-celebrate 520ms ease-in-out; }
 .token-body.fx-shake { animation: fx-shake 420ms ease-in-out; }
+
+.tile.fx-elevator-arrive { animation: fx-elevator-pulse 520ms ease-out; }
+
+@keyframes fx-elevator-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.85); }
+  45% { transform: scale(1.03); box-shadow: 0 0 18px rgba(167, 139, 250, 0.9); }
+  100% { transform: scale(1); }
+}
 
 @keyframes fx-hop {
   0% { transform: translateY(0) scale(1, 1) rotate(var(--lean-deg)); }
@@ -1376,15 +1405,15 @@ button.primary:hover:not(:disabled) {
 }
 
 @keyframes fx-glide {
-  0%, 100% { transform: scale(1) rotate(var(--lean-deg)); }
-  50% { transform: translateY(-3px) scale(1.08) rotate(var(--lean-deg)); }
+  0%, 100% { transform: translateY(0) scale(1) rotate(var(--lean-deg)); }
+  30%, 70% { transform: translateY(-3px) scale(1.06) rotate(var(--lean-deg)); }
 }
 
-@keyframes fx-teleport {
-  0% { transform: scale(1); opacity: 1; }
-  35% { transform: scale(0.35); opacity: 0.35; }
-  70% { transform: scale(1.2); opacity: 1; }
-  100% { transform: scale(1) rotate(var(--lean-deg)); opacity: 1; }
+@keyframes fx-elevator {
+  0%, 100% { transform: scale(1) rotate(var(--lean-deg)); opacity: 1; }
+  16% { transform: scale(0.88); opacity: 0.78; }
+  82% { transform: scale(0.92); opacity: 0.85; }
+  92% { transform: scale(1.12) rotate(var(--lean-deg)); opacity: 1; }
 }
 
 @keyframes fx-celebrate {
@@ -1467,6 +1496,16 @@ button.primary:hover:not(:disabled) {
 .avatar-color-wide {
   width: 100%;
   height: 32px;
+}
+
+.avatar-walk-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.avatar-walk-row .setup-field {
+  flex: 1;
 }
 
 .avatar-modal-layout[hidden],

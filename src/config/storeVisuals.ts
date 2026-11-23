@@ -4,7 +4,7 @@ export type StoreIconId =
   | 'sparkles' | 'paw' | 'gamepad' | 'wheel' | 'bread' | 'grill' | 'shirt'
   | 'burger' | 'camera' | 'candy' | 'book' | 'coffee' | 'bowl' | 'bolt'
   | 'fish' | 'flower' | 'house' | 'fruit' | 'gift' | 'gem' | 'film'
-  | 'meat' | 'briefcase' | 'cross' | 'ball' | 'plane' | 'music'
+  | 'meat' | 'briefcase' | 'cross' | 'ball' | 'plane' | 'music' | 'icecream'
   | 'vacant' | 'bank' | 'elevator' | 'escalator';
 
 export interface StoreVisualMeta {
@@ -43,6 +43,7 @@ export const STORE_ICON_PATHS: Record<StoreIconId, readonly string[]> = {
   ball: ['M 12 12 m -8 0 a 8 8 0 1 0 16 0 a 8 8 0 1 0 -16 0', 'M 6 7 C 10 11 10 13 6 17', 'M 18 7 C 14 11 14 13 18 17'],
   plane: ['M 3 13 L 21 6 L 15 19 L 11 14 Z', 'M 11 14 L 21 6'],
   music: ['M 9 17 V 6 L 19 4 V 15', 'M 6 17 a 2.5 2 0 1 0 3 0 a 2.5 2 0 1 0 -3 0', 'M 16 15 a 2.5 2 0 1 0 3 0 a 2.5 2 0 1 0 -3 0'],
+  icecream: ['M 8 11 L 12 21 L 16 11 Z', 'M 7 11 C 7 6.5 17 6.5 17 11 Z', 'M 10 6.5 A 2 2 0 1 1 14 6.5'],
   vacant: ['M 4 11 H 20 V 19 H 4 Z', 'M 8 11 L 12 6 L 16 11'],
   bank: ['M 3 9 L 12 4 L 21 9 Z', 'M 6 9 V 17 M 10 9 V 17 M 14 9 V 17 M 18 9 V 17', 'M 4 19 H 20'],
   elevator: ['M 5 5 H 19 V 19 H 5 Z', 'M 9 10 L 12 7 L 15 10 M 9 14 L 12 17 L 15 14'],
@@ -58,7 +59,7 @@ export const STORE_VISUALS: Record<string, StoreVisualMeta> = {
   auto_parts: M('tech', 'wheel', '#94a3b8'),
   bakery: M('food', 'bread', '#f59e0b'),
   bbq_house: M('food', 'grill', '#ef4444'),
-  bobsons: M('fashion', 'shirt', '#ec4899'),
+  bobsons: M('food', 'icecream', '#f472b6'),
   burger_shop: M('food', 'burger', '#f97316'),
   camera_shop: M('tech', 'camera', '#38bdf8'),
   candy_store: M('food', 'candy', '#f472b6'),
@@ -81,8 +82,8 @@ export const STORE_VISUALS: Record<string, StoreVisualMeta> = {
   italian: M('food', 'bowl', '#22c55e'),
   johnson_books: M('hobby', 'book', '#60a5fa'),
   juice_pub: M('food', 'coffee', '#fb7185'),
-  kid: M('fashion', 'gift', '#38bdf8'),
-  kiss: M('luxury', 'sparkles', '#f43f5e'),
+  kid: M('tech', 'gamepad', '#38bdf8'),
+  kiss: M('food', 'burger', '#f43f5e'),
   meat_land: M('market', 'meat', '#f87171'),
   mens_clothes: M('fashion', 'shirt', '#60a5fa'),
   movie_theater: M('hobby', 'film', '#f43f5e'),

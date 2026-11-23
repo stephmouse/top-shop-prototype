@@ -1,3 +1,4 @@
+import { WALK_SOUND_META } from '../config/walkSounds';
 import type { Player } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { HudNetInfo } from './hudView';
@@ -48,6 +49,8 @@ export function collectStatusChips(
   }
   if (player.blockDeliveryTurns > 0) chips.push({ text: `NoDeliv(${player.blockDeliveryTurns}T)`, variant: 'debuff' });
   if (player.blockNewStoreTurns > 0) chips.push({ text: `NoOpen(${player.blockNewStoreTurns}T)`, variant: 'debuff' });
-  if (player.chirpSandals) chips.push({ text: 'Chirp', variant: 'info' });
+  if (player.chirpSandals) {
+    chips.push({ text: WALK_SOUND_META[player.equippedWalkSound ?? 'chirp'].shortChip, variant: 'info' });
+  }
   return chips;
 }

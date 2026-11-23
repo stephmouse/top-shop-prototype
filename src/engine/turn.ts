@@ -96,13 +96,6 @@ export function advanceToNextTurn(state: GameState): GameState {
       guard++;
       continue;
     }
-    if (cand.skipNextTurn) {
-      nextPlayers[nextIndex] = { ...cand, skipNextTurn: false };
-      log = [`[T${state.turnNumber}] ${cand.name} missed their turn!`, ...log].slice(0, 40);
-      nextIndex = (nextIndex + 1) % total;
-      guard++;
-      continue;
-    }
     break;
   }
 

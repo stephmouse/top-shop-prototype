@@ -21,9 +21,13 @@ export function applyPeerSeatProfiles(state: GameState, roster: RoomRoster | nul
     if (!peer) return player;
     const nextName = peer.name.trim() || player.name;
     const nextColor = HEX_COLOR_RE.test(peer.color) ? peer.color : player.color;
-    if (nextName === player.name && nextColor === player.color) return player;
+    const peerWalk = peer.avatar?.walkSound;
+    const walkChanged = peerWalk !== undefined && peerWalk !== player.avatar?.walkSound;
+    if (nextName === player.name && nextColor === player.color && !walkChanged) return player;
     changed = true;
-    return { ...player, name: nextName, color: nextColor };
+    const nextAvatar =
+      walkChanged && player.avatar ? { ...player.avatar, walkSound: peerWalk } : player.avatar;
+    return { ...player, name: nextName, color: nextColor, ...(nextAvatar ? { avatar: nextAvatar } : {}) };
   });
   return changed ? { ...state, players } : state;
 }

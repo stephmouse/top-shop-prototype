@@ -15,8 +15,14 @@ import {
   stripAvatarCustomImage,
 } from '../config/avatarTypes';
 import type { AvatarAccessory, AvatarEyeStyle, AvatarHair, AvatarMarking, AvatarSpec, AvatarSpecies } from '../config/avatarTypes';
+import { WALK_SOUND_CHOICE_LABELS, WALK_SOUND_CHOICES } from '../config/walkSounds';
+import type { WalkSoundChoice } from '../config/walkSounds';
 import { createAvatarElement } from './avatarSvg';
 import { createImageCropper } from './imageCropper';
+
+export interface AvatarModalOptions {
+  onPreviewWalkSound?: (choice: WalkSoundChoice) => void;
+}
 
 export interface AvatarModalController {
   el: HTMLElement;
@@ -56,7 +62,7 @@ function mkColorField(label: string, value: string, onChange: (hex: string) => v
   return wrap;
 }
 
-export function createAvatarModal(): AvatarModalController {
+export function createAvatarModal(options?: AvatarModalOptions): AvatarModalController {
   let visible = false;
   let draft: AvatarSpec = createSpeciesPreset('mouse');
   let frameColor = '#e74c3c';
@@ -177,7 +183,24 @@ export function createAvatarModal(): AvatarModalController {
       mkColorField('Eyes', draft.eyeColor, (v) => updateBuilder({ eyeColor: v }))
     );
 
-    controlsCol.append(photoBanner, gridA, colorsGrid);
+    const walkRow = mk('div', 'avatar-walk-row');
+    const testSoundBtn = Object.assign(mk('button', '', '🔊 Test'), { type: 'button' as const });
+    testSoundBtn.addEventListener('click', () => options?.onPreviewWalkSound?.(draft.walkSound ?? 'chirp'));
+    walkRow.append(
+      mkSelectField<WalkSoundChoice>(
+        'Walk Shoes (9-pt Bank Unlock)',
+        WALK_SOUND_CHOICES,
+        WALK_SOUND_CHOICE_LABELS,
+        draft.walkSound ?? 'chirp',
+        (v) => {
+          draft = { ...draft, walkSound: v };
+          options?.onPreviewWalkSound?.(v);
+        }
+      ),
+      testSoundBtn
+    );
+
+    controlsCol.append(photoBanner, gridA, colorsGrid, walkRow);
     refreshPreview();
   }
 
@@ -199,7 +222,10 @@ export function createAvatarModal(): AvatarModalController {
     draft = { ...(stripAvatarCustomImage(draft) ?? draft), primaryColor: p.primaryColor, secondaryColor: p.secondaryColor, marking: p.marking };
     renderControls();
   });
-  randomBtn.addEventListener('click', () => { draft = createRandomAvatar(); renderControls(); });
+  randomBtn.addEventListener('click', () => {
+    draft = { ...createRandomAvatar(), ...(draft.walkSound ? { walkSound: draft.walkSound } : {}) };
+    renderControls();
+  });
   closeTop.addEventListener('click', close);
   cancelBtn.addEventListener('click', close);
   saveBtn.addEventListener('click', () => { saveCb?.({ ...draft }); close(); });

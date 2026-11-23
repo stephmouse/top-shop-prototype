@@ -1,6 +1,9 @@
 import { PAYDAY_CONFIG, SHOP_RULES, STORE_TYPES } from '../config/balance';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
+import { isValidWalkSoundStyle, WALK_SOUND_STYLES } from '../config/walkSounds';
+import type { WalkSoundChoice, WalkSoundStyle } from '../config/walkSounds';
+import { pickRandom } from './rng';
 import type {
   EscalatorExit,
   EscalatorLink,
@@ -179,4 +182,15 @@ export function getAvailableDirections(
   if (tile.neighbors.left) dirs.push('left');
   if (tile.neighbors.right) dirs.push('right');
   return dirs;
+}
+
+export function resolveEquippedWalkSound(
+  choice: WalkSoundChoice | undefined,
+  seed: number
+): { style: WalkSoundStyle; nextSeed: number } {
+  if (choice === 'random') {
+    const picked = pickRandom(seed, WALK_SOUND_STYLES);
+    return { style: picked.value, nextSeed: picked.nextSeed };
+  }
+  return { style: isValidWalkSoundStyle(choice) ? choice : 'chirp', nextSeed: seed };
 }

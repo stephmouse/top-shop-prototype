@@ -15,6 +15,7 @@ import { buildBoardShopPick } from './ui/boardPickState';
 import { createFxOverlay } from './ui/fxOverlay';
 import { createHomeModal } from './ui/homeModal';
 import { applyHostSeatEdit, applyUnifiedProfileChange, buildExtendedLocalPlayers } from './ui/hostProfileSync';
+import type { TokenMoveHint } from './ui/hudView';
 import { bindKeyboardControls } from './ui/keyboard';
 import { createLobbyModal } from './ui/lobbyModal';
 import { renderMatchLog } from './ui/matchLogView';
@@ -30,6 +31,7 @@ import type { UserProfile } from './ui/playerProfile';
 import { renderRouteOverlay } from './ui/routeOverlay';
 import { createSetupModal } from './ui/setupModal';
 import { createSoundFx } from './ui/soundFx';
+import { diffGameStates } from './ui/stateDiff';
 import { createTopbar } from './ui/topbar';
 import { createTurnCueTracker, shouldWarnBeforeUnload } from './ui/turnCue';
 
@@ -87,7 +89,7 @@ const netSession = createMultiplayerSession({
     lobbyModal.showStatus(msg, true); console.warn('[TopShop Net]', msg);
   },
 });
-(window as unknown as Record<string, unknown>).__topShopNet = netSession;
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
 const moveDriver = createMovementDriver({
   netSession, getState: () => state, isAutoStepEnabled: () => autoStepEnabled, onApplyHostAction: applyHostAction,
@@ -126,7 +128,7 @@ function updateHostSeat(seatIdx: number, next: UserProfile): void {
   render(); lobbyModal.refresh();
 }
 
-const avatarModal = createAvatarModal();
+const avatarModal = createAvatarModal({ onPreviewWalkSound: (c) => soundFx.playWalkSoundPreview(c) });
 const setupModal = createSetupModal({
   initialSetup: currentSetup, onStartMatch: startMatchFromSetup, onSaveMatch: saveCurrentMatch, onLoadMatch: loadSavedState,
   onEditAvatar: (idx, cur, col, onSave) => avatarModal.open(cur, col, `Customize Player ${idx + 1} Standee`, onSave),
@@ -208,6 +210,8 @@ bindKeyboardControls({
   getState: () => state, getActionBox: () => actionBox, dispatch, isMovingPhase: moveDriver.isMovingPhase,
   isModalOpen: () => avatarModal.isOpen() || homeModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
   onCloseModal: () => { if (avatarModal.isOpen()) return avatarModal.close(); homeModal.close(); setupModal.close(); lobbyModal.close(); },
+  getHoldWaitMs: moveDriver.getHoldWaitMs,
+  isAwaitingAck: moveDriver.isAwaitingAck,
 });
 
 function syncHeaderAndHud(): void {
@@ -245,9 +249,16 @@ function render(): void {
   const prev = prevRenderedState;
   if (prev && prev !== state) stageCashbackHud(hudEl, prev, state);
   const preview = computeMovePreview(state), canAct = netSession.isLocalTurn(state);
+  const diffEvents = diffGameStates(prev, state);
+  const moveHints = new Map<string, TokenMoveHint>();
+  for (const ev of diffEvents) {
+    if (ev.type === 'player_moved' && ev.durationMs !== undefined) {
+      moveHints.set(ev.playerId, { kind: ev.kind, durationMs: ev.durationMs });
+    }
+  }
   syncHeaderAndHud(); paintBoard(preview, canAct); drawRoutes(preview);
-  renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  fxOverlay.playStateDiff(prev, state); prevRenderedState = state;
+  renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars(), moveHints);
+  fxOverlay.playStateDiff(prev, state, diffEvents); prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   renderActionBox(canAct); turnCue.sync(state, canAct); renderMatchLog(logBox, state); setupModal.refresh(); moveDriver.scheduleTick();

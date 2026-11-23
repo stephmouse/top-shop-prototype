@@ -49,7 +49,7 @@ function encodeScaledPortrait(img: HTMLImageElement, srcX: number, srcY: number,
     octx.imageSmoothingQuality = 'high';
     octx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, step.size, step.size);
     const url = step.q !== undefined ? offscreen.toDataURL(step.mime, step.q) : offscreen.toDataURL(step.mime);
-    if (isValidCustomImageDataUrl(url)) return url;
+    if (url.startsWith(`data:${step.mime};`) && isValidCustomImageDataUrl(url)) return url;
   }
   return null;
 }
@@ -72,7 +72,7 @@ export function createImageCropper(options: ImageCropperOptions): ImageCropperCo
   const btnRow = mk('div', 'setup-btn-row');
   const backBtn = Object.assign(mk('button', '', 'Back'), { type: 'button' as const });
   const resetBtn = Object.assign(mk('button', '', 'Reset Crop'), { type: 'button' as const });
-  const confirmBtn = Object.assign(mk('button', 'primary', 'Use Cropped Portrait'), { type: 'button' as const });
+  const confirmBtn = Object.assign(mk('button', 'primary', 'Use Cropped Portrait'), { type: 'button' as const, disabled: true });
   btnRow.append(backBtn, resetBtn, confirmBtn);
   wrap.append(canvas, zoomRow, hint, btnRow);
 
@@ -172,7 +172,7 @@ export function createImageCropper(options: ImageCropperOptions): ImageCropperCo
   });
 
   function reset(): void {
-    loadSeq++; loadedImg = null; dragging = false;
+    loadSeq++; loadedImg = null; dragging = false; confirmBtn.disabled = true;
     canvas.className = 'cropper-canvas';
     revokeActiveUrl(); resetTransform();
   }
@@ -186,7 +186,7 @@ export function createImageCropper(options: ImageCropperOptions): ImageCropperCo
     const url = (objectUrl = URL.createObjectURL(file));
     const img = new Image();
     img.onload = () => {
-      if (seq === loadSeq) { loadedImg = img; revokeActiveUrl(); resetTransform(); }
+      if (seq === loadSeq) { loadedImg = img; confirmBtn.disabled = false; revokeActiveUrl(); resetTransform(); }
       else URL.revokeObjectURL(url);
     };
     img.onerror = () => {

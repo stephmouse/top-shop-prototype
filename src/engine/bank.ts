@@ -1,8 +1,9 @@
 import { BANK_REWARDS } from '../config/balance';
+import { WALK_SOUND_META } from '../config/walkSounds';
 import { canRedeemBankReward } from './bankEligibility';
 import { resolveTargetRival } from './bankHelpers';
 import { applyBankShopEffect } from './bankShopEffects';
-import { appendLog, clampPoints, getActivePlayer } from './helpers';
+import { appendLog, clampPoints, getActivePlayer, resolveEquippedWalkSound } from './helpers';
 import { randomInt } from './rng';
 import { resumeAfterPostAction } from './shops';
 import type { GameState, Player } from './types';
@@ -187,9 +188,12 @@ export function handleRedeemBankReward(
         return resumeAfterPostAction(makeState(`${rival.name} will miss next payday.`));
       }
 
-    case 'equip_chirp_shoes':
-      patchPlayer(active.id, { chirpSandals: true });
-      return resumeAfterPostAction(makeState('Equipped "Chirp-Chirp" shoes!'));
+    case 'equip_chirp_shoes': {
+      const resolved = resolveEquippedWalkSound(active.avatar?.walkSound, seed);
+      seed = resolved.nextSeed;
+      patchPlayer(active.id, { chirpSandals: true, equippedWalkSound: resolved.style });
+      return resumeAfterPostAction(makeState(`Equipped ${WALK_SOUND_META[resolved.style].label}!`));
+    }
 
     case 'double_own_store_prices':
       patchPlayer(active.id, { doublePriceTurns: eff.turns + 1 });

@@ -1,3 +1,4 @@
+import { WALK_SOUND_META } from '../config/walkSounds';
 import type { GameState } from '../engine/types';
 import { getBoardTileElement } from './boardView';
 import { formatDollars } from './cashCounter';
@@ -6,10 +7,11 @@ import { getTokenBodyElement } from './hudView';
 import { CASHBACK_BEAT2_MS } from './playerCardView';
 import type { SoundFxController } from './soundFx';
 import { diffGameStates } from './stateDiff';
+import type { VisualEvent } from './stateDiff';
 
 export interface FxOverlayController {
   el: HTMLElement;
-  playStateDiff: (prev: GameState | null, next: GameState) => void;
+  playStateDiff: (prev: GameState | null, next: GameState, precomputedEvents?: VisualEvent[]) => void;
   clear: () => void;
 }
 
@@ -20,12 +22,6 @@ const SHOP_FX_CLASS: Record<'opened' | 'buyout' | 'vacated' | 'upgraded' | 'clos
   upgraded: 'fx-shop-upgrade',
   closed: 'fx-shop-closed',
   restocked: 'fx-shop-restock',
-};
-
-const MOVE_FX: Record<'step' | 'escalator' | 'elevator', [string, number]> = {
-  step: ['fx-hop', 210],
-  escalator: ['fx-glide', 260],
-  elevator: ['fx-teleport', 420],
 };
 
 function stripFxClasses(el: HTMLElement): void {
@@ -112,7 +108,7 @@ export function createFxOverlay(
     layer.innerHTML = '';
   }
 
-  function playStateDiff(prev: GameState | null, next: GameState): void {
+  function playStateDiff(prev: GameState | null, next: GameState, precomputedEvents?: VisualEvent[]): void {
     const sameMatch =
       prev && prev !== next && prev.mapId === next.mapId && prev.players.length === next.players.length && next.turnNumber >= prev.turnNumber;
     if (sameMatch && soundFx) {
@@ -123,7 +119,7 @@ export function createFxOverlay(
       }
     }
 
-    const events = diffGameStates(prev, next);
+    const events = precomputedEvents ?? diffGameStates(prev, next);
     if (events.length === 0) return;
     soundFx?.playVisualEvents(events);
 
@@ -137,8 +133,22 @@ export function createFxOverlay(
 
     for (const ev of events) {
       if (ev.type === 'player_moved') {
-        const [cls, ms] = MOVE_FX[ev.kind];
-        triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), cls, ms);
+        const body = getTokenBodyElement(tokensLayerEl, ev.playerId);
+        if (ev.kind === 'step') {
+          triggerFxClass(body, 'fx-hop', 210);
+        } else if (ev.kind === 'escalator') {
+          const ms = ev.durationMs ?? 440;
+          body?.style?.setProperty?.('--fx-dur', `${ms}ms`);
+          triggerFxClass(body, 'fx-glide', ms);
+        } else {
+          const ms = ev.durationMs ?? 520;
+          body?.style?.setProperty?.('--fx-dur', `${ms}ms`);
+          triggerFxClass(body, 'fx-elevator', ms);
+          scheduleTimer(
+            () => triggerFxClass(getBoardTileElement(boardEl, ev.toTileId), 'fx-elevator-arrive', 520),
+            Math.max(120, ms - 80)
+          );
+        }
       } else if (ev.type === 'bank_payday') {
         triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-celebrate', 520);
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), 'fx-bank-pulse', 650);
@@ -154,7 +164,12 @@ export function createFxOverlay(
         spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), `${sign}${Math.abs(ev.amount)} pts`, 'is-pts', bumpStack(ev.tileId));
       } else if (ev.type === 'chirp_equipped') {
         triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-celebrate', 520);
-        spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), 'Chirp-Chirp!', 'is-payday', bumpStack(ev.tileId));
+        spawnFloatBadge(
+          getBoardTileElement(boardEl, ev.tileId),
+          WALK_SOUND_META[ev.walkSound ?? 'chirp'].badgeText,
+          'is-payday',
+          bumpStack(ev.tileId)
+        );
       } else if (ev.type === 'shop_changed') {
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), SHOP_FX_CLASS[ev.kind], 650);
       } else if (ev.type === 'liquidate_forced') {
