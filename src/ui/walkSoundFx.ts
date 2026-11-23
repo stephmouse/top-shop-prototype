@@ -9,7 +9,89 @@ export type ToneFn = (
   vol?: number
 ) => void;
 
-export function playWalkStepSound(style: WalkSoundStyle, tone: ToneFn, alt: boolean): void {
+function playWhoopee(
+  audio: AudioContext | null | undefined,
+  tone: ToneFn,
+  startFreq: number,
+  endFreq: number,
+  dur: number,
+  flutterHz: number,
+  delay = 0,
+  vol = 0.075
+): void {
+  if (
+    !audio ||
+    typeof audio.createBiquadFilter !== 'function' ||
+    typeof audio.createBuffer !== 'function' ||
+    typeof audio.createBufferSource !== 'function'
+  ) {
+    tone(startFreq, dur, 'sawtooth', delay, endFreq, 0.05);
+    tone(Math.max(50, endFreq * 1.2), dur * 0.7, 'triangle', delay + 0.03, Math.max(45, endFreq * 0.85), 0.04);
+    return;
+  }
+
+  const now = audio.currentTime + delay;
+  const osc = audio.createOscillator();
+  const lfo = audio.createOscillator();
+  const lfoGain = audio.createGain();
+  const lp = audio.createBiquadFilter();
+  const env = audio.createGain();
+
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(startFreq, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(40, endFreq), now + dur);
+
+  lfo.type = 'sine';
+  lfo.frequency.setValueAtTime(flutterHz, now);
+  lfoGain.gain.setValueAtTime(28, now);
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc.frequency);
+
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(480, now);
+  lp.Q.setValueAtTime(4.5, now);
+
+  env.gain.setValueAtTime(0.0001, now);
+  env.gain.linearRampToValueAtTime(vol, now + 0.015);
+  env.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+  osc.connect(lp);
+  lp.connect(env);
+  env.connect(audio.destination);
+  osc.start(now);
+  osc.stop(now + dur + 0.02);
+  lfo.start(now);
+  lfo.stop(now + dur + 0.02);
+
+  const samples = Math.max(256, Math.floor(audio.sampleRate * dur));
+  const buf = audio.createBuffer(1, samples, audio.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < samples; i++) data[i] = Math.random() * 2 - 1;
+
+  const noise = audio.createBufferSource();
+  noise.buffer = buf;
+  const bp = audio.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.setValueAtTime(420, now);
+  bp.Q.setValueAtTime(1.8, now);
+  const nGain = audio.createGain();
+  nGain.gain.setValueAtTime(0.0001, now);
+  nGain.gain.linearRampToValueAtTime(vol * 0.45, now + 0.012);
+  nGain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+  noise.connect(bp);
+  bp.connect(nGain);
+  nGain.connect(audio.destination);
+  noise.start(now);
+  noise.stop(now + dur + 0.02);
+}
+
+export function playWalkStepSound(
+  style: WalkSoundStyle,
+  tone: ToneFn,
+  alt: boolean,
+  audio?: AudioContext | null
+): void {
   switch (style) {
     case 'chirp': {
       const f1 = alt ? 1250 : 1350;
@@ -51,10 +133,19 @@ export function playWalkStepSound(style: WalkSoundStyle, tone: ToneFn, alt: bool
       notes.forEach((f, idx) => tone(f, 0.08, idx === 2 ? 'triangle' : 'sine', idx * 0.035, f, 0.045));
       return;
     }
+    case 'poot': {
+      if (alt) playWhoopee(audio, tone, 195, 115, 0.11, 36);
+      else playWhoopee(audio, tone, 140, 58, 0.16, 28);
+      return;
+    }
   }
 }
 
-export function playWalkEquipSound(style: WalkSoundStyle, tone: ToneFn): void {
+export function playWalkEquipSound(
+  style: WalkSoundStyle,
+  tone: ToneFn,
+  audio?: AudioContext | null
+): void {
   switch (style) {
     case 'chirp':
       tone(1250, 0.05, 'sine', 0, 2150, 0.055);
@@ -80,6 +171,10 @@ export function playWalkEquipSound(style: WalkSoundStyle, tone: ToneFn): void {
       return;
     case 'jingle':
       [1568, 1976, 2349, 2637].forEach((f, idx) => tone(f, 0.1, 'sine', idx * 0.055, f, 0.048));
+      return;
+    case 'poot':
+      playWhoopee(audio, tone, 165, 52, 0.36, 30, 0, 0.085);
+      playWhoopee(audio, tone, 225, 180, 0.07, 40, 0.34, 0.06);
       return;
   }
 }

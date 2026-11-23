@@ -106,7 +106,7 @@ export function createSoundFx(): SoundFxController {
       if (moved.kind === 'step') {
         if (moved.chirp) {
           chirpAlt = !chirpAlt;
-          playWalkStepSound(moved.walkSound ?? 'chirp', tone, chirpAlt);
+          playWalkStepSound(moved.walkSound ?? 'chirp', tone, chirpAlt, ensureContext());
         } else tone(440, 0.045, 'triangle', 0, 520, 0.045);
       } else if (moved.kind === 'escalator') {
         const up = (moved.verticalSign ?? 1) >= 0;
@@ -122,7 +122,7 @@ export function createSoundFx(): SoundFxController {
       }
     }
     const equipped = events.find((e) => e.type === 'chirp_equipped');
-    if (equipped && equipped.type === 'chirp_equipped') playWalkEquipSound(equipped.walkSound ?? 'chirp', tone);
+    if (equipped && equipped.type === 'chirp_equipped') playWalkEquipSound(equipped.walkSound ?? 'chirp', tone, ensureContext());
 
     if (payday) {
       playArp([523, 659, 784, 1046], 'triangle', 0.06, 0.16);
@@ -171,7 +171,7 @@ export function createSoundFx(): SoundFxController {
       const style = choice === 'random'
         ? WALK_SOUND_STYLES[Math.floor(Math.random() * WALK_SOUND_STYLES.length)]!
         : choice;
-      playWalkStepSound(style, tone, chirpAlt);
+      playWalkStepSound(style, tone, chirpAlt, ensureContext());
     },
   };
 }
