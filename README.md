@@ -4,7 +4,7 @@ An unofficial, browser-based TypeScript & Vite fan recreation of the PlayStation
 
 > **Work-in-Progress Prototype:** This project is an active WIP prototype currently in early playtesting using CSS Grid, SVG, and synthesized Web Audio placeholder visuals. You can play the current build directly in your browser at **[stephmouse.github.io/top-shop-prototype](https://stephmouse.github.io/top-shop-prototype/)** (or run it locally—see [Contributing & Local Development](#contributing--local-development)).
 >
-> **AI-Assisted Development Notice:** This project was built with substantial **AI coding and reverse-engineering assistance** (alongside human design, direction, verification, and playtesting). We want to be upfront and transparent so anyone who prefers not to use AI-assisted projects can make an informed choice.
+> **AI-Assisted Development Notice:** This project was built with substantial **AI coding and reverse-engineering assistance** (alongside human design, direction, verification, and playtesting). I want to be upfront and transparent so anyone who prefers not to use AI-assisted projects can make an informed choice.
 
 ---
 
