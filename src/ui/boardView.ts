@@ -1,3 +1,5 @@
+import { getStageDef } from '../config/maps';
+import type { StageId } from '../config/maps';
 import type { StoreIconId } from '../config/storeVisuals';
 import { getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
@@ -5,6 +7,8 @@ import type { GameState, Tile } from '../engine/types';
 import type { BoardShopPickSpec } from './boardPickState';
 import {
   computeChainAdjacency,
+  computeEscalatorAdjacency,
+  createDecorativeCell,
   createStoreIconSvg,
   formatTileContent,
   updateShopShelf,
@@ -66,16 +70,16 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
   container.style.setProperty('--board-cols', String(cols));
 
   const cache: BoardDomCache = { stageSignature: sig, tileRefs: new Map(), nextByTile: new Map(), endByTile: new Map() };
+  const stageGrid = getStageDef(state.mapId as StageId).rows.map((r) => r.trim().split(/\s+/));
 
   for (let floor = floors; floor >= 1; floor--) {
     for (let col = 0; col < cols; col++) {
       const tile = findTileAt(state, floor, col);
-      const cell = document.createElement('div');
       if (!tile) {
-        cell.className = 'tile tile--void';
-        container.appendChild(cell);
+        container.appendChild(createDecorativeCell(stageGrid[floors - floor]?.[col] ?? '.', floor, col));
         continue;
       }
+      const cell = document.createElement('div');
 
       cell.className = `tile tile--${tile.type}`;
       cell.dataset.tileId = tile.id;
@@ -186,6 +190,7 @@ export function renderBoard(
     const pickHovered = Boolean(pickTarget && tile.shopSlotId === pick?.hoveredShopId);
     const content = formatTileContent(state, tile, hasMultiShaft);
     const { chainLeft, chainRight } = computeChainAdjacency(state, tile, content.shop);
+    const escAdj = computeEscalatorAdjacency(state, tile);
 
     const classes = ['tile', `tile--${tile.type}`];
     if (isActiveTile) classes.push('active-tile');
@@ -200,9 +205,18 @@ export function renderBoard(
     if (content.isClosed) classes.push('is-closed');
     if (chainLeft) classes.push('chain-left');
     if (chainRight) classes.push('chain-right');
+    if (escAdj.joinUp) classes.push('esc-join-up');
+    if (escAdj.joinDown) classes.push('esc-join-down');
+    if (escAdj.splitAbove) classes.push('esc-split-above');
+    if (escAdj.splitBelow) classes.push('esc-split-below');
     if (content.level) classes.push(`chain-l${content.level}`);
     if (content.category) classes.push(`cat-${content.category}`);
     setClassesKeepingFx(cell, classes);
+    cell.title = escAdj.splitBelow
+      ? 'Separate escalator flight — does not connect to the floor below'
+      : escAdj.splitAbove
+        ? 'Separate escalator flight — does not connect to the floor above'
+        : '';
 
     const owner = content.shop?.ownerId ? state.players.find((p) => p.id === content.shop?.ownerId) : undefined;
     cell.style.borderBottom = owner ? `4px solid ${owner.color}` : '';

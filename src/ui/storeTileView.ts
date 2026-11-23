@@ -43,6 +43,72 @@ export function createStoreIconSvg(iconId: StoreIconId): Element {
   return svg;
 }
 
+export interface EscalatorAdjacency {
+  joinUp: boolean;
+  joinDown: boolean;
+  splitAbove: boolean;
+  splitBelow: boolean;
+}
+
+export function computeEscalatorAdjacency(state: GameState, tile: Tile): EscalatorAdjacency {
+  if (tile.type !== 'escalator') {
+    return { joinUp: false, joinDown: false, splitAbove: false, splitBelow: false };
+  }
+  const hasEscAbove = state.tiles[`f${tile.floor + 1}_c${tile.col}`]?.type === 'escalator';
+  const hasEscBelow = state.tiles[`f${tile.floor - 1}_c${tile.col}`]?.type === 'escalator';
+  const hasUp = Boolean(tile.neighbors.up);
+  const hasDown = Boolean(tile.neighbors.down);
+  const upSpans = Boolean(
+    tile.neighbors.up && Math.abs((state.tiles[tile.neighbors.up.targetTileId]?.floor ?? tile.floor) - tile.floor) > 1
+  );
+  const downSpans = Boolean(
+    tile.neighbors.down &&
+      Math.abs((state.tiles[tile.neighbors.down.targetTileId]?.floor ?? tile.floor) - tile.floor) > 1
+  );
+  return {
+    joinUp: hasUp && (hasEscAbove || upSpans),
+    joinDown: hasDown && (hasEscBelow || downSpans),
+    splitAbove: !hasUp && hasEscAbove,
+    splitBelow: !hasDown && hasEscBelow,
+  };
+}
+
+export function createDecorativeCell(token: string, floor: number, col: number): HTMLElement {
+  const cell = document.createElement('div');
+  if (token !== '=' && token !== 'S' && token !== 'T') {
+    cell.className = 'tile tile--void';
+    return cell;
+  }
+  const isHallway = token === '=';
+  cell.className = isHallway ? 'tile tile--hallway' : 'tile tile--esc-shaft';
+  cell.setAttribute('aria-hidden', 'true');
+  cell.title = isHallway ? '0-step mall walkway into the crossover escalator' : 'Express escalator shaft (non-stop ride)';
+
+  const header = Object.assign(document.createElement('div'), { className: 'tile-header' });
+  header.appendChild(Object.assign(document.createElement('span'), { textContent: `${floor}F:${col + 1}` }));
+
+  const body = Object.assign(document.createElement('div'), { className: 'tile-body' });
+  const titleRow = Object.assign(document.createElement('div'), { className: 'tile-title-row' });
+  if (!isHallway) {
+    const iconEl = Object.assign(document.createElement('span'), { className: 'tile-icon' });
+    iconEl.appendChild(createStoreIconSvg('escalator'));
+    titleRow.appendChild(iconEl);
+  }
+  titleRow.appendChild(
+    Object.assign(document.createElement('div'), {
+      className: 'tile-name',
+      textContent: isHallway ? '← WALKWAY →' : 'EXPRESS ↕',
+    })
+  );
+  const statsEl = Object.assign(document.createElement('div'), {
+    className: 'tile-stats',
+    textContent: isHallway ? 'Pass-through' : 'Tower Shaft',
+  });
+  body.append(titleRow, statsEl);
+  cell.append(header, body, Object.assign(document.createElement('div'), { className: 'tile-tokens' }));
+  return cell;
+}
+
 export function computeChainAdjacency(
   state: GameState,
   tile: Tile,
@@ -104,6 +170,7 @@ export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: b
       };
     case 'escalator': {
       const { up, down } = tile.neighbors;
+      const escAdj = computeEscalatorAdjacency(state, tile);
       let name = 'ESC';
       if (up && down) name = 'ESC ↕ (X)';
       else if (up) {
@@ -121,7 +188,15 @@ export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: b
           name = dest && Math.abs(dest.floor - tile.floor) > 1 ? `ESC ${arrow} ${dest.floor}F` : `ESC ${arrow}`;
         }
       }
-      return { ...base, name, iconId: 'escalator' };
+      const stats =
+        up && down
+          ? 'Fork ↑ / ↓'
+          : escAdj.splitBelow
+            ? 'Up only'
+            : escAdj.splitAbove
+              ? 'Down only'
+              : undefined;
+      return { ...base, name, ...(stats ? { stats } : {}), iconId: 'escalator' };
     }
     case 'shop': {
       const shop = tile.shopSlotId ? state.shops[tile.shopSlotId] : undefined;

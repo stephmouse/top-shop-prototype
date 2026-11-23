@@ -162,6 +162,72 @@ button.primary:hover:not(:disabled) {
   border-color: #d29922;
 }
 .tile--escalator .tile-icon { color: #fbbf24; }
+.tile--escalator.esc-join-up {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top-style: dashed;
+  border-top-color: rgba(251, 191, 36, 0.55);
+}
+.tile--escalator.esc-join-down {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  border-bottom-style: dashed;
+  border-bottom-color: rgba(251, 191, 36, 0.55);
+}
+.tile--escalator.esc-join-up.esc-join-down {
+  border-left-color: #f59e0b;
+  border-right-color: #f59e0b;
+}
+.tile--escalator.esc-split-below {
+  border-bottom: 5px solid #94a3b8;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  background:
+    linear-gradient(180deg, transparent 74%, rgba(15, 23, 42, 0.72) 100%),
+    repeating-linear-gradient(-35deg, rgba(210, 153, 34, 0.08) 0 6px, transparent 6px 12px),
+    #282115;
+}
+.tile--escalator.esc-split-above {
+  border-top: 5px solid #94a3b8;
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  background:
+    linear-gradient(0deg, transparent 74%, rgba(15, 23, 42, 0.72) 100%),
+    repeating-linear-gradient(-35deg, rgba(210, 153, 34, 0.08) 0 6px, transparent 6px 12px),
+    #282115;
+}
+
+.tile--hallway {
+  background:
+    linear-gradient(90deg, rgba(148, 163, 184, 0.14) 0 4px, transparent 4px 10px),
+    linear-gradient(180deg, #1b2434 0%, #141c28 50%, #1b2434 100%);
+  border-top: 2px solid #475569;
+  border-bottom: 2px solid #475569;
+  border-left: 1px dashed rgba(148, 163, 184, 0.35);
+  border-right: 1px dashed rgba(148, 163, 184, 0.35);
+  border-radius: 2px;
+  opacity: 0.78;
+  pointer-events: none;
+}
+.tile--hallway .tile-header,
+.tile--hallway .tile-name,
+.tile--hallway .tile-stats {
+  color: #94a3b8;
+}
+
+.tile--esc-shaft {
+  background: repeating-linear-gradient(-35deg, rgba(210, 153, 34, 0.11) 0 6px, transparent 6px 12px), #231c11;
+  border-left: 2px solid #d29922;
+  border-right: 2px solid #d29922;
+  border-top: 2px dashed rgba(251, 191, 36, 0.45);
+  border-bottom: 2px dashed rgba(251, 191, 36, 0.45);
+  border-radius: 0;
+  opacity: 0.88;
+  pointer-events: none;
+}
+.tile--esc-shaft .tile-icon { color: #fbbf24; }
+.tile--esc-shaft .tile-name { color: #fde68a; }
+.tile--esc-shaft .tile-stats { color: #cbd5e1; }
 
 .tile--shop {
   background: linear-gradient(180deg, #1f2839 0%, #151c29 100%);

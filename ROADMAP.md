@@ -42,4 +42,5 @@
 
 ## Future / Optional (Maybe Later)
 - **Tier 3 — Hybrid 2D Animated Mall Cross-Section (PixiJS + HTML/CSS UI):** Replace the CSS Grid board with a 2D WebGL canvas (`PixiJS`) featuring animated scrolling escalator treads, moving elevator cars between floors, walking customers/cashiers inside open stores, character reaction portraits on Events/Bank visits, illustrated icons across all 264 items, and smooth camera zoom/pan for larger stages (`16×4`, `11×5`), while keeping menus/modals in HTML/CSS.
+  - **Physical Escalator & Hallway Token Paths:** Once actual mall visuals are in place, animate player tokens so they physically follow the escalator steps/rails up and down on screen (including multi-floor express towers and crossover hallways), rather than the placeholder direct tile-to-tile glide.
 - **AI Bot Players:** Heuristic bot controller in `src/engine/bot.ts` (auto-picks direction toward unowned/own stores, buys/delivers/redeems points) for solo play.
