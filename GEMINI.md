@@ -2,8 +2,9 @@
 
 ## Environment & Commands (Windows PowerShell)
 - Always use `npm.cmd` instead of `npm` (PowerShell script execution policy blocks `npm.ps1`).
+- Automated tests: `npm.cmd test` (`vitest run`).
 - Type-check & build: `npm.cmd run build` (`tsc --noEmit && vite build`).
-- Always run `npm.cmd run build` after edits and fix any TypeScript errors before finishing.
+- Always run `npm.cmd test` and `npm.cmd run build` after edits and fix any test or TypeScript errors before finishing.
 
 ## Architecture & Code Discipline
 - **Strict Separation of Concerns:**

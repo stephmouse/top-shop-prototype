@@ -72,6 +72,7 @@ Contributions, playtest reports, bug fixes, and PRs are welcome! Look at [ROADMA
 ```bash
 npm install        # Install dependencies
 npm run dev        # Start Vite dev server (localhost:5173 + LAN host)
+npm test           # Run automated engine & catalog test suite (Vitest)
 npm run build      # Type-check (tsc --noEmit) and bundle to dist/
 npm run preview    # Preview the production bundle locally
 ```
