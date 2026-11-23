@@ -1,54 +1,28 @@
-import { sanitizeAvatarSpec } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
 import type { GameState } from '../engine/types';
-import { HEX_COLOR_RE, normalizeRoomCode } from '../net/protocol';
+import { normalizeRoomCode } from '../net/protocol';
 import type { ConnectedPeerInfo } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
-import { createAvatarElement } from './avatarSvg';
 import { addLobbySection, mk, mkBtn, renderActiveRoomView } from './lobbyRoomView';
+import {
+  createProfileEditorRow,
+  GUEST_PROFILE_STORAGE_KEY,
+  loadUserProfile,
+  saveUserProfile,
+} from './playerProfile';
+import type { UserProfile } from './playerProfile';
 
-export const GUEST_PROFILE_STORAGE_KEY = 'top_shop_guest_profile_v1';
-
-interface GuestProfile { name: string; color: string; avatar: AvatarSpec; }
-
-function getLocalStore(): Storage | null {
-  try { return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null; } catch { return null; }
-}
-
-function loadGuestProfile(fallback: { name: string; color: string; avatar?: AvatarSpec }): GuestProfile {
-  const def: GuestProfile = {
-    name: fallback.name.trim().slice(0, 18) || 'Guest',
-    color: HEX_COLOR_RE.test(fallback.color) ? fallback.color : '#3498db',
-    avatar: sanitizeAvatarSpec(fallback.avatar, 1),
-  };
-  const store = getLocalStore();
-  if (!store) return def;
-  try {
-    const rawText = store.getItem(GUEST_PROFILE_STORAGE_KEY);
-    if (!rawText) return def;
-    const raw: unknown = JSON.parse(rawText);
-    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return def;
-    const r = raw as Record<string, unknown>;
-    return {
-      name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 18) : def.name,
-      color: typeof r.color === 'string' && HEX_COLOR_RE.test(r.color) ? r.color : def.color,
-      avatar: sanitizeAvatarSpec(r.avatar, 1),
-    };
-  } catch { return def; }
-}
-
-function saveGuestProfile(prof: GuestProfile): void {
-  const store = getLocalStore();
-  if (!store) return;
-  try { store.setItem(GUEST_PROFILE_STORAGE_KEY, JSON.stringify(prof)); } catch { /* Ignore quota errors */ }
-}
+export { GUEST_PROFILE_STORAGE_KEY };
 
 export interface LobbyModalOptions {
   netSession: MultiplayerSession;
   getState: () => GameState;
   getDefaultProfile: () => { name: string; color: string; avatar?: AvatarSpec };
   onAddPlayerSlot?: (peer: ConnectedPeerInfo) => void;
-  onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
+  onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onUpdateHostSeat?: (seatIndex: number, next: UserProfile) => void;
+  onOpenMatchSetup?: () => void;
+  onProfileChange?: (next: UserProfile) => void;
 }
 
 export interface LobbyModalController {
@@ -71,7 +45,7 @@ function mkCodeInput(value: string, maxLength: number, placeholder: string, onCo
 }
 
 export function createLobbyModal(options: LobbyModalOptions): LobbyModalController {
-  const profile = loadGuestProfile(options.getDefaultProfile());
+  let profile = loadUserProfile(options.getDefaultProfile());
   let draftHostCode = '';
   let draftJoinCode = '';
   let visible = false;
@@ -110,22 +84,19 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
   }
 
   function renderOfflineView(): void {
-    const profileSec = addLobbySection('Your Guest Profile (When Joining)');
-    const profileRow = mk('div', 'setup-player-row');
-    const avatarBtn = Object.assign(mk('button', 'setup-avatar-btn'), { type: 'button' as const, title: 'Customize Guest Standee' });
-    avatarBtn.style.borderColor = profile.color;
-    avatarBtn.appendChild(createAvatarElement(profile.avatar, profile.color));
-    const openCustomize = () => options.onEditAvatar?.(profile.avatar, profile.color, (next) => {
-      profile.avatar = next; saveGuestProfile(profile); renderBody();
-    });
-    avatarBtn.addEventListener('click', openCustomize);
-    const nameInput = Object.assign(mk('input', 'setup-input'), { type: 'text', value: profile.name, maxLength: 18, placeholder: 'Your Name' });
-    nameInput.addEventListener('input', () => { profile.name = nameInput.value.trim() || 'Guest'; saveGuestProfile(profile); });
-    const colorInput = Object.assign(mk('input', 'setup-color-picker'), { type: 'color', value: profile.color });
-    colorInput.addEventListener('input', () => { profile.color = colorInput.value; avatarBtn.style.borderColor = colorInput.value; saveGuestProfile(profile); });
-    colorInput.addEventListener('change', () => { profile.color = colorInput.value; saveGuestProfile(profile); renderBody(); });
-    profileRow.append(avatarBtn, nameInput, colorInput, mkBtn('Customize', openCustomize));
-    profileSec.appendChild(profileRow);
+    const profileSec = addLobbySection('Your Standee & Guest Profile');
+    profileSec.appendChild(createProfileEditorRow({
+      profile,
+      avatarTitle: 'Customize Guest Standee',
+      onChange: (next) => {
+        profile = next;
+        saveUserProfile(profile);
+        options.onProfileChange?.(profile);
+      },
+      onEditAvatar: options.onEditAvatar
+        ? (cur, col, onSave) => options.onEditAvatar!(cur, col, onSave, 'Customize Guest Standee')
+        : undefined,
+    }));
 
     const hostSec = addLobbySection('Host a Private Room');
     hostSec.appendChild(mk('div', 'setup-muted', 'Mix local couch seats and online friends across P1–P6. Share the room code after hosting.'));
@@ -143,7 +114,7 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     const joinRow = mk('div', 'setup-player-row');
     const joinInput = mkCodeInput(draftJoinCode, 12, 'Enter Room Code (e.g. 7K9P2M)', (c) => { draftJoinCode = c; });
     const triggerJoin = () => {
-      saveGuestProfile(profile);
+      saveUserProfile(profile);
       runConnect(
         `Joining room ${draftJoinCode || '...'}...`,
         () => options.netSession.joinRoom(draftJoinCode, profile),
@@ -171,6 +142,18 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
         netSession: options.netSession,
         showStatus,
         onAddPlayerSlot: options.onAddPlayerSlot,
+        guestProfile: profile,
+        onSaveGuestProfile: (next) => {
+          profile = next;
+          saveUserProfile(profile);
+          options.onProfileChange?.(profile);
+          options.netSession.updateMyProfile(profile);
+          showStatus('Profile updated & synced!');
+          renderBody();
+        },
+        onEditAvatar: options.onEditAvatar,
+        onUpdateHostSeat: options.onUpdateHostSeat,
+        onOpenMatchSetup: options.onOpenMatchSetup,
       });
     }
   }
@@ -180,6 +163,7 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
   return {
     el: backdrop,
     open: (prefillRoomCode) => {
+      profile = loadUserProfile(options.getDefaultProfile());
       if (prefillRoomCode) draftJoinCode = normalizeRoomCode(prefillRoomCode);
       visible = true;
       backdrop.hidden = false;

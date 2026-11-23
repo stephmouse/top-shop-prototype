@@ -4,6 +4,7 @@ import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { GameAction } from './actions';
 import { handleRedeemBankReward } from './bank';
+import { randomInt } from './rng';
 import {
   handlePickEventCard,
   handleResolveEventStore,
@@ -73,15 +74,34 @@ export function createInitialGameState(
     isBot: Boolean(input.isBot),
   }));
 
+  let nextSeed = seed;
+  let startIdx = 0;
+  if (config.startingPlayer === 'random') {
+    const pick = randomInt(seed, 0, players.length - 1);
+    nextSeed = pick.nextSeed;
+    startIdx = pick.value;
+  } else if (
+    typeof config.startingPlayer === 'number' &&
+    Number.isInteger(config.startingPlayer) &&
+    config.startingPlayer >= 0 &&
+    config.startingPlayer < players.length
+  ) {
+    startIdx = config.startingPlayer;
+  }
+  const starterNote =
+    config.startingPlayer === 'random' || startIdx !== 0
+      ? ` ${players[startIdx]!.name} goes first${config.startingPlayer === 'random' ? ' (random)' : ''}!`
+      : '';
+
   return {
-    seed,
+    seed: nextSeed,
     mapId: stageId,
     turnNumber: 1,
     month: 0,
     year: 1,
     totalMonths: 0,
-    roundStartPlayerIndex: 0,
-    activePlayerIndex: 0,
+    roundStartPlayerIndex: startIdx,
+    activePlayerIndex: startIdx,
     phase: 'ROLL_PENCIL',
     lastRoll: null,
     remainingSteps: 0,
@@ -105,7 +125,7 @@ export function createInitialGameState(
     segmentPools,
     lastPurchaseReceipt: null,
     winnerId: null,
-    log: [`Match started at Floor 1 Bank (${stageDef.name} · Year 1, April).`],
+    log: [`Match started at Floor 1 Bank (${stageDef.name} · Year 1, April).${starterNote}`],
   };
 }
 

@@ -79,6 +79,16 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
 
   const rawCfg = isRecord(raw.config) ? raw.config : {};
   const maxBankrupt = Math.max(1, players.length - 1);
+  const rawStarter = rawCfg.startingPlayer;
+  const startingPlayer: MatchConfig['startingPlayer'] =
+    rawStarter === 'random'
+      ? 'random'
+      : typeof rawStarter === 'number' &&
+          Number.isInteger(rawStarter) &&
+          rawStarter >= 0 &&
+          rawStarter < players.length
+        ? rawStarter
+        : 0;
   const config: MatchConfig = {
     targetAssets: clampInt(rawCfg.targetAssets, 1000, 1000000, DEFAULT_MATCH_CONFIG.targetAssets),
     startingCash: clampInt(rawCfg.startingCash, 500, 500000, DEFAULT_MATCH_CONFIG.startingCash),
@@ -88,6 +98,7 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
       rawCfg.showMonthPopup === undefined
         ? DEFAULT_MATCH_CONFIG.showMonthPopup !== false
         : Boolean(rawCfg.showMonthPopup),
+    startingPlayer,
   };
 
   return { stageId, players, config };
@@ -172,6 +183,16 @@ export function saveAutoSavedMatch(state: GameState): void {
     storage.setItem(ACTIVE_MATCH_STORAGE_KEY, JSON.stringify(state));
   } catch {
     // Ignore storage quota/availability errors
+  }
+}
+
+export function clearAutoSavedMatch(): void {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    storage.removeItem(ACTIVE_MATCH_STORAGE_KEY);
+  } catch {
+    // Ignore storage availability errors
   }
 }
 

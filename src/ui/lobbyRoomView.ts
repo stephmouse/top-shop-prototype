@@ -1,8 +1,13 @@
+import type { AvatarSpec } from '../config/avatarTypes';
 import { MAX_PLAYERS } from '../config/balance';
 import type { GameState } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
+import { createAvatarElement } from './avatarSvg';
+import { resolvePlayerAvatar } from './hudView';
+import { createProfileEditorRow } from './playerProfile';
+import type { UserProfile } from './playerProfile';
 
 export interface ActiveRoomViewContext {
   role: Exclude<NetRole, 'offline'>;
@@ -11,6 +16,11 @@ export interface ActiveRoomViewContext {
   netSession: MultiplayerSession;
   showStatus: (message: string, isError?: boolean) => void;
   onAddPlayerSlot?: (peer: ConnectedPeerInfo) => void;
+  guestProfile?: UserProfile;
+  onSaveGuestProfile?: (next: UserProfile) => void;
+  onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onUpdateHostSeat?: (seatIndex: number, next: UserProfile) => void;
+  onOpenMatchSetup?: () => void;
 }
 
 export const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, textContent = '') =>
@@ -58,15 +68,36 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
   );
   topRow.append(pillRow, mkBtn('Disconnect', () => { netSession.disconnect(); showStatus('Disconnected from online room.'); }));
 
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?room=${roster.roomCode}`;
+  const origin = typeof window !== 'undefined' && window.location ? window.location.origin + window.location.pathname : '/';
+  const inviteUrl = `${origin}?room=${roster.roomCode}`;
   const shareRow = mk('div', 'setup-btn-row');
   shareRow.append(
     mkBtn('Copy Room Code', () => void copyText(roster.roomCode).then((ok) => showStatus(ok ? `Copied code ${roster.roomCode}!` : `Room code: ${roster.roomCode}`))),
     mkBtn('Copy Invite Link', () => void copyText(inviteUrl).then((ok) => showStatus(ok ? 'Invite link copied!' : `Share link: ${inviteUrl}`)), 'primary'),
     mkBtn('Open Guest Tab', () => window.open(inviteUrl, '_blank', 'noopener,noreferrer'))
   );
+  if (role === 'host' && ctx.onOpenMatchSetup) {
+    shareRow.appendChild(mkBtn('Match Setup & Rules', ctx.onOpenMatchSetup));
+  }
   infoSec.append(topRow, shareRow);
   container.appendChild(infoSec);
+
+  if (role === 'guest' && ctx.guestProfile && ctx.onSaveGuestProfile) {
+    const profSec = addLobbySection('Your Standee & Profile');
+    profSec.appendChild(mk('div', 'setup-muted lobby-profile-note', 'Edit your name, color, or standee live — changes sync to everyone.'));
+    let draftProf = { ...ctx.guestProfile };
+    profSec.appendChild(createProfileEditorRow({
+      profile: draftProf,
+      avatarTitle: 'Customize Your Standee',
+      saveLabel: 'Update Profile',
+      onChange: (next) => { draftProf = next; },
+      onCommit: (next) => { draftProf = next; ctx.onSaveGuestProfile?.(next); },
+      onEditAvatar: ctx.onEditAvatar
+        ? (cur, col, onSave) => ctx.onEditAvatar!(cur, col, onSave, 'Customize Your Standee')
+        : undefined,
+    }));
+    container.appendChild(profSec);
+  }
 
   if (role === 'host' && waitingPeers.length > 0) {
     const waitSec = addLobbySection('Waiting Spectators (No Seat)', 'lobby-waiting-banner');
@@ -93,14 +124,45 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
   }
 
   const seatsSec = addLobbySection(`Seat Assignments (P1–P${state.players.length})`);
+  const customAvatars = netSession.getCustomAvatars();
   state.players.forEach((player, idx) => {
     const ownerToken = roster.seatOwners[idx] ?? HOST_TOKEN;
     const isMine = canClientAct(role, roster, myToken, idx);
     const ownerPeer = roster.peers.find((p) => p.clientToken === ownerToken);
+    const resolvedAv = resolvePlayerAvatar(state, idx, roster, customAvatars);
+    const canHostEditSeat = role === 'host' && ownerToken === HOST_TOKEN && Boolean(ctx.onUpdateHostSeat);
 
     const row = mk('div', 'lobby-seat-row');
     const left = mk('div', 'lobby-seat-info');
-    left.append(mk('span', 'setup-player-tag', `P${idx + 1}`), mkDot(player.color), mk('span', '', player.name));
+    left.appendChild(mk('span', 'setup-player-tag', `P${idx + 1}`));
+
+    if (canHostEditSeat && ctx.onEditAvatar) {
+      const avBtn = Object.assign(mk('button', 'lobby-seat-avatar'), { type: 'button' as const, title: `Customize P${idx + 1} Standee` });
+      avBtn.style.borderColor = player.color;
+      avBtn.appendChild(createAvatarElement(resolvedAv, player.color));
+      avBtn.addEventListener('click', () => {
+        ctx.onEditAvatar!(resolvedAv, player.color, (nextAv) => {
+          ctx.onUpdateHostSeat!(idx, { name: player.name, color: player.color, avatar: nextAv });
+        }, `Customize P${idx + 1} Standee`);
+      });
+      left.appendChild(avBtn);
+    } else {
+      const avWrap = mk('span', 'lobby-seat-avatar is-static');
+      avWrap.style.borderColor = player.color;
+      avWrap.appendChild(createAvatarElement(resolvedAv, player.color));
+      left.append(avWrap, mk('span', '', player.name));
+    }
+
+    if (canHostEditSeat) {
+      const inlineEdit = mk('div', 'lobby-seat-inline-edit');
+      const nameIn = Object.assign(mk('input', 'setup-input lobby-seat-name-input'), { type: 'text', value: player.name, maxLength: 18, placeholder: `Player ${idx + 1}` });
+      const colIn = Object.assign(mk('input', 'setup-color-picker'), { type: 'color', value: player.color });
+      const commitSeat = () => ctx.onUpdateHostSeat!(idx, { name: nameIn.value.trim() || `Player ${idx + 1}`, color: colIn.value, avatar: resolvedAv });
+      nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commitSeat(); } });
+      colIn.addEventListener('change', commitSeat);
+      inlineEdit.append(nameIn, colIn, mkBtn('Apply', commitSeat));
+      left.appendChild(inlineEdit);
+    }
     if (isMine) left.appendChild(mk('span', 'net-seat-badge is-you', 'YOU'));
 
     if (role === 'host') {

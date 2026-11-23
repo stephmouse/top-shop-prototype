@@ -141,6 +141,7 @@ export interface MatchConfig {
   bankruptLimit: number;
   finishRoundOnWin: boolean;
   showMonthPopup?: boolean;
+  startingPlayer?: 'random' | number;
 }
 
 export interface PurchaseReceipt {

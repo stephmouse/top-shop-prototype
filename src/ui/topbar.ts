@@ -18,6 +18,7 @@ export interface TopbarOptions {
   onToggleAutoStep: (enabled: boolean) => void;
   onToggleSound?: (enabled: boolean) => void;
   onSelectStage: (stageId: StageId) => void;
+  onOpenHome?: () => void;
   onOpenSetup: () => void;
   onOpenLobby: () => void;
   onSaveMatch: () => void;
@@ -78,6 +79,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   controls.appendChild(stageSelect);
 
   let saveTimer: number | null = null;
+  const homeBtn = options.onOpenHome ? makeButton('Home', options.onOpenHome) : null;
   const setupBtn = makeButton('Match Setup', options.onOpenSetup, true);
   const onlineBtn = makeButton('Online Lobby', options.onOpenLobby);
   onlineBtn.className = 'topbar-online-btn';
@@ -91,7 +93,8 @@ export function createTopbar(options: TopbarOptions): TopbarController {
     }, 1500);
   });
   const loadBtn = makeButton('Load', options.onLoadMatch);
-  controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
+  if (homeBtn) controls.append(homeBtn, setupBtn, onlineBtn, saveBtn, loadBtn);
+  else controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
 
   const newMatchBtns: HTMLButtonElement[] = [];
   for (const count of [2, 3, 4, 5, 6]) {
@@ -107,6 +110,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
       const isGuest = netInfo?.role === 'guest';
       stageSelect.value = stageId;
       stageSelect.disabled = isGuest;
+      if (homeBtn) homeBtn.disabled = isGuest;
       setupBtn.disabled = isGuest;
       saveBtn.disabled = isGuest;
       loadBtn.disabled = isGuest || !hasSavedMatch;

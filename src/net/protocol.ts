@@ -32,6 +32,7 @@ export interface RoomRoster {
 
 export type ClientToHostMessage =
   | { type: 'HELLO'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
+  | { type: 'UPDATE_PROFILE'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
   | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean };
 
@@ -187,7 +188,7 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
 
 export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
   if (!isRecord(raw) || !isShortStr(raw.clientToken, 64) || typeof raw.type !== 'string') return false;
-  if (raw.type === 'HELLO') {
+  if (raw.type === 'HELLO' || raw.type === 'UPDATE_PROFILE') {
     return (
       isShortStr(raw.name, 40) &&
       typeof raw.color === 'string' &&

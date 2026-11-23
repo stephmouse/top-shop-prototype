@@ -1,10 +1,11 @@
 import { MAX_PLAYERS, PLAYER_COLORS } from './config/balance';
 import type { StageId } from './config/maps';
-import type { DirectionChoice, GameAction } from './engine/actions';
+import type { GameAction } from './engine/actions';
 import { getActivePlayer } from './engine/helpers';
 import { computeMovePreview } from './engine/movePreview';
 import { applyAction, createInitialGameState } from './engine/state';
 import type { GameState } from './engine/types';
+import { HOST_TOKEN } from './net/protocol';
 import type { ConnectedPeerInfo } from './net/protocol';
 import { createMultiplayerSession } from './net/session';
 import { renderActionPanel } from './ui/actionPanel';
@@ -12,27 +13,31 @@ import { createAvatarModal } from './ui/avatarModal';
 import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './ui/boardView';
 import { buildBoardShopPick } from './ui/boardPickState';
 import { createFxOverlay } from './ui/fxOverlay';
+import { createHomeModal } from './ui/homeModal';
+import { applyHostSeatEdit, applyUnifiedProfileChange, buildExtendedLocalPlayers } from './ui/hostProfileSync';
 import { bindKeyboardControls } from './ui/keyboard';
+import { createLobbyModal } from './ui/lobbyModal';
 import { renderMatchLog } from './ui/matchLogView';
+import { createMovementDriver } from './ui/movementDriver';
 import {
-  extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot, loadStoredSetup,
-  sanitizeMatchSetup, saveAutoSavedMatch, saveManualMatchSlot, saveStoredSetup,
+  clearAutoSavedMatch, extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot,
+  loadStoredSetup, sanitizeMatchSetup, saveAutoSavedMatch, saveManualMatchSlot, saveStoredSetup,
 } from './ui/persistence';
 import type { MatchSetupData } from './ui/persistence';
 import { resetPlayersHudCache, stageCashbackHud } from './ui/playerCardView';
+import { loadUserProfile } from './ui/playerProfile';
+import type { UserProfile } from './ui/playerProfile';
 import { renderRouteOverlay } from './ui/routeOverlay';
-import { createSoundFx } from './ui/soundFx';
-import { createLobbyModal } from './ui/lobbyModal';
 import { createSetupModal } from './ui/setupModal';
+import { createSoundFx } from './ui/soundFx';
 import { createTopbar } from './ui/topbar';
 import { createTurnCueTracker, shouldWarnBeforeUnload } from './ui/turnCue';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
 
-let autoStepEnabled = false, showRoutes = true, guidedWalkActive = false, awaitingRemoteStepAck = false;
-let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = null, stepTimer: number | null = null, ackTimer: number | null = null;
-let guidedChoices: DirectionChoice[] = [];
+let autoStepEnabled = false, showRoutes = true, suppressSyncRender = false;
+let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = null;
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
 let prevRenderedState: GameState | null = null;
 
@@ -43,13 +48,17 @@ let state: GameState =
 
 const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, textContent = '') =>
   Object.assign(document.createElement(tag), { className, textContent });
+const getPrimaryFallback = () => ({
+  name: currentSetup.players[0]?.name ?? 'Player 1',
+  color: currentSetup.players[0]?.color ?? PLAYER_COLORS[0]!,
+  avatar: currentSetup.players[0]?.avatar,
+});
 
 const shell = mk('div', 'app-shell'), hudEl = mk('section', 'hud-row'), boardStageEl = mk('section', 'board-stage');
 const boardEl = mk('div', 'board-grid'), tokensLayerEl = mk('div', 'tokens-layer');
 const routeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 routeSvgEl.setAttribute('class', 'route-layer');
-const soundFx = createSoundFx();
-const turnCue = createTurnCueTracker(soundFx);
+const soundFx = createSoundFx(), turnCue = createTurnCueTracker(soundFx);
 const fxOverlay = createFxOverlay(boardEl, tokensLayerEl, soundFx);
 boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl, fxOverlay.el);
 
@@ -61,29 +70,37 @@ function applyHostAction(action: GameAction): GameState {
   if (next === state) return state;
   state = next; saveAutoSavedMatch(state); render(); return state;
 }
+function broadcastSuppressed(nextState: GameState): void {
+  suppressSyncRender = true;
+  try { netSession.broadcastHostState(nextState); } finally { suppressSyncRender = false; }
+}
 
 const netSession = createMultiplayerSession({
   getState: () => state,
   onApplyHostAction: applyHostAction,
-  onReceiveRemoteState: (remoteState) => { clearAckTimer(); awaitingRemoteStepAck = false; state = remoteState; lobbyModal.refresh(); render(); },
-  onSyncHostState: (synced) => { state = synced; saveAutoSavedMatch(state); render(); },
+  onReceiveRemoteState: (remoteState) => { moveDriver.clearAckTimer(); moveDriver.clearAwaitingAck(); state = remoteState; lobbyModal.refresh(); render(); },
+  onSyncHostState: (synced) => { state = synced; saveAutoSavedMatch(state); if (!suppressSyncRender) render(); },
   onSessionChange: () => renderSessionUi(),
   onError: (msg) => {
-    clearAckTimer(); awaitingRemoteStepAck = false;
-    if (netSession.getRole() === 'offline' && !lobbyModal.isOpen()) { setupModal.close(); lobbyModal.open(); }
+    moveDriver.clearAckTimer(); moveDriver.clearAwaitingAck();
+    if (netSession.getRole() === 'offline' && !lobbyModal.isOpen() && !homeModal.isOpen()) { setupModal.close(); lobbyModal.open(); }
     lobbyModal.showStatus(msg, true); console.warn('[TopShop Net]', msg);
   },
 });
 (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
+const moveDriver = createMovementDriver({
+  netSession, getState: () => state, isAutoStepEnabled: () => autoStepEnabled, onApplyHostAction: applyHostAction,
+});
+
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
-  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; hoveredPickShopId = null; turnCue.reset(); resetPlayersHudCache(hudEl); tokensLayerEl.innerHTML = ''; fxOverlay.clear();
+  moveDriver.cancel(); moveDriver.clearAwaitingAck(); hoveredEndTileId = null; hoveredPickShopId = null;
+  turnCue.reset(); resetPlayersHudCache(hudEl); tokensLayerEl.innerHTML = ''; fxOverlay.clear();
   prevRenderedState = null; state = nextState; currentSetup = nextSetup;
   saveStoredSetup(nextSetup); saveAutoSavedMatch(state);
-  netSession.broadcastHostState(state);
+  broadcastSuppressed(state);
   render();
 }
-
 const startMatchFromSetup = (setup: MatchSetupData) => {
   const clean = sanitizeMatchSetup(setup) ?? currentSetup;
   commitMatchState(createInitialGameState(clean.players, clean.config, Date.now() & 0xffffff, clean.stageId), clean);
@@ -91,31 +108,64 @@ const startMatchFromSetup = (setup: MatchSetupData) => {
 const loadSavedState = (saved: GameState) => commitMatchState(saved, extractSetupFromState(saved));
 const saveCurrentMatch = () => { const env = saveManualMatchSlot(state); setupModal.refreshSaveStatus(); syncTopbar(true); return env; };
 
+function applyUnifiedProfile(next: UserProfile): void {
+  const res = applyUnifiedProfileChange(state, currentSetup, netSession.getRole(), next);
+  currentSetup = res.nextSetup;
+  if (res.stateChanged) {
+    state = res.nextState;
+    if (netSession.getRole() === 'host') broadcastSuppressed(state);
+    render();
+  }
+}
+function updateHostSeat(seatIdx: number, next: UserProfile): void {
+  const roster = netSession.getRoster();
+  if (netSession.getRole() !== 'host' || (roster?.seatOwners[seatIdx] ?? HOST_TOKEN) !== HOST_TOKEN) return;
+  const res = applyHostSeatEdit(state, currentSetup, seatIdx, next);
+  state = res.nextState; currentSetup = res.nextSetup;
+  broadcastSuppressed(state);
+  render(); lobbyModal.refresh();
+}
+
 const avatarModal = createAvatarModal();
 const setupModal = createSetupModal({
   initialSetup: currentSetup, onStartMatch: startMatchFromSetup, onSaveMatch: saveCurrentMatch, onLoadMatch: loadSavedState,
   onEditAvatar: (idx, cur, col, onSave) => avatarModal.open(cur, col, `Customize Player ${idx + 1} Standee`, onSave),
+  getOnlineContext: () => ({ role: netSession.getRole(), roster: netSession.getRoster(), customAvatars: netSession.getCustomAvatars() }),
+  onOpenLobby: () => lobbyModal.open(),
 });
-
-const addPlayerSlotForPeer = (peer: ConnectedPeerInfo) => {
-  if (netSession.getRole() !== 'host' || state.players.length >= MAX_PLAYERS) return;
-  const peerImg = netSession.getCustomAvatars()[peer.clientToken];
-  const players = [
-    ...state.players.map(({ name, color, isBot, avatar }) => ({ name, color, isBot, avatar })),
-    { name: peer.name, color: peer.color, isBot: false, ...(peer.avatar ? { avatar: peerImg ? { ...peer.avatar, customImage: peerImg } : peer.avatar } : {}) },
-  ];
-  startMatchFromSetup({ ...currentSetup, players });
-  netSession.assignSeat(state.players.length - 1, peer.clientToken);
-  lobbyModal.showStatus(`Added Player ${state.players.length} slot for ${peer.name}.`);
-};
+const openSetup = () => { homeModal.close(); lobbyModal.close(); setupModal.open(currentSetup); };
+const openLobby = (code?: string) => { homeModal.close(); setupModal.close(); lobbyModal.open(code); };
 
 const lobbyModal = createLobbyModal({
   netSession, getState: () => state,
   getDefaultProfile: () => ({ name: currentSetup.players[1]?.name ?? 'Guest', color: currentSetup.players[1]?.color ?? PLAYER_COLORS[1]!, avatar: currentSetup.players[1]?.avatar }),
-  onAddPlayerSlot: addPlayerSlotForPeer,
-  onEditAvatar: (cur, col, onSave) => avatarModal.open(cur, col, 'Customize Guest Standee', onSave),
+  onAddPlayerSlot: (peer: ConnectedPeerInfo) => {
+    if (netSession.getRole() !== 'host' || state.players.length >= MAX_PLAYERS) return;
+    const players = buildExtendedLocalPlayers(currentSetup);
+    startMatchFromSetup({ ...currentSetup, players });
+    netSession.assignSeat(players.length - 1, peer.clientToken);
+    lobbyModal.showStatus(`Added Player ${players.length} slot for ${peer.name}.`);
+  },
+  onEditAvatar: (cur, col, onSave, title = 'Customize Guest Standee') => avatarModal.open(cur, col, title, onSave),
+  onUpdateHostSeat: updateHostSeat, onOpenMatchSetup: openSetup, onProfileChange: applyUnifiedProfile,
 });
-const openSetup = () => { lobbyModal.close(); setupModal.open(currentSetup); };
+
+const homeModal = createHomeModal({
+  getState: () => state, getProfile: () => loadUserProfile(getPrimaryFallback()),
+  onUpdateProfile: applyUnifiedProfile,
+  onEditAvatar: (cur, col, onSave, title = 'Customize Your Standee') => avatarModal.open(cur, col, title, onSave),
+  onPlayLocal: () => setupModal.open(currentSetup),
+  onHostOnline: async (customCode) => {
+    const code = await netSession.hostRoom(customCode);
+    syncTopbar(); lobbyModal.open(); lobbyModal.showStatus(`Room ${code} ready! Share the code or invite link.`);
+    return code;
+  },
+  onJoinOnline: async (roomCode, prof) => { applyUnifiedProfile(prof); await netSession.joinRoom(roomCode, prof); syncTopbar(); },
+  onDiscardResume: () => {
+    clearAutoSavedMatch();
+    commitMatchState(createInitialGameState(currentSetup.players, currentSetup.config, Date.now() & 0xffffff, currentSetup.stageId), currentSetup);
+  },
+});
 
 const drawRoutes = (preview = computeMovePreview(state)) =>
   renderRouteOverlay(routeSvgEl, boardEl, state, preview, showRoutes, hoveredEndTileId);
@@ -123,12 +173,11 @@ const drawRoutes = (preview = computeMovePreview(state)) =>
 const topbar = createTopbar({
   initialShowRoutes: showRoutes, initialAutoStep: autoStepEnabled, initialSoundEnabled: !soundFx.isMuted(), initialStageId: state.mapId as StageId,
   onToggleRoutes: (show) => { showRoutes = show; drawRoutes(); },
-  onToggleAutoStep: (enabled) => { autoStepEnabled = enabled; scheduleMovementTick(); },
+  onToggleAutoStep: (enabled) => { autoStepEnabled = enabled; moveDriver.scheduleTick(); },
   onToggleSound: (enabled) => soundFx.setMuted(!enabled),
   onSelectStage: (stageId) => startMatchFromSetup({ ...currentSetup, stageId }),
-  onOpenSetup: openSetup,
-  onOpenLobby: () => { setupModal.close(); lobbyModal.open(); },
-  onSaveMatch: saveCurrentMatch,
+  onOpenHome: () => { setupModal.close(); lobbyModal.close(); homeModal.open(); },
+  onOpenSetup: openSetup, onOpenLobby: () => openLobby(), onSaveMatch: saveCurrentMatch,
   onLoadMatch: () => { const slot = loadManualMatchSlot(); if (slot) loadSavedState(slot.state); },
   onNewMatch: (count) => startMatchFromSetup({
     ...currentSetup,
@@ -146,55 +195,19 @@ const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
 };
 
 setupModal.el.addEventListener('click', () => syncTopbar());
-shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, setupModal.el, lobbyModal.el, avatarModal.el);
+shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, homeModal.el, setupModal.el, lobbyModal.el, avatarModal.el);
 root.appendChild(shell);
-
-const clearStepTimer = () => { if (stepTimer !== null) { window.clearTimeout(stepTimer); stepTimer = null; } };
-const clearAckTimer = () => { if (ackTimer !== null) { window.clearTimeout(ackTimer); ackTimer = null; } };
-const cancelGuidedWalk = () => { clearStepTimer(); clearAckTimer(); guidedWalkActive = false; guidedChoices = []; };
-const isMovingPhase = (phase: GameState['phase']) =>
-  phase === 'STEPPING' || phase === 'ESCALATOR_RIDE' || phase === 'ESCALATOR_UNDO' || phase === 'CHOOSE_DIRECTION';
-
-const sendStepAction = (action: GameAction) => {
-  clearAckTimer();
-  if (netSession.getRole() === 'guest') {
-    awaitingRemoteStepAck = true;
-    ackTimer = window.setTimeout(() => { awaitingRemoteStepAck = false; scheduleMovementTick(); }, 2500);
-  }
-  if (!netSession.sendOrApplyAction(action)) { clearAckTimer(); awaitingRemoteStepAck = false; }
-};
-
-function stepGuidedOrAuto(): void {
-  if ((state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') && netSession.shouldTickEscalator()) {
-    netSession.broadcastHostState(applyHostAction({ type: 'ADVANCE_STEP' })); return;
-  }
-  if (!netSession.isLocalTurn(state) || awaitingRemoteStepAck) return;
-  if (guidedWalkActive) {
-    if (state.phase === 'CHOOSE_DIRECTION' && guidedChoices.length > 0) return sendStepAction({ type: 'CHOOSE_DIRECTION', direction: guidedChoices.shift()! });
-    if (state.phase === 'STEPPING') return sendStepAction({ type: 'ADVANCE_STEP' });
-    return cancelGuidedWalk();
-  }
-  if (autoStepEnabled && state.phase === 'STEPPING') sendStepAction({ type: 'ADVANCE_STEP' });
-}
-
-function scheduleMovementTick(): void {
-  clearStepTimer();
-  if (!isMovingPhase(state.phase)) { guidedWalkActive = false; guidedChoices = []; return; }
-  const canEsc = netSession.shouldTickEscalator() && (state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO');
-  const canWalk = netSession.isLocalTurn(state) && !awaitingRemoteStepAck && (guidedWalkActive || (autoStepEnabled && state.phase === 'STEPPING'));
-  if (canEsc || canWalk) stepTimer = window.setTimeout(stepGuidedOrAuto, 210);
-}
 
 function dispatch(action: GameAction): void {
   if (!netSession.isLocalTurn(state)) return;
-  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; hoveredPickShopId = null;
+  moveDriver.cancel(); moveDriver.clearAwaitingAck(); hoveredEndTileId = null; hoveredPickShopId = null;
   netSession.sendOrApplyAction(action);
 }
 
 bindKeyboardControls({
-  getState: () => state, getActionBox: () => actionBox, dispatch, isMovingPhase,
-  isModalOpen: () => avatarModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
-  onCloseModal: () => { if (avatarModal.isOpen()) return avatarModal.close(); setupModal.close(); lobbyModal.close(); },
+  getState: () => state, getActionBox: () => actionBox, dispatch, isMovingPhase: moveDriver.isMovingPhase,
+  isModalOpen: () => avatarModal.isOpen() || homeModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
+  onCloseModal: () => { if (avatarModal.isOpen()) return avatarModal.close(); homeModal.close(); setupModal.close(); lobbyModal.close(); },
 });
 
 function syncHeaderAndHud(): void {
@@ -215,22 +228,19 @@ function paintBoard(preview = computeMovePreview(state), canAct = netSession.isL
   renderBoard(boardEl, state, {
     preview, shopPick: canAct ? buildBoardShopPick(state, dispatch, refreshPickUi, hoveredPickShopId) : null,
     onSelectNextStep: (opt) => dispatch(state.phase === 'CHOOSE_DIRECTION' && opt.direction ? { type: 'CHOOSE_DIRECTION', direction: opt.direction } : { type: 'ADVANCE_STEP' }),
-    onSelectEndTarget: (target) => {
-      if (!netSession.isLocalTurn(state)) return;
-      cancelGuidedWalk(); hoveredEndTileId = null; guidedChoices = [...target.queuedChoices]; guidedWalkActive = true; stepGuidedOrAuto();
-    },
+    onSelectEndTarget: (target) => { if (netSession.isLocalTurn(state)) { hoveredEndTileId = null; moveDriver.startGuidedWalk(target.queuedChoices); } },
     onHoverEndTarget: (tileId) => { hoveredEndTileId = tileId; drawRoutes(preview); },
   });
 }
 function renderSessionUi(): void {
-  lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
+  lobbyModal.refresh(); setupModal.refresh(); homeModal.refresh();
+  syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
   const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
   turnCue.sync(state, canAct);
   if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
-    paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin); scheduleMovementTick();
+    paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin); moveDriver.scheduleTick();
   }
 }
-
 function render(): void {
   const prev = prevRenderedState;
   if (prev && prev !== state) stageCashbackHud(hudEl, prev, state);
@@ -240,9 +250,7 @@ function render(): void {
   fxOverlay.playStateDiff(prev, state); prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
-  renderActionBox(canAct); turnCue.sync(state, canAct);
-  renderMatchLog(logBox, state);
-  scheduleMovementTick();
+  renderActionBox(canAct); turnCue.sync(state, canAct); renderMatchLog(logBox, state); setupModal.refresh(); moveDriver.scheduleTick();
 }
 
 const syncBoardOverlays = () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); };
@@ -251,5 +259,5 @@ if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncBoardOverlays)
 window.addEventListener('beforeunload', (e) => { if (shouldWarnBeforeUnload(state, netSession.getRole(), netSession.getRoster())) { e.preventDefault(); e.returnValue = ''; } });
 render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();
-if (roomParam) lobbyModal.open(roomParam);
-else if (!autoSaved) setupModal.open(currentSetup);
+if (roomParam) openLobby(roomParam);
+else homeModal.open();

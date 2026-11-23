@@ -39,6 +39,7 @@ export interface MultiplayerSession {
   broadcastHostState: (nextState: GameState) => void;
   notifyPencilSpin: (spinning: boolean) => void;
   assignSeat: (seatIndex: number, ownerToken: string) => void;
+  updateMyProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
   kickPeer: (clientToken: string) => void;
   disconnect: () => void;
 }
@@ -104,6 +105,18 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         syncAvatars(conn); callbacks.onSessionChange(); return;
       }
       if (boundToken !== raw.clientToken) return;
+      if (raw.type === 'UPDATE_PROFILE') {
+        avatarSync.setPeerImage(boundToken, raw.avatar?.customImage);
+        const peerAvatar = stripAvatarCustomImage(raw.avatar);
+        roster = upsertPeerInRoster(roster, {
+          clientToken: boundToken, peerId: conn.peer, name: raw.name.trim().slice(0, 20) || 'Guest',
+          color: raw.color, ...(peerAvatar ? { avatar: peerAvatar } : {}), connected: true,
+        }, false);
+        const { state: synced, changed: seatChanged } = syncSeatProfiles();
+        if (seatChanged) { seq++; broadcastToGuests({ type: 'STATE_SYNC', seq, roster, state: redactStateForClient(synced), pencilSpinning: remotePencilSpinning }); }
+        else broadcastToGuests({ type: 'ROSTER_SYNC', roster });
+        syncAvatars(); callbacks.onSessionChange(); return;
+      }
       const curState = callbacks.getState();
       if (roster.seatOwners[curState.activePlayerIndex] !== boundToken) { conn.open && conn.send({ type: 'ERROR', message: 'Not your turn.' }); return; }
       if (raw.type === 'ACTION_REQUEST') {
@@ -229,6 +242,12 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       const { state: synced, changed } = syncSeatProfiles();
       if (changed) syncHostState(synced); else { broadcastToGuests({ type: 'ROSTER_SYNC', roster }); if (seatIndex === callbacks.getState().activePlayerIndex) clearRemoteSpin(seatIndex); }
       callbacks.onSessionChange();
+    },
+    updateMyProfile: (profile) => {
+      if (role !== 'guest' || !hostConn?.open) return;
+      const name = profile.name.trim().slice(0, 20) || 'Guest';
+      const color = HEX_COLOR_RE.test(profile.color) ? profile.color : '#3498db';
+      hostConn.send({ type: 'UPDATE_PROFILE', clientToken, name, color, ...(profile.avatar ? { avatar: profile.avatar } : {}) } satisfies ClientToHostMessage);
     },
     kickPeer: (targetToken) => {
       if (role !== 'host' || !roster) return;

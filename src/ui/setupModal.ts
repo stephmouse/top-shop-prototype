@@ -5,12 +5,15 @@ import { getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import { formatCalendarDate } from '../engine/eventDraw';
 import type { GameState } from '../engine/types';
-import { createAvatarElement } from './avatarSvg';
 import {
   clearManualMatchSlot, createDefaultMatchSetup, downloadSetupConfigJson,
   loadManualMatchSlot, parseSetupConfigJson, sanitizeMatchSetup, saveStoredSetup,
 } from './persistence';
 import type { MatchSetupData, SavedMatchEnvelope } from './persistence';
+import { getGuestPeerForSeat, renderSetupPlayersList } from './setupPlayersView';
+import type { SetupOnlineContext } from './setupPlayersView';
+
+export type { SetupOnlineContext };
 
 export interface SetupModalOptions {
   initialSetup: MatchSetupData;
@@ -18,6 +21,8 @@ export interface SetupModalOptions {
   onSaveMatch: () => SavedMatchEnvelope;
   onLoadMatch: (state: GameState) => void;
   onEditAvatar?: (idx: number, current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
+  getOnlineContext?: () => SetupOnlineContext;
+  onOpenLobby?: () => void;
 }
 
 export interface SetupModalController {
@@ -25,6 +30,7 @@ export interface SetupModalController {
   open: (setup?: MatchSetupData) => void;
   close: () => void;
   isOpen: () => boolean;
+  refresh: () => void;
   refreshSaveStatus: () => void;
 }
 
@@ -32,6 +38,10 @@ const MODAL_TEMPLATE = `
   <div class="setup-header">
     <h2 class="setup-title">Match Setup &amp; Persistence</h2>
     <button type="button" data-role="close-header">Resume Match (Esc)</button>
+  </div>
+  <div class="setup-online-banner" hidden data-role="online-banner">
+    <span data-role="online-note"></span>
+    <button type="button" data-role="open-lobby">Online Lobby</button>
   </div>
   <section class="setup-section">
     <h3 class="setup-section-title">Map / Stage</h3>
@@ -57,6 +67,7 @@ const MODAL_TEMPLATE = `
       <label class="setup-field"><span class="setup-field-label">Target Assets ($)</span><input class="setup-input" type="number" min="1000" max="1000000" step="500" data-role="target" /></label>
       <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="500" data-role="cash" /></label>
       <label class="setup-field"><span class="setup-field-label">Bankrupt Limit</span><input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" /></label>
+      <label class="setup-field"><span class="setup-field-label">First Turn</span><select class="setup-select" data-role="first-player"></select></label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="finish-round" /> Finish Round on Win</label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="month-popup" /> Show Month Popups</label>
     </div>
@@ -91,6 +102,8 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   backdrop.appendChild(modal);
 
   const q = <T extends HTMLElement>(role: string): T => modal.querySelector<T>(`[data-role="${role}"]`)!;
+  const onlineBanner = q<HTMLElement>('online-banner');
+  const onlineNote = q<HTMLElement>('online-note');
   const stageSelect = q<HTMLSelectElement>('stage');
   const stageDesc = q<HTMLElement>('stage-desc');
   const playersList = q<HTMLElement>('players-list');
@@ -98,6 +111,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   const targetInput = q<HTMLInputElement>('target');
   const cashInput = q<HTMLInputElement>('cash');
   const bankruptInput = q<HTMLInputElement>('bankrupt');
+  const firstPlayerSelect = q<HTMLSelectElement>('first-player');
   const finishRoundCheckbox = q<HTMLInputElement>('finish-round');
   const monthPopupCheckbox = q<HTMLInputElement>('month-popup');
   const saveSummary = q<HTMLElement>('save-summary');
@@ -119,7 +133,42 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     statusEl.hidden = !message;
   }
 
+  function captureFormInputs(): void {
+    draft.stageId = stageSelect.value as StageId;
+    const rawFirst = firstPlayerSelect.value;
+    draft.config = {
+      targetAssets: Number(targetInput.value),
+      startingCash: Number(cashInput.value),
+      bankruptLimit: Number(bankruptInput.value),
+      finishRoundOnWin: finishRoundCheckbox.checked,
+      showMonthPopup: monthPopupCheckbox.checked,
+      startingPlayer: rawFirst === 'random' ? 'random' : Number(rawFirst),
+    };
+  }
+
+  function syncFirstPlayerOptions(online?: SetupOnlineContext): void {
+    const curVal =
+      draft.config.startingPlayer === 'random'
+        ? 'random'
+        : String(
+            typeof draft.config.startingPlayer === 'number' && draft.config.startingPlayer < draft.players.length
+              ? draft.config.startingPlayer
+              : 0
+          );
+    firstPlayerSelect.innerHTML = '';
+    firstPlayerSelect.appendChild(
+      Object.assign(document.createElement('option'), { value: 'random', textContent: '🎲 Random Player' })
+    );
+    draft.players.forEach((p, idx) => {
+      const guest = getGuestPeerForSeat(online, idx);
+      const label = guest ? `P${idx + 1} · ${guest.name} (Guest)` : `P${idx + 1} · ${p.name || `Player ${idx + 1}`}`;
+      firstPlayerSelect.appendChild(Object.assign(document.createElement('option'), { value: String(idx), textContent: label }));
+    });
+    firstPlayerSelect.value = curVal;
+  }
+
   function resizePlayers(count: number): void {
+    captureFormInputs();
     const nextPlayers = Array.from({ length: count }, (_, idx) => {
       const prev = draft.players[idx];
       return {
@@ -131,37 +180,6 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     });
     draft = sanitizeMatchSetup({ ...draft, players: nextPlayers }) ?? draft;
     syncForm();
-  }
-
-  function renderPlayersList(): void {
-    playersList.innerHTML = '';
-    for (const btn of countBtns) btn.className = Number(btn.dataset.count) === draft.players.length ? 'primary' : '';
-    draft.players.forEach((player, idx) => {
-      const row = Object.assign(document.createElement('div'), { className: 'setup-player-row' });
-      const tag = Object.assign(document.createElement('span'), { className: 'setup-player-tag', textContent: `P${idx + 1}` });
-      const pColor = player.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
-      const avatarSpec = sanitizeAvatarSpec(player.avatar, idx);
-      const avatarBtn = Object.assign(document.createElement('button'), { type: 'button' as const, className: 'setup-avatar-btn', title: 'Customize Standee' });
-      avatarBtn.style.borderColor = pColor;
-      avatarBtn.appendChild(createAvatarElement(avatarSpec, pColor));
-      avatarBtn.addEventListener('click', () => options.onEditAvatar?.(idx, avatarSpec, pColor, (nextAv) => {
-        draft.players[idx] = { ...draft.players[idx]!, avatar: nextAv }; renderPlayersList();
-      }));
-      const nameInput = Object.assign(document.createElement('input'), { className: 'setup-input', type: 'text', maxLength: 20, value: player.name });
-      nameInput.addEventListener('input', () => { draft.players[idx] = { ...draft.players[idx]!, name: nameInput.value }; });
-      const colorInput = Object.assign(document.createElement('input'), { className: 'setup-color-picker', type: 'color', value: pColor });
-      colorInput.addEventListener('input', () => { draft.players[idx] = { ...draft.players[idx]!, color: colorInput.value }; avatarBtn.style.borderColor = colorInput.value; });
-      colorInput.addEventListener('change', () => renderPlayersList());
-      const swatches = Object.assign(document.createElement('div'), { className: 'setup-swatches' });
-      for (const hex of PLAYER_COLORS) {
-        const sw = Object.assign(document.createElement('button'), { type: 'button', title: hex, className: `color-swatch${colorInput.value.toLowerCase() === hex ? ' is-selected' : ''}` });
-        sw.style.backgroundColor = hex;
-        sw.addEventListener('click', () => { draft.players[idx] = { ...draft.players[idx]!, color: hex }; renderPlayersList(); });
-        swatches.appendChild(sw);
-      }
-      row.append(tag, avatarBtn, nameInput, colorInput, swatches);
-      playersList.appendChild(row);
-    });
   }
 
   function refreshSaveStatus(): void {
@@ -177,33 +195,36 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     saveSummary.textContent = `Saved Slot: ${stageName} · Turn ${slot.state.turnNumber} (${cal}) · ${slot.state.players.length}P`;
   }
 
-  function formatStageSummary(stageId: StageId): string {
-    const stg = getStageDef(stageId);
-    return `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots`;
-  }
-
   function syncForm(): void {
+    const online = options.getOnlineContext?.();
+    const isHostOnline = online?.role === 'host' && Boolean(online.roster);
+    onlineBanner.hidden = !isHostOnline;
+    if (isHostOnline && online?.roster) {
+      onlineNote.textContent = `Online Room ${online.roster.roomCode} active — guest slots are auto-populated and locked.`;
+    }
     stageSelect.value = draft.stageId;
-    stageDesc.textContent = formatStageSummary(draft.stageId);
+    stageDesc.textContent = (() => {
+      const stg = getStageDef(draft.stageId);
+      return `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots`;
+    })();
     targetInput.value = String(draft.config.targetAssets);
     cashInput.value = String(draft.config.startingCash);
     bankruptInput.max = String(Math.max(1, draft.players.length - 1));
     bankruptInput.value = String(draft.config.bankruptLimit);
     finishRoundCheckbox.checked = draft.config.finishRoundOnWin;
     monthPopupCheckbox.checked = draft.config.showMonthPopup !== false;
-    renderPlayersList();
+    for (const btn of countBtns) btn.className = Number(btn.dataset.count) === draft.players.length ? 'primary' : '';
+    renderSetupPlayersList(playersList, draft, online, {
+      onEditAvatar: options.onEditAvatar,
+      onPlayersMutated: () => syncForm(),
+      onNameInput: () => syncFirstPlayerOptions(online),
+    });
+    syncFirstPlayerOptions(online);
     refreshSaveStatus();
   }
 
   function readSanitizedDraft(): MatchSetupData {
-    draft.stageId = stageSelect.value as StageId;
-    draft.config = {
-      targetAssets: Number(targetInput.value),
-      startingCash: Number(cashInput.value),
-      bankruptLimit: Number(bankruptInput.value),
-      finishRoundOnWin: finishRoundCheckbox.checked,
-      showMonthPopup: monthPopupCheckbox.checked,
-    };
+    captureFormInputs();
     draft = sanitizeMatchSetup(draft) ?? createDefaultMatchSetup();
     return draft;
   }
@@ -219,9 +240,11 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
 
   stageSelect.addEventListener('change', () => {
     draft.stageId = stageSelect.value as StageId;
-    stageDesc.textContent = formatStageSummary(draft.stageId);
+    const stg = getStageDef(draft.stageId);
+    stageDesc.textContent = `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots`;
   });
   for (const btn of countBtns) btn.addEventListener('click', () => resizePlayers(Number(btn.dataset.count)));
+  q('open-lobby').addEventListener('click', () => { close(); options.onOpenLobby?.(); });
   q('reset').addEventListener('click', () => { draft = createDefaultMatchSetup(); syncForm(); setStatus('Reset setup to default rules.'); });
   q('save').addEventListener('click', () => { options.onSaveMatch(); refreshSaveStatus(); setStatus('Match saved to browser storage.'); });
   loadBtn.addEventListener('click', () => { const s = loadManualMatchSlot(); if (!s) return refreshSaveStatus(); options.onLoadMatch(s.state); close(); });
@@ -247,5 +270,5 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   q('start').addEventListener('click', () => { const c = readSanitizedDraft(); saveStoredSetup(c); options.onStartMatch(c); close(); });
 
   syncForm();
-  return { el: backdrop, open, close, isOpen: () => visible, refreshSaveStatus };
+  return { el: backdrop, open, close, isOpen: () => visible, refresh: () => { if (visible) syncForm(); }, refreshSaveStatus };
 }
