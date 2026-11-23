@@ -3,10 +3,13 @@ import {
   autoStockOwnShops,
   canCaptureShop,
   canPlayerOpenWithCash,
+  captureRivalChainForPlayer,
   captureRivalShopForPlayer,
   resolveTargetOwnShop,
   resolveTargetRival,
   resolveTargetRivalShop,
+  upgradeOwnSegmentToChain,
+  vacateShopChain,
   vacateShopSlot,
 } from './bankHelpers';
 import { appendLog } from './helpers';
@@ -14,6 +17,7 @@ import { pickRandom } from './rng';
 import {
   buildStarterStock,
   getAllowedStoreTypeIds,
+  getSegmentSlotCount,
   getShopTotalStock,
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
@@ -74,8 +78,10 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
 
     case 'close_rival_store_level': {
       const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === eff.level)!;
-      const nextShops = vacateShopSlot({ ...state, shops: ctx.shops }, target.id);
-      return resumeAfterPostAction(buildResultState(ctx, `Closed ${target.id} (L${eff.level}).`, nextShops));
+      const nextShops = vacateShopChain({ ...state, shops: ctx.shops }, target.id);
+      return resumeAfterPostAction(
+        buildResultState(ctx, `Closed ${target.id} chain (L${eff.level}).`, nextShops)
+      );
     }
 
     case 'close_all_empty_rival_stores': {
@@ -136,24 +142,22 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
         let cur: GameState = { ...state, shops: ctx.shops };
         for (const s of Object.values(ctx.shops)) {
           if (s.ownerId && s.ownerId !== active.id && getShopTotalStock(s) === 0 && canCaptureShop(cur, active.id, s)) {
-            cur = { ...cur, shops: captureRivalShopForPlayer(cur, s.id, active.id, false) };
+            cur = { ...cur, shops: captureRivalShopForPlayer(cur, s.id, active.id) };
           }
         }
         return resumeAfterPostAction(buildResultState(ctx, "Captured rivals' empty stores.", cur.shops));
       }
+      if (eff.mode === 'one_l4') {
+        const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === 4)!;
+        const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
+        return resumeAfterPostAction(buildResultState(ctx, `Captured L4 chain (${target.id}).`, nextShops));
+      }
       const target = resolveTargetRivalShop(
         state,
         targetShopId,
-        (s) =>
-          (eff.mode === 'one_l4' ? s.level === 4 : getShopTotalStock(s) === 0) &&
-          canCaptureShop(state, active.id, s)
+        (s) => getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
       )!;
-      const nextShops = captureRivalShopForPlayer(
-        { ...state, shops: ctx.shops },
-        target.id,
-        active.id,
-        eff.mode === 'one_l4'
-      );
+      const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
       return resumeAfterPostAction(buildResultState(ctx, `Captured ${target.id}.`, nextShops));
     }
 
@@ -179,16 +183,16 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
     }
 
     case 'upgrade_own_store_l4': {
-      const target = resolveTargetOwnShop(state, targetShopId, (s) => s.level < 4)!;
-      const nextShops = recomputeSegmentChainLevels(
-        {
-          ...state,
-          shops: { ...ctx.shops, [target.id]: { ...target, level: 4, upgradedToL4: true } },
-        },
-        target.segmentId,
-        active.id
+      const target = resolveTargetOwnShop(
+        state,
+        targetShopId,
+        (s) => s.level < getSegmentSlotCount(state, s.segmentId)
+      )!;
+      const nextShops = upgradeOwnSegmentToChain({ ...state, shops: ctx.shops }, target.id, active.id);
+      const nextLevel = nextShops[target.id]?.level ?? 4;
+      return resumeAfterPostAction(
+        buildResultState(ctx, `Upgraded ${target.id} segment to L${nextLevel} chain!`, nextShops)
       );
-      return resumeAfterPostAction(buildResultState(ctx, `Upgraded ${target.id} to Level 4!`, nextShops));
     }
 
     default:

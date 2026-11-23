@@ -18,6 +18,8 @@ export {
   buildStarterStock,
   getAllowedStoreTypeIds,
   getCheapestItemPrice,
+  getConnectedChainShops,
+  getSegmentSlotCount,
   getShopTotalStock,
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
@@ -87,7 +89,6 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     ...shop,
     ownerId: active.id,
     storeTypeId,
-    upgradedToL4: false,
     stock: {},
     isClosedTurns: 0,
   };

@@ -86,7 +86,6 @@ export interface Shop {
   ownerId: string | null;
   storeTypeId: string | null;
   level: 1 | 2 | 3 | 4;
-  upgradedToL4?: boolean;
   stock: Record<string, number>; // itemId -> quantity
   isClosedTurns: number;
 }

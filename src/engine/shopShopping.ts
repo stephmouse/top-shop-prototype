@@ -196,7 +196,6 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     ownerId: null,
     storeTypeId: null,
     level: 1,
-    upgradedToL4: false,
     stock: {},
     isClosedTurns: 0,
   };

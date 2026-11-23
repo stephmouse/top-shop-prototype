@@ -14,7 +14,7 @@ import {
 import type { GameState, Player, Shop } from './types';
 
 export function resetShopSlot(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, upgradedToL4: false, stock: {}, isClosedTurns: 0 };
+  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
 }
 
 export function applyStockTransform(
@@ -92,7 +92,6 @@ export function handleResolveEventStore(
       ...shop,
       ownerId: active.id,
       storeTypeId,
-      upgradedToL4: false,
       stock: {},
     };
     const nextShops = recomputeSegmentChainLevels(

@@ -2,6 +2,7 @@ import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import {
   buildStarterStock,
   getAllowedStoreTypeIds,
+  getConnectedChainShops,
   getShopTotalStock,
   recomputeSegmentChainLevels,
 } from './shops';
@@ -14,10 +15,7 @@ export function resolveTargetRival(
 ): Player | undefined {
   const active = state.players[state.activePlayerIndex]!;
   const rivals = state.players.filter((p) => p.id !== active.id && !p.isBankrupt && predicate(p));
-  if (preferredId !== undefined) {
-    return rivals.find((p) => p.id === preferredId);
-  }
-  return rivals[0];
+  return preferredId !== undefined ? rivals.find((p) => p.id === preferredId) : rivals[0];
 }
 
 export function resolveTargetRivalShop(
@@ -29,10 +27,7 @@ export function resolveTargetRivalShop(
   const shops = Object.values(state.shops).filter(
     (s) => s.ownerId !== null && s.ownerId !== active.id && predicate(s)
   );
-  if (preferredShopId !== undefined) {
-    return shops.find((s) => s.id === preferredShopId);
-  }
-  return shops[0];
+  return preferredShopId !== undefined ? shops.find((s) => s.id === preferredShopId) : shops[0];
 }
 
 export function resolveTargetOwnShop(
@@ -41,13 +36,8 @@ export function resolveTargetOwnShop(
   predicate: (s: Shop) => boolean = () => true
 ): Shop | undefined {
   const active = state.players[state.activePlayerIndex]!;
-  const shops = Object.values(state.shops).filter(
-    (s) => s.ownerId === active.id && predicate(s)
-  );
-  if (preferredShopId !== undefined) {
-    return shops.find((s) => s.id === preferredShopId);
-  }
-  return shops[0];
+  const shops = Object.values(state.shops).filter((s) => s.ownerId === active.id && predicate(s));
+  return preferredShopId !== undefined ? shops.find((s) => s.id === preferredShopId) : shops[0];
 }
 
 export function canCaptureShop(state: GameState, playerId: string, shop: Shop): boolean {
@@ -64,31 +54,45 @@ export function canPlayerOpenWithCash(state: GameState, ownerId: string, cashBud
   );
 }
 
+function makeVacantShop(shop: Shop): Shop {
+  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
+}
+
+function recomputeSegmentOwners(
+  state: GameState,
+  shops: Record<string, Shop>,
+  segmentId: string,
+  ...ownerIds: string[]
+): Record<string, Shop> {
+  let next = shops;
+  for (const ownerId of ownerIds) {
+    next = recomputeSegmentChainLevels({ ...state, shops: next }, segmentId, ownerId);
+  }
+  return next;
+}
+
 export function vacateShopSlot(state: GameState, shopId: string): Record<string, Shop> {
   const shop = state.shops[shopId];
   if (!shop || !shop.ownerId) return state.shops;
-  const prevOwner = shop.ownerId;
-  const reset: Shop = {
-    ...shop,
-    ownerId: null,
-    storeTypeId: null,
-    level: 1,
-    upgradedToL4: false,
-    stock: {},
-    isClosedTurns: 0,
-  };
-  return recomputeSegmentChainLevels(
-    { ...state, shops: { ...state.shops, [shopId]: reset } },
-    shop.segmentId,
-    prevOwner
-  );
+  const nextShops = { ...state.shops, [shopId]: makeVacantShop(shop) };
+  return recomputeSegmentOwners(state, nextShops, shop.segmentId, shop.ownerId);
+}
+
+/** Closes all connected tiles in the chain containing `shopId` and recomputes remaining chain levels. */
+export function vacateShopChain(state: GameState, shopId: string): Record<string, Shop> {
+  const shop = state.shops[shopId];
+  if (!shop || !shop.ownerId) return state.shops;
+  const nextShops = { ...state.shops };
+  for (const member of getConnectedChainShops(state, shopId)) {
+    nextShops[member.id] = makeVacantShop(member);
+  }
+  return recomputeSegmentOwners(state, nextShops, shop.segmentId, shop.ownerId);
 }
 
 export function captureRivalShopForPlayer(
   state: GameState,
   shopId: string,
-  newOwnerId: string,
-  preserveL4 = false
+  newOwnerId: string
 ): Record<string, Shop> {
   const shop = state.shops[shopId];
   if (!shop || !shop.ownerId || shop.ownerId === newOwnerId) return state.shops;
@@ -96,30 +100,66 @@ export function captureRivalShopForPlayer(
   if (allowed.length === 0) return state.shops;
 
   const prevOwnerId = shop.ownerId;
-  const nextTypeId =
-    shop.storeTypeId && allowed.includes(shop.storeTypeId) ? shop.storeTypeId : allowed[0]!;
+  const nextTypeId = shop.storeTypeId && allowed.includes(shop.storeTypeId) ? shop.storeTypeId : allowed[0]!;
   const keepStock = nextTypeId === shop.storeTypeId && getShopTotalStock(shop) > 0;
+  const claimed: Shop = { ...shop, ownerId: newOwnerId, storeTypeId: nextTypeId, isClosedTurns: 0 };
 
-  const claimed: Shop = {
-    ...shop,
-    ownerId: newOwnerId,
-    storeTypeId: nextTypeId,
-    upgradedToL4: preserveL4 || Boolean(shop.upgradedToL4),
-    isClosedTurns: 0,
-  };
-
-  let nextShops = recomputeSegmentChainLevels(
-    { ...state, shops: { ...state.shops, [shopId]: claimed } },
+  const nextShops = recomputeSegmentOwners(
+    state,
+    { ...state.shops, [shopId]: claimed },
     shop.segmentId,
-    prevOwnerId
+    prevOwnerId,
+    newOwnerId
   );
-  nextShops = recomputeSegmentChainLevels({ ...state, shops: nextShops }, shop.segmentId, newOwnerId);
-
   const updated = nextShops[shopId]!;
-  nextShops[shopId] = {
-    ...updated,
-    stock: keepStock ? updated.stock : buildStarterStock(nextTypeId, updated.level),
-  };
+  nextShops[shopId] = { ...updated, stock: keepStock ? updated.stock : buildStarterStock(nextTypeId, updated.level) };
+  return nextShops;
+}
+
+/** Transfers all connected tiles of a rival chain to `newOwnerId`, preserving store type and stock. */
+export function captureRivalChainForPlayer(
+  state: GameState,
+  shopId: string,
+  newOwnerId: string
+): Record<string, Shop> {
+  const shop = state.shops[shopId];
+  if (!shop || !shop.ownerId || shop.ownerId === newOwnerId) return state.shops;
+
+  const nextShops = { ...state.shops };
+  for (const member of getConnectedChainShops(state, shopId)) {
+    nextShops[member.id] = { ...member, ownerId: newOwnerId, isClosedTurns: 0 };
+  }
+  return recomputeSegmentOwners(state, nextShops, shop.segmentId, shop.ownerId, newOwnerId);
+}
+
+/**
+ * Claims every slot in `targetShopId`'s segment under `ownerId` (PS1 `bank_48` / `0x80071098`),
+ * keeping existing own stock and auto-stocking newly claimed slots.
+ */
+export function upgradeOwnSegmentToChain(
+  state: GameState,
+  targetShopId: string,
+  ownerId: string
+): Record<string, Shop> {
+  const target = state.shops[targetShopId];
+  if (!target || target.ownerId !== ownerId || !target.storeTypeId) return state.shops;
+
+  const storeTypeId = target.storeTypeId;
+  const newlyClaimedIds = new Set<string>();
+  const claimedShops: Record<string, Shop> = { ...state.shops };
+
+  for (const s of Object.values(claimedShops)) {
+    if (s.segmentId !== target.segmentId) continue;
+    const isOwn = s.ownerId === ownerId;
+    if (!isOwn) newlyClaimedIds.add(s.id);
+    claimedShops[s.id] = { ...s, ownerId, storeTypeId, stock: isOwn ? s.stock : {}, isClosedTurns: 0 };
+  }
+
+  const nextShops = recomputeSegmentOwners(state, claimedShops, target.segmentId, ownerId);
+  for (const id of newlyClaimedIds) {
+    const leveled = nextShops[id]!;
+    nextShops[id] = { ...leveled, stock: buildStarterStock(storeTypeId, leveled.level) };
+  }
   return nextShops;
 }
 

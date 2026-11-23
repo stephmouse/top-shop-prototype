@@ -70,6 +70,54 @@ export function buildStarterStock(storeTypeId: string, level: 1 | 2 | 3 | 4): Re
   return stock;
 }
 
+/** Returns the total number of shop slots in a given segment. */
+export function getSegmentSlotCount(state: GameState, segmentId: string): number {
+  let count = 0;
+  for (const s of Object.values(state.shops)) {
+    if (s.segmentId === segmentId) count++;
+  }
+  return count;
+}
+
+function collectConnectedChain(
+  state: GameState,
+  shops: Record<string, Shop>,
+  startShop: Shop,
+  visited = new Set<string>()
+): Shop[] {
+  const { segmentId, ownerId } = startShop;
+  if (!ownerId || visited.has(startShop.id)) return [];
+  const queue = [startShop];
+  const component: Shop[] = [];
+  visited.add(startShop.id);
+
+  while (queue.length > 0) {
+    const curr = queue.shift()!;
+    component.push(curr);
+    const tile = state.tiles[curr.tileId];
+    if (!tile) continue;
+
+    for (const sideTileId of [tile.neighbors.left, tile.neighbors.right]) {
+      if (!sideTileId) continue;
+      const sideTile = state.tiles[sideTileId];
+      const sideShop = sideTile?.shopSlotId ? shops[sideTile.shopSlotId] : undefined;
+      if (sideShop && sideShop.segmentId === segmentId && sideShop.ownerId === ownerId && !visited.has(sideShop.id)) {
+        visited.add(sideShop.id);
+        queue.push(sideShop);
+      }
+    }
+  }
+  return component;
+}
+
+/** Returns all contiguous same-owner shops in the same segment connected to `shopId`, sorted by tile column. */
+export function getConnectedChainShops(state: GameState, shopId: string): Shop[] {
+  const start = state.shops[shopId];
+  if (!start || !start.ownerId) return [];
+  const chain = collectConnectedChain(state, state.shops, start);
+  return chain.sort((a, b) => (state.tiles[a.tileId]?.col ?? 0) - (state.tiles[b.tileId]?.col ?? 0));
+}
+
 export function recomputeSegmentChainLevels(
   state: GameState,
   segmentId: string,
@@ -83,32 +131,10 @@ export function recomputeSegmentChainLevels(
 
   for (const startShop of ownedInSeg) {
     if (visited.has(startShop.id)) continue;
-    const queue = [startShop];
-    const component: Shop[] = [];
-    visited.add(startShop.id);
-
-    while (queue.length > 0) {
-      const curr = queue.shift()!;
-      component.push(curr);
-      const tile = state.tiles[curr.tileId];
-      if (!tile) continue;
-
-      for (const sideTileId of [tile.neighbors.left, tile.neighbors.right]) {
-        if (!sideTileId) continue;
-        const sideTile = state.tiles[sideTileId];
-        const sideShop = sideTile?.shopSlotId ? shops[sideTile.shopSlotId] : undefined;
-        if (sideShop && sideShop.segmentId === segmentId && sideShop.ownerId === ownerId && !visited.has(sideShop.id)) {
-          visited.add(sideShop.id);
-          queue.push(sideShop);
-        }
-      }
-    }
-
-    const hasL4 = component.some((m) => Boolean(m.upgradedToL4));
-    const chainLevel = Math.min(4, component.length) as 1 | 2 | 3 | 4;
-    const level = hasL4 ? 4 : chainLevel;
+    const component = collectConnectedChain(state, shops, startShop, visited);
+    const level = Math.min(4, component.length) as 1 | 2 | 3 | 4;
     for (const member of component) {
-      shops[member.id] = { ...member, level, upgradedToL4: hasL4 };
+      shops[member.id] = { ...member, level };
     }
   }
   return shops;

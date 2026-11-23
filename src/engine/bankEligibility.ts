@@ -5,7 +5,7 @@ import {
   resolveTargetRival,
   resolveTargetRivalShop,
 } from './bankHelpers';
-import { getShopTotalStock } from './shops';
+import { getSegmentSlotCount, getShopTotalStock } from './shops';
 import type { BankRewardDef, GameState, Player, Shop } from './types';
 
 export type BankRewardTargetList =
@@ -100,7 +100,7 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
       if (eff.mode === 'one_l4') {
         return {
           kind: 'shop',
-          shops: rivalShops.filter((s) => s.level === 4 && canCaptureShop(state, active.id, s)),
+          shops: rivalShops.filter((s) => s.level === 4),
           includeOwner: true,
           prompt: 'Pick Rival L4 Store to Take Over:',
         };
@@ -126,7 +126,7 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
     case 'upgrade_own_store_l4':
       return {
         kind: 'shop',
-        shops: ownShops.filter((s) => s.level < 4),
+        shops: ownShops.filter((s) => s.level < getSegmentSlotCount(state, s.segmentId)),
         includeOwner: false,
         prompt: 'Pick Your Store to Upgrade to L4:',
       };
