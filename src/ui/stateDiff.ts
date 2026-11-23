@@ -3,11 +3,27 @@ import type { GameState, Shop } from '../engine/types';
 export type VisualEvent =
   | { type: 'player_moved'; playerId: string; fromTileId: string; toTileId: string; kind: 'step' | 'escalator' | 'elevator'; chirp?: boolean }
   | { type: 'bank_payday'; playerId: string; tileId: string; isExact: boolean }
-  | { type: 'cash_delta'; playerId: string; tileId: string; amount: number; reason: 'payday' | 'gain' | 'loss'; isHurt: boolean }
+  | { type: 'cash_delta'; playerId: string; tileId: string; amount: number; reason: 'payday' | 'gain' | 'loss'; isHurt: boolean; isActive: boolean }
   | { type: 'points_delta'; playerId: string; tileId: string; amount: number }
   | { type: 'chirp_equipped'; playerId: string; tileId: string }
   | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked' }
-  | { type: 'liquidate_forced'; playerId: string; tileId: string };
+  | { type: 'liquidate_forced'; playerId: string; tileId: string }
+  | {
+      type: 'cashback_triggered';
+      buyerId: string;
+      buyerName: string;
+      buyerTileId: string;
+      ownerId: string;
+      ownerName: string;
+      ownerTileId: string;
+      shopTileId: string;
+      storeName: string;
+      grossPaid: number;
+      cashbackCount: number;
+      cashbackRefund: number;
+      refundedItemNames: string[];
+    }
+  | { type: 'month_changed'; month: number; year: number };
 
 function sumStock(shop: Shop): number {
   let total = 0;
@@ -29,6 +45,12 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
 
   const events: VisualEvent[] = [];
   const canHurt = prev.phase === 'SHOP_BUY_RIVAL' || prev.phase === 'EVENT_PICK' || prev.phase === 'BANK_MENU';
+  const cashbackReceipt =
+    prev.phase === 'SHOP_BUY_RIVAL' &&
+    next.lastPurchaseReceipt &&
+    next.lastPurchaseReceipt.cashbackCount > 0
+      ? next.lastPurchaseReceipt
+      : null;
 
   for (let i = 0; i < next.players.length; i++) {
     const pp = prev.players[i];
@@ -58,7 +80,9 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
     }
 
     const cashDiff = np.cash - pp.cash;
-    if (cashDiff !== 0) {
+    const suppressedByCashback =
+      cashbackReceipt && (np.id === cashbackReceipt.buyerId || np.id === cashbackReceipt.ownerId);
+    if (cashDiff !== 0 && !suppressedByCashback) {
       events.push({
         type: 'cash_delta',
         playerId: np.id,
@@ -66,6 +90,7 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
         amount: cashDiff,
         reason: paydayTriggered && cashDiff > 0 ? 'payday' : cashDiff > 0 ? 'gain' : 'loss',
         isHurt: cashDiff < 0 && canHurt,
+        isActive: i === prev.activePlayerIndex,
       });
     }
 
@@ -102,6 +127,32 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
     if (active) {
       events.push({ type: 'liquidate_forced', playerId: active.id, tileId: active.tileId });
     }
+  }
+
+  if (cashbackReceipt) {
+    const buyer = next.players.find((p) => p.id === cashbackReceipt.buyerId);
+    const owner = next.players.find((p) => p.id === cashbackReceipt.ownerId);
+    if (buyer && owner) {
+      events.push({
+        type: 'cashback_triggered',
+        buyerId: buyer.id,
+        buyerName: buyer.name,
+        buyerTileId: buyer.tileId,
+        ownerId: owner.id,
+        ownerName: owner.name,
+        ownerTileId: owner.tileId,
+        shopTileId: cashbackReceipt.tileId,
+        storeName: cashbackReceipt.storeName,
+        grossPaid: cashbackReceipt.grossPaid,
+        cashbackCount: cashbackReceipt.cashbackCount,
+        cashbackRefund: cashbackReceipt.cashbackRefund,
+        refundedItemNames: cashbackReceipt.refundedItemNames,
+      });
+    }
+  }
+
+  if (next.totalMonths > prev.totalMonths && next.config.showMonthPopup !== false && next.phase !== 'GAME_OVER') {
+    events.push({ type: 'month_changed', month: next.month, year: next.year });
   }
 
   return events;

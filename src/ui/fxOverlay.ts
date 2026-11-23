@@ -1,6 +1,9 @@
 import type { GameState } from '../engine/types';
 import { getBoardTileElement } from './boardView';
+import { formatDollars } from './cashCounter';
+import { createCashbackBannerElement, createMonthBannerElement } from './fxBanners';
 import { getTokenBodyElement } from './hudView';
+import { CASHBACK_BEAT2_MS } from './playerCardView';
 import type { SoundFxController } from './soundFx';
 import { diffGameStates } from './stateDiff';
 
@@ -32,6 +35,10 @@ function stripFxClasses(el: HTMLElement): void {
   el.className = kept.join(' ');
 }
 
+function removeNode(node: HTMLElement): void {
+  if (typeof node.remove === 'function') node.remove();
+}
+
 export function createFxOverlay(
   boardEl: HTMLElement,
   tokensLayerEl: HTMLElement,
@@ -52,6 +59,14 @@ export function createFxOverlay(
     }, ms);
     activeTimers.add(id);
     return id;
+  }
+
+  function removeByClass(cls: string): void {
+    for (const child of Array.from(layer.children)) {
+      if (((child as HTMLElement).className || '').includes(cls)) {
+        removeNode(child as HTMLElement);
+      }
+    }
   }
 
   function triggerFxClass(target: HTMLElement | undefined, cls: string, durationMs: number): void {
@@ -83,7 +98,7 @@ export function createFxOverlay(
     badge.style.left = `${tileEl.offsetLeft + Math.max(12, Math.round(tileEl.offsetWidth / 2))}px`;
     badge.style.top = `${Math.max(4, tileEl.offsetTop + 12 - stackIdx * 18)}px`;
     layer.appendChild(badge);
-    scheduleTimer(() => badge.remove(), 950);
+    scheduleTimer(() => removeNode(badge), 950);
   }
 
   function clear(): void {
@@ -112,6 +127,7 @@ export function createFxOverlay(
     if (events.length === 0) return;
     soundFx?.playVisualEvents(events);
 
+    const hasCashback = events.some((e) => e.type === 'cashback_triggered');
     const tileStacks = new Map<string, number>();
     const bumpStack = (tileId: string) => {
       const idx = tileStacks.get(tileId) ?? 0;
@@ -143,6 +159,35 @@ export function createFxOverlay(
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), SHOP_FX_CLASS[ev.kind], 650);
       } else if (ev.type === 'liquidate_forced') {
         triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-shake', 420);
+      } else if (ev.type === 'cashback_triggered') {
+        // Beat 1: Normal purchase pay/gain floats & owner smugly celebrates
+        spawnFloatBadge(getBoardTileElement(boardEl, ev.shopTileId), `-${formatDollars(ev.grossPaid)}`, 'is-loss', bumpStack(ev.shopTileId));
+        spawnFloatBadge(getBoardTileElement(boardEl, ev.ownerTileId), `+${formatDollars(ev.grossPaid)}`, 'is-gain', bumpStack(ev.ownerTileId));
+        triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.buyerId), 'fx-shake', 420);
+        triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.ownerId), 'fx-celebrate', 480);
+
+        // Beat 2: Bait-and-switch 2x Cash Back refund drops on owner!
+        scheduleTimer(() => {
+          removeByClass('fx-cashback-banner');
+          const banner = createCashbackBannerElement(ev);
+          layer.appendChild(banner);
+          scheduleTimer(() => removeNode(banner), 1950);
+          soundFx?.playCashbackFanfare();
+          triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.buyerId), 'fx-celebrate', 650);
+          triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.ownerId), 'fx-shake', 550);
+          spawnFloatBadge(getBoardTileElement(boardEl, ev.buyerTileId), `+${formatDollars(ev.cashbackRefund)}`, 'is-payday', 0);
+          spawnFloatBadge(getBoardTileElement(boardEl, ev.ownerTileId), `-${formatDollars(ev.cashbackRefund)}`, 'is-loss', 0);
+        }, CASHBACK_BEAT2_MS);
+      } else if (ev.type === 'month_changed') {
+        const spawnMonth = () => {
+          removeByClass('fx-month-banner');
+          const banner = createMonthBannerElement(ev.month, ev.year);
+          layer.appendChild(banner);
+          soundFx?.playMonthFlip();
+          scheduleTimer(() => removeNode(banner), 1380);
+        };
+        if (hasCashback) scheduleTimer(spawnMonth, 2100);
+        else spawnMonth();
       }
     }
   }

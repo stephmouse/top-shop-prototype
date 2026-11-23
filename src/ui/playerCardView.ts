@@ -1,142 +1,269 @@
 import { computePlayerNetWorth } from '../engine/helpers';
 import type { GameState, Player } from '../engine/types';
-import { canClientAct, HOST_TOKEN } from '../net/protocol';
-import { createAvatarElement } from './avatarSvg';
+import { createAvatarElement, getAvatarRenderKey } from './avatarSvg';
+import {
+  cancelRollingStat,
+  formatDollars,
+  makeRollingStatBox,
+  setRollingStatTarget,
+} from './cashCounter';
+import type { RollingStatHandle } from './cashCounter';
 import { resolvePlayerAvatar } from './hudView';
 import type { HudNetInfo } from './hudView';
+import { collectStatusChips, makeMetaChip, resolveNetBadge } from './playerCardMeta';
 
-type MetaChipVariant = 'dir' | 'stores' | 'buff' | 'debuff' | 'info';
+export const CASHBACK_BEAT2_MS = 820;
 
-function formatDollars(amount: number): string {
-  const abs = Math.abs(Math.round(amount)).toLocaleString('en-US');
-  return amount < 0 ? `-$${abs}` : `$${abs}`;
+interface StatOverride {
+  cash: number;
+  netWorth: number;
 }
 
-function makeStatBox(label: string, valueText: string, extraClass: string): HTMLElement {
-  const box = document.createElement('div');
-  box.className = extraClass ? `player-stat ${extraClass}` : 'player-stat';
-  const lbl = document.createElement('span');
-  lbl.className = 'player-stat-label';
-  lbl.textContent = label;
-  const val = document.createElement('span');
-  val.className = 'player-stat-value';
-  val.textContent = valueText;
-  box.append(lbl, val);
-  return box;
+interface PlayerCardDomRef {
+  playerId: string;
+  card: HTMLElement;
+  nameWrap: HTMLElement;
+  hudAv: HTMLElement;
+  nameSpan: HTMLElement;
+  badgeEl: HTMLElement | null;
+  ptsSpan: HTMLElement;
+  progress: HTMLElement;
+  progressFill: HTMLElement;
+  metaRow: HTMLElement;
+  cashStat: RollingStatHandle;
+  netStat: RollingStatHandle;
+  lastAvatarKey: string;
+  lastBadgeKey: string;
+  lastMetaKey: string;
 }
 
-function makeMetaChip(text: string, variant?: MetaChipVariant): HTMLElement {
-  const chip = document.createElement('span');
-  chip.className = variant ? `player-meta-chip is-${variant}` : 'player-meta-chip';
-  chip.textContent = text;
-  return chip;
+interface HudCardsCache {
+  signature: string;
+  cardRefs: PlayerCardDomRef[];
+  stagedTimer: number | null;
+  stagedState: GameState | null;
+  stagedOverrides: Map<string, StatOverride>;
 }
 
-function appendNetBadge(nameWrap: HTMLElement, idx: number, netInfo?: HudNetInfo): void {
-  if (!netInfo || netInfo.role === 'offline' || !netInfo.roster) return;
-  const isMine = canClientAct(netInfo.role, netInfo.roster, netInfo.myClientToken, idx);
-  const ownerToken = netInfo.roster.seatOwners[idx] ?? HOST_TOKEN;
-  const peer = netInfo.roster.peers.find((p) => p.clientToken === ownerToken);
-  const badge = document.createElement('span');
-  if (isMine) {
-    badge.className = 'net-seat-badge is-you';
-    badge.textContent = 'YOU';
-  } else if (ownerToken === HOST_TOKEN) {
-    badge.className = 'net-seat-badge is-host';
-    badge.textContent = 'HOST';
-  } else if (peer) {
-    badge.className = `net-seat-badge ${peer.connected ? 'is-online' : 'is-offline'}`;
-    badge.textContent = peer.connected ? peer.name : `${peer.name} (DC)`;
+const hudCacheMap = new WeakMap<HTMLElement, HudCardsCache>();
+
+function clearStagedOverride(cache: HudCardsCache): void {
+  if (cache.stagedTimer !== null && typeof window !== 'undefined') {
+    window.clearTimeout(cache.stagedTimer);
   }
-  if (badge.textContent) nameWrap.appendChild(badge);
+  cache.stagedTimer = null;
+  cache.stagedState = null;
+  cache.stagedOverrides.clear();
 }
 
-function appendStatusChips(metaRow: HTMLElement, player: Player): void {
-  if (player.doubleNextPayday) metaRow.appendChild(makeMetaChip('2xPay', 'buff'));
-  if (player.skipNextPayday) metaRow.appendChild(makeMetaChip('NoPay', 'debuff'));
-  if (player.doublePriceTurns > 0) metaRow.appendChild(makeMetaChip(`2x$${player.doublePriceTurns}T`, 'buff'));
-  if (player.pencilTurnsLeft > 0 && player.pencilMode !== 'normal') {
-    const variant: MetaChipVariant = player.pencilMode === 'slow' ? 'buff' : 'debuff';
-    metaRow.appendChild(makeMetaChip(`Pencil:${player.pencilMode}(${player.pencilTurnsLeft}T)`, variant));
+export function resetPlayersHudCache(container: HTMLElement): void {
+  const cache = hudCacheMap.get(container);
+  if (!cache) return;
+  clearStagedOverride(cache);
+  for (const ref of cache.cardRefs) {
+    cancelRollingStat(ref.cashStat);
+    cancelRollingStat(ref.netStat);
   }
-  if (player.blockDeliveryTurns > 0) metaRow.appendChild(makeMetaChip(`NoDeliv(${player.blockDeliveryTurns}T)`, 'debuff'));
-  if (player.blockNewStoreTurns > 0) metaRow.appendChild(makeMetaChip(`NoOpen(${player.blockNewStoreTurns}T)`, 'debuff'));
-  if (player.chirpSandals) metaRow.appendChild(makeMetaChip('Chirp', 'info'));
+  hudCacheMap.delete(container);
+}
+
+export function stageCashbackHud(
+  container: HTMLElement,
+  prev: GameState,
+  next: GameState,
+  delayMs = CASHBACK_BEAT2_MS
+): void {
+  const cache = hudCacheMap.get(container);
+  if (!cache) return;
+  clearStagedOverride(cache);
+
+  const receipt = next.lastPurchaseReceipt;
+  if (
+    prev.phase !== 'SHOP_BUY_RIVAL' ||
+    !receipt ||
+    receipt.cashbackCount <= 0 ||
+    typeof window === 'undefined' ||
+    typeof requestAnimationFrame !== 'function'
+  ) {
+    return;
+  }
+
+  const prevBuyer = prev.players.find((p) => p.id === receipt.buyerId);
+  const prevOwner = prev.players.find((p) => p.id === receipt.ownerId);
+  if (!prevBuyer || !prevOwner) return;
+
+  const buyerBeat1Net = computePlayerNetWorth(next, receipt.buyerId) - receipt.cashbackRefund;
+  const ownerBeat1Net = computePlayerNetWorth(next, receipt.ownerId) + receipt.cashbackRefund;
+  cache.stagedOverrides.set(receipt.buyerId, { cash: prevBuyer.cash - receipt.grossPaid, netWorth: buyerBeat1Net });
+  cache.stagedOverrides.set(receipt.ownerId, { cash: prevOwner.cash + receipt.grossPaid, netWorth: ownerBeat1Net });
+  cache.stagedState = next;
+
+  cache.stagedTimer = window.setTimeout(() => {
+    cache.stagedTimer = null;
+    cache.stagedOverrides.clear();
+    cache.stagedState = null;
+    const targetAssets = Math.max(1, next.config.targetAssets);
+    for (const id of [receipt.buyerId, receipt.ownerId]) {
+      const ref = cache.cardRefs.find((r) => r.playerId === id);
+      const player = next.players.find((p) => p.id === id);
+      if (!ref || !player) continue;
+      const finalNet = computePlayerNetWorth(next, player.id);
+      const pct = Math.max(0, Math.round((finalNet / targetAssets) * 100));
+      setRollingStatTarget(ref.cashStat, player.cash, { durationMs: 520 });
+      setRollingStatTarget(ref.netStat, finalNet, { durationMs: 520 });
+      ref.progress.title = `${formatDollars(finalNet)} / ${formatDollars(targetAssets)} target (${pct}%)`;
+      ref.progressFill.style.width = `${Math.min(100, pct)}%`;
+    }
+  }, delayMs);
+}
+
+function mountCard(player: Player, netWorth: number): PlayerCardDomRef {
+  const card = document.createElement('div');
+  const head = document.createElement('div');
+  head.className = 'player-card-head';
+  const nameWrap = document.createElement('span');
+  nameWrap.className = 'player-card-namewrap';
+  const hudAv = document.createElement('span');
+  hudAv.className = 'hud-avatar';
+  const nameSpan = document.createElement('span');
+  nameWrap.append(hudAv, nameSpan);
+  const ptsSpan = document.createElement('span');
+  head.append(nameWrap, ptsSpan);
+
+  const cashBox = makeRollingStatBox('CASH', player.cash, 'player-stat is-cash', (v) =>
+    v < 0 ? 'player-stat is-cash is-negative' : 'player-stat is-cash'
+  );
+  const netBox = makeRollingStatBox('NET ASSETS', netWorth, 'player-stat is-net');
+  const finances = document.createElement('div');
+  finances.className = 'player-card-finances';
+  finances.append(cashBox.box, netBox.box);
+
+  const progress = document.createElement('div');
+  progress.className = 'player-card-progress';
+  const progressFill = document.createElement('div');
+  progressFill.className = 'player-card-progress-fill';
+  progress.appendChild(progressFill);
+
+  const metaRow = document.createElement('div');
+  metaRow.className = 'player-card-meta';
+  card.append(head, finances, progress, metaRow);
+
+  return {
+    playerId: player.id,
+    card,
+    nameWrap,
+    hudAv,
+    nameSpan,
+    badgeEl: null,
+    ptsSpan,
+    progress,
+    progressFill,
+    metaRow,
+    cashStat: cashBox.handle,
+    netStat: netBox.handle,
+    lastAvatarKey: '',
+    lastBadgeKey: '',
+    lastMetaKey: '',
+  };
+}
+
+function patchCard(
+  ref: PlayerCardDomRef,
+  state: GameState,
+  player: Player,
+  idx: number,
+  ownedCount: number,
+  displayCash: number,
+  displayNetWorth: number,
+  immediate: boolean,
+  netInfo?: HudNetInfo
+): void {
+  const isActive = idx === state.activePlayerIndex;
+  const cls = ['player-card'];
+  if (isActive) cls.push('is-active');
+  if (player.isBankrupt) cls.push('is-bankrupt');
+  ref.card.className = cls.join(' ');
+  ref.card.style.borderColor = isActive ? player.color : '';
+
+  const resolvedAvatar = resolvePlayerAvatar(state, idx, netInfo?.roster, netInfo?.customAvatars);
+  const avatarKey = getAvatarRenderKey(resolvedAvatar, player.color);
+  if (avatarKey !== ref.lastAvatarKey) {
+    ref.hudAv.style.borderColor = player.color;
+    ref.hudAv.innerHTML = '';
+    ref.hudAv.appendChild(createAvatarElement(resolvedAvatar, player.color));
+    ref.lastAvatarKey = avatarKey;
+  }
+
+  ref.nameSpan.style.color = player.color;
+  ref.nameSpan.textContent = `P${idx + 1} ${player.name}`;
+
+  const badge = resolveNetBadge(idx, netInfo);
+  const badgeKey = badge ? `${badge.cls}|${badge.text}` : '';
+  if (badgeKey !== ref.lastBadgeKey) {
+    if (ref.badgeEl) {
+      ref.nameWrap.innerHTML = '';
+      ref.nameWrap.append(ref.hudAv, ref.nameSpan);
+      ref.badgeEl = null;
+    }
+    if (badge) {
+      const b = document.createElement('span');
+      b.className = badge.cls;
+      b.textContent = badge.text;
+      ref.nameWrap.appendChild(b);
+      ref.badgeEl = b;
+    }
+    ref.lastBadgeKey = badgeKey;
+  }
+
+  ref.ptsSpan.className = player.isBankrupt ? 'player-card-pts is-bankrupt' : 'player-card-pts';
+  ref.ptsSpan.textContent = player.isBankrupt ? 'BANKRUPT' : `${player.points} pts`;
+
+  setRollingStatTarget(ref.cashStat, displayCash, { immediate });
+  setRollingStatTarget(ref.netStat, displayNetWorth, { immediate });
+
+  const targetAssets = Math.max(1, state.config.targetAssets);
+  const pct = Math.max(0, Math.round((displayNetWorth / targetAssets) * 100));
+  ref.progress.title = `${formatDollars(displayNetWorth)} / ${formatDollars(targetAssets)} target (${pct}%)`;
+  ref.progressFill.style.width = `${Math.min(100, pct)}%`;
+  ref.progressFill.style.backgroundColor = player.color;
+
+  const chips = collectStatusChips(player, ownedCount);
+  const metaKey = chips.map((c) => `${c.variant}:${c.text}`).join('|');
+  if (metaKey !== ref.lastMetaKey) {
+    ref.metaRow.innerHTML = '';
+    for (const c of chips) ref.metaRow.appendChild(makeMetaChip(c.text, c.variant));
+    ref.lastMetaKey = metaKey;
+  }
 }
 
 export function renderPlayersHud(container: HTMLElement, state: GameState, netInfo?: HudNetInfo): void {
-  container.innerHTML = '';
-
   const storeCounts: Record<string, number> = {};
   for (const shop of Object.values(state.shops)) {
-    if (shop.ownerId) {
-      storeCounts[shop.ownerId] = (storeCounts[shop.ownerId] ?? 0) + 1;
-    }
+    if (shop.ownerId) storeCounts[shop.ownerId] = (storeCounts[shop.ownerId] ?? 0) + 1;
+  }
+
+  const sig = state.players.map((p) => p.id).join('|');
+  let cache = hudCacheMap.get(container);
+  const rebuilt = !cache || cache.signature !== sig;
+  if (rebuilt) {
+    resetPlayersHudCache(container);
+    container.innerHTML = '';
+    const cardRefs = state.players.map((player) => {
+      const ref = mountCard(player, computePlayerNetWorth(state, player.id));
+      container.appendChild(ref.card);
+      return ref;
+    });
+    cache = { signature: sig, cardRefs, stagedTimer: null, stagedState: null, stagedOverrides: new Map() };
+    hudCacheMap.set(container, cache);
+  } else if (cache!.stagedState && cache!.stagedState !== state) {
+    clearStagedOverride(cache!);
   }
 
   state.players.forEach((player, idx) => {
-    const isActive = idx === state.activePlayerIndex;
-    const card = document.createElement('div');
-    const cls = ['player-card'];
-    if (isActive) cls.push('is-active');
-    if (player.isBankrupt) cls.push('is-bankrupt');
-    card.className = cls.join(' ');
-    card.style.borderColor = isActive ? player.color : '';
-
-    const head = document.createElement('div');
-    head.className = 'player-card-head';
-    const nameWrap = document.createElement('span');
-    nameWrap.className = 'player-card-namewrap';
-    const hudAv = document.createElement('span');
-    hudAv.className = 'hud-avatar';
-    hudAv.style.borderColor = player.color;
-    hudAv.appendChild(
-      createAvatarElement(resolvePlayerAvatar(state, idx, netInfo?.roster, netInfo?.customAvatars), player.color)
-    );
-    const nameSpan = document.createElement('span');
-    nameSpan.style.color = player.color;
-    nameSpan.textContent = `P${idx + 1} ${player.name}`;
-    nameWrap.append(hudAv, nameSpan);
-    appendNetBadge(nameWrap, idx, netInfo);
-
-    const ptsSpan = document.createElement('span');
-    ptsSpan.className = player.isBankrupt ? 'player-card-pts is-bankrupt' : 'player-card-pts';
-    ptsSpan.textContent = player.isBankrupt ? 'BANKRUPT' : `${player.points} pts`;
-    head.append(nameWrap, ptsSpan);
-
-    const netWorth = computePlayerNetWorth(state, player.id);
-    const finances = document.createElement('div');
-    finances.className = 'player-card-finances';
-    finances.append(
-      makeStatBox('CASH', formatDollars(player.cash), player.cash < 0 ? 'is-cash is-negative' : 'is-cash'),
-      makeStatBox('NET ASSETS', formatDollars(netWorth), 'is-net')
-    );
-
-    const targetAssets = Math.max(1, state.config.targetAssets);
-    const pct = Math.max(0, Math.round((netWorth / targetAssets) * 100));
-    const fillPct = Math.min(100, pct);
-    const progress = document.createElement('div');
-    progress.className = 'player-card-progress';
-    progress.title = `${formatDollars(netWorth)} / ${formatDollars(targetAssets)} target (${pct}%)`;
-    const progressFill = document.createElement('div');
-    progressFill.className = 'player-card-progress-fill';
-    progressFill.style.width = `${fillPct}%`;
-    progressFill.style.backgroundColor = player.color;
-    progress.appendChild(progressFill);
-
-    const hArrow = player.horizontalDir === 'left' ? '←' : player.horizontalDir === 'right' ? '→' : '?';
-    const vArrow = player.verticalDir === 'up' ? '↑' : player.verticalDir === 'down' ? '↓' : '?';
-    const ownedCount = storeCounts[player.id] ?? 0;
-
-    const metaRow = document.createElement('div');
-    metaRow.className = 'player-card-meta';
-    metaRow.append(
-      makeMetaChip(`Dir ${hArrow} ${vArrow}`, 'dir'),
-      makeMetaChip(`${ownedCount} ${ownedCount === 1 ? 'store' : 'stores'}`, 'stores')
-    );
-    appendStatusChips(metaRow, player);
-
-    card.append(head, finances, progress, metaRow);
-    container.appendChild(card);
+    const ref = cache!.cardRefs[idx]!;
+    const override = cache!.stagedState === state ? cache!.stagedOverrides.get(player.id) : undefined;
+    const displayCash = override ? override.cash : player.cash;
+    const displayNetWorth = override ? override.netWorth : computePlayerNetWorth(state, player.id);
+    patchCard(ref, state, player, idx, storeCounts[player.id] ?? 0, displayCash, displayNetWorth, rebuilt, netInfo);
   });
 }

@@ -11,6 +11,7 @@ type SlotKind = 'bank' | 'deliver' | 'event' | 'liquidate';
 export interface BoardShopPickSpec {
   selectableShopIds: Set<string>;
   selectedShopId: string | null;
+  hoveredShopId?: string | null;
   badgeText: string;
   selectedBadgeText: string;
   onSelectShop: (shopId: string) => void;
@@ -142,6 +143,19 @@ function getBankShopBadge(reward: BankRewardDef): string {
 }
 
 export function buildBoardShopPick(
+  state: GameState,
+  dispatch: DispatchFn,
+  onUiChange: () => void,
+  hoveredShopId: string | null = null
+): BoardShopPickSpec | null {
+  const spec = buildRawBoardShopPick(state, dispatch, onUiChange);
+  if (!spec) return null;
+  return hoveredShopId && spec.selectableShopIds.has(hoveredShopId)
+    ? { ...spec, hoveredShopId }
+    : spec;
+}
+
+function buildRawBoardShopPick(
   state: GameState,
   dispatch: DispatchFn,
   onUiChange: () => void

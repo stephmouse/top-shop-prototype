@@ -84,6 +84,10 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
     startingCash: clampInt(rawCfg.startingCash, 500, 500000, DEFAULT_MATCH_CONFIG.startingCash),
     bankruptLimit: clampInt(rawCfg.bankruptLimit, 1, maxBankrupt, 1),
     finishRoundOnWin: Boolean(rawCfg.finishRoundOnWin),
+    showMonthPopup:
+      rawCfg.showMonthPopup === undefined
+        ? DEFAULT_MATCH_CONFIG.showMonthPopup !== false
+        : Boolean(rawCfg.showMonthPopup),
   };
 
   return { stageId, players, config };

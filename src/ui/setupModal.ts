@@ -58,6 +58,7 @@ const MODAL_TEMPLATE = `
       <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="500" data-role="cash" /></label>
       <label class="setup-field"><span class="setup-field-label">Bankrupt Limit</span><input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" /></label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="finish-round" /> Finish Round on Win</label>
+      <label class="setup-checkbox-field"><input type="checkbox" data-role="month-popup" /> Show Month Popups</label>
     </div>
   </section>
   <section class="setup-section">
@@ -98,6 +99,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   const cashInput = q<HTMLInputElement>('cash');
   const bankruptInput = q<HTMLInputElement>('bankrupt');
   const finishRoundCheckbox = q<HTMLInputElement>('finish-round');
+  const monthPopupCheckbox = q<HTMLInputElement>('month-popup');
   const saveSummary = q<HTMLElement>('save-summary');
   const loadBtn = q<HTMLButtonElement>('load');
   const clearBtn = q<HTMLButtonElement>('clear');
@@ -188,6 +190,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     bankruptInput.max = String(Math.max(1, draft.players.length - 1));
     bankruptInput.value = String(draft.config.bankruptLimit);
     finishRoundCheckbox.checked = draft.config.finishRoundOnWin;
+    monthPopupCheckbox.checked = draft.config.showMonthPopup !== false;
     renderPlayersList();
     refreshSaveStatus();
   }
@@ -199,6 +202,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
       startingCash: Number(cashInput.value),
       bankruptLimit: Number(bankruptInput.value),
       finishRoundOnWin: finishRoundCheckbox.checked,
+      showMonthPopup: monthPopupCheckbox.checked,
     };
     draft = sanitizeMatchSetup(draft) ?? createDefaultMatchSetup();
     return draft;

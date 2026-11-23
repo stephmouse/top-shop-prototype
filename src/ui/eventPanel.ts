@@ -10,6 +10,7 @@ import {
   handleEventSellPickClick,
   setEventSelectedShopId,
 } from './boardPickState';
+import { formatLotLabel, groupEmptyLotsBySection } from './lotLabels';
 
 type DispatchFn = (action: GameAction) => void;
 
@@ -93,6 +94,14 @@ export function renderEventPickPanel(
   container.append(header, grid);
 }
 
+function bindHoverShop(btn: HTMLElement, shopId: string, onHoverShop?: (shopId: string | null) => void): void {
+  if (!onHoverShop) return;
+  btn.addEventListener('mouseenter', () => onHoverShop(shopId));
+  btn.addEventListener('mouseleave', () => onHoverShop(null));
+  btn.addEventListener('focus', () => onHoverShop(shopId));
+  btn.addEventListener('blur', () => onHoverShop(null));
+}
+
 function formatLoc(state: GameState, shop: Shop): string {
   const t = state.tiles[shop.tileId];
   return t ? `${t.floor}F:${t.col + 1}` : shop.id;
@@ -102,7 +111,8 @@ export function renderEventStorePanel(
   container: HTMLElement,
   state: GameState,
   dispatch: DispatchFn,
-  onUiChange?: () => void
+  onUiChange?: () => void,
+  onHoverShop?: (shopId: string | null) => void
 ): void {
   const prompt = state.eventStorePrompt;
   if (!prompt) return;
@@ -131,9 +141,8 @@ export function renderEventStorePanel(
         btn.style.borderLeft = `4px solid ${active.color}`;
         const baseLabel = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
         btn.textContent = isConfirming ? `Confirm? ${baseLabel}` : baseLabel;
-        btn.addEventListener('click', () =>
-          handleEventSellPickClick(state, shop.id, dispatch, notify)
-        );
+        bindHoverShop(btn, shop.id, onHoverShop);
+        btn.addEventListener('click', () => handleEventSellPickClick(state, shop.id, dispatch, notify));
         list.appendChild(btn);
       }
     } else {
@@ -148,13 +157,14 @@ export function renderEventStorePanel(
         const backBtn = document.createElement('button');
         backBtn.textContent = '← Back to Empty Lots';
         backBtn.addEventListener('click', () => {
+          onHoverShop?.(null);
           setEventSelectedShopId(state, null);
           notify();
         });
         list.appendChild(backBtn);
 
         const slotNote = document.createElement('div');
-        slotNote.textContent = `Pick store type to open at ${formatLoc(state, pickedSlot)} (${pickedSlot.segmentId}):`;
+        slotNote.textContent = `Pick store type to open at ${formatLotLabel(state, pickedSlot)}:`;
         list.appendChild(slotNote);
 
         const allowed = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
@@ -167,8 +177,9 @@ export function renderEventStorePanel(
           const btn = document.createElement('button');
           btn.className = 'primary';
           btn.disabled = payer.cash < def.baseOpenCost;
-          btn.textContent = `Open ${def.name} at ${formatLoc(state, pickedSlot)} ($${def.baseOpenCost}${payerTag})`;
+          btn.textContent = `Open ${def.name} ($${def.baseOpenCost}${payerTag})`;
           btn.addEventListener('click', () => {
+            onHoverShop?.(null);
             setEventSelectedShopId(state, null);
             dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: pickedSlot.id, storeTypeId: def.id });
           });
@@ -183,14 +194,28 @@ export function renderEventStorePanel(
             : 'No eligible empty lots available.';
         list.appendChild(pickNote);
 
-        for (const s of emptySlots) {
-          const btn = document.createElement('button');
-          btn.textContent = `Slot ${formatLoc(state, s)} (${s.segmentId}) → Pick Store Type`;
-          btn.addEventListener('click', () => {
-            setEventSelectedShopId(state, s.id);
-            notify();
-          });
-          list.appendChild(btn);
+        for (const group of groupEmptyLotsBySection(state, emptySlots, active.id)) {
+          const groupEl = document.createElement('div');
+          groupEl.className = 'lot-group';
+          const hdr = document.createElement('div');
+          hdr.className = 'lot-group-header';
+          hdr.append(mkSpan('', group.title), mkSpan('lot-group-sub', group.storeSummary));
+          const slotsRow = document.createElement('div');
+          slotsRow.className = 'lot-group-slots';
+          for (const item of group.items) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = `Spot ${item.spotNum} (${item.coord})${item.isChainAdjacent ? ' ★ Chain' : ''}`;
+            bindHoverShop(btn, item.shop.id, onHoverShop);
+            btn.addEventListener('click', () => {
+              onHoverShop?.(null);
+              setEventSelectedShopId(state, item.shop.id);
+              notify();
+            });
+            slotsRow.appendChild(btn);
+          }
+          groupEl.append(hdr, slotsRow);
+          list.appendChild(groupEl);
         }
       }
     }
@@ -199,6 +224,7 @@ export function renderEventStorePanel(
       const skip = document.createElement('button');
       skip.textContent = prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip';
       skip.addEventListener('click', () => {
+        onHoverShop?.(null);
         setEventSelectedShopId(state, null);
         dispatch({ type: 'SKIP_EVENT_STORE' });
       });

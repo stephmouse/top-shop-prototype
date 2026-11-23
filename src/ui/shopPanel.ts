@@ -7,7 +7,7 @@ import {
   getTile,
 } from '../engine/helpers';
 import { getAllowedStoreTypeIds } from '../engine/shops';
-import type { GameState } from '../engine/types';
+import type { GameState, ItemDef } from '../engine/types';
 import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPickState';
 import {
   formatShopLocation,
@@ -89,52 +89,82 @@ export function renderBuyRivalPanel(
 
   const list = document.createElement('div');
   list.className = 'card-list';
-  const selectedIds: string[] = [];
+
+  interface ShelfSlot {
+    slotIdx: number;
+    item: ItemDef;
+    price: number;
+  }
+
+  const sortedItems = [...def.items].sort((a, b) => b.retailPrice - a.retailPrice);
+  const slots: ShelfSlot[] = [];
+  for (const item of sortedItems) {
+    const qty = shop.stock[item.id] ?? 0;
+    const price = getEffectiveItemRetailPrice(state, item, shop.ownerId);
+    for (let k = 0; k < qty; k++) {
+      slots.push({ slotIdx: slots.length, item, price });
+    }
+  }
+
+  const maxPick = Math.min(SHOP_RULES.maxItemsPerVisit, slots.length);
+  const selectedSlots = new Set<number>();
   const summary = document.createElement('div');
-  const buyBtn = makePanelButton('Purchase Selected', () => dispatch({ type: 'BUY_RIVAL_ITEMS', itemIds: selectedIds }), { primary: true });
+  const grid = document.createElement('div');
+  grid.className = 'rival-shelf-grid';
+  const buyBtn = makePanelButton(
+    'Purchase Selected',
+    () =>
+      dispatch({
+        type: 'BUY_RIVAL_ITEMS',
+        itemIds: Array.from(selectedSlots).map((idx) => slots[idx]!.item.id),
+      }),
+    { primary: true }
+  );
+
+  const slotButtons: Array<{ btn: HTMLButtonElement; slot: ShelfSlot; statusEl: HTMLSpanElement }> = [];
 
   const refresh = () => {
-    const total = selectedIds.reduce((sum, id) => {
-      const it = def.items.find((i) => i.id === id);
-      return sum + (it ? getEffectiveItemRetailPrice(state, it, shop.ownerId) : 0);
-    }, 0);
-    summary.textContent = `Selected: ${selectedIds.length}/2 (Must buy 1–2) | Total: $${total}`;
-    buyBtn.disabled = selectedIds.length < 1 || selectedIds.length > 2;
+    let total = 0;
+    for (const idx of selectedSlots) {
+      total += slots[idx]?.price ?? 0;
+    }
+    const atCap = selectedSlots.size >= SHOP_RULES.maxItemsPerVisit;
+    for (const { btn, slot, statusEl } of slotButtons) {
+      const picked = selectedSlots.has(slot.slotIdx);
+      btn.className = `rival-item-card${picked ? ' is-selected' : ''}`;
+      btn.disabled = !picked && atCap;
+      statusEl.textContent = picked ? '✓ Selected' : 'Click to buy';
+    }
+    const buyoutNote =
+      selectedSlots.size > 0 && selectedSlots.size === slots.length ? ' · Clears store for buyout!' : '';
+    summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | Selected: ${selectedSlots.size}/${maxPick} (Must buy 1–${maxPick}) | Total: $${total}${buyoutNote}`;
+    buyBtn.disabled = selectedSlots.size < 1 || selectedSlots.size > SHOP_RULES.maxItemsPerVisit;
   };
 
-  const sortedStockedItems = [...def.items]
-    .filter((item) => (shop.stock[item.id] ?? 0) > 0)
-    .sort((a, b) => b.retailPrice - a.retailPrice);
-
-  for (const item of sortedStockedItems) {
-    const stockQty = shop.stock[item.id] ?? 0;
-    const price = getEffectiveItemRetailPrice(state, item, shop.ownerId);
-    const row = document.createElement('div');
-    row.className = 'action-stack';
-    const label = document.createElement('span');
-    const updateLabel = () => {
-      const chosenCount = selectedIds.filter((id) => id === item.id).length;
-      label.textContent = `${item.name} ($${price}, CB ${Math.round(item.cashbackChance * 100)}%) [Stock: ${stockQty}] Picked: ${chosenCount}`;
+  for (const slot of slots) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'rival-item-card';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'rival-item-name';
+    nameEl.textContent = slot.item.name;
+    const metaEl = document.createElement('span');
+    metaEl.className = 'rival-item-meta';
+    metaEl.textContent = `$${slot.price} · CB ${Math.round(slot.item.cashbackChance * 100)}%`;
+    const statusEl = document.createElement('span');
+    statusEl.className = 'rival-item-pick';
+    btn.append(nameEl, metaEl, statusEl);
+    btn.addEventListener('click', () => {
+      if (selectedSlots.has(slot.slotIdx)) selectedSlots.delete(slot.slotIdx);
+      else if (selectedSlots.size < SHOP_RULES.maxItemsPerVisit) selectedSlots.add(slot.slotIdx);
       refresh();
-    };
-    row.appendChild(makePanelButton('-', () => {
-      const idx = selectedIds.indexOf(item.id);
-      if (idx >= 0) selectedIds.splice(idx, 1);
-      updateLabel();
-    }));
-    row.appendChild(makePanelButton('+', () => {
-      const chosenCount = selectedIds.filter((id) => id === item.id).length;
-      if (selectedIds.length < 2 && chosenCount < stockQty) selectedIds.push(item.id);
-      updateLabel();
-    }));
-    row.appendChild(label);
-    list.appendChild(row);
-    updateLabel();
+    });
+    slotButtons.push({ btn, slot, statusEl });
+    grid.appendChild(btn);
   }
 
   refresh();
-  list.appendChild(summary);
-  list.appendChild(buyBtn);
+  list.append(summary, grid, buyBtn);
   container.appendChild(list);
 }
 

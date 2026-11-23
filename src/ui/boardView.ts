@@ -183,6 +183,7 @@ export function renderBoard(
     const endTarget = cache.endByTile.get(tile.id);
     const pickTarget = Boolean(pick && tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId));
     const pickSelected = Boolean(pickTarget && tile.shopSlotId === pick?.selectedShopId);
+    const pickHovered = Boolean(pickTarget && tile.shopSlotId === pick?.hoveredShopId);
     const content = formatTileContent(state, tile, hasMultiShaft);
     const { chainLeft, chainRight } = computeChainAdjacency(state, tile, content.shop);
 
@@ -192,6 +193,7 @@ export function renderBoard(
     if (endTarget) classes.push('tile--end-target');
     if (pickTarget) classes.push('tile--pick-target');
     if (pickSelected) classes.push('tile--pick-selected');
+    if (pickHovered) classes.push('tile--pick-hover');
     if (pick && !pickTarget) classes.push('tile--pick-dim');
     if (content.isOwned) classes.push('is-owned');
     if (content.isVacantShop) classes.push('is-vacant');

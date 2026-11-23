@@ -17,6 +17,7 @@ export const DEFAULT_MATCH_CONFIG: MatchConfig = {
   startingCash: 3000,
   bankruptLimit: 1,
   finishRoundOnWin: false,
+  showMonthPopup: true,
 };
 
 export const PENCIL_FACES: readonly PencilFace[] = [1, 2, 3, 4, 5, 6, 7, 8, 'E'];

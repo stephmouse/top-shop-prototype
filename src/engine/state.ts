@@ -103,14 +103,13 @@ export function createInitialGameState(
     tiles,
     shops,
     segmentPools,
+    lastPurchaseReceipt: null,
     winnerId: null,
     log: [`Match started at Floor 1 Bank (${stageDef.name} · Year 1, April).`],
   };
 }
 
-export function applyAction(state: GameState, action: GameAction): GameState {
-  if (state.phase === 'GAME_OVER') return state;
-
+function dispatchAction(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'ROLL_PENCIL':
       return handleRollPencil(state, action.chosenFace);
@@ -153,4 +152,14 @@ export function applyAction(state: GameState, action: GameAction): GameState {
     default:
       return state;
   }
+}
+
+export function applyAction(state: GameState, action: GameAction): GameState {
+  if (state.phase === 'GAME_OVER') return state;
+  const next = dispatchAction(state, action);
+  if (next === state) return state;
+  if (action.type !== 'BUY_RIVAL_ITEMS' && next.lastPurchaseReceipt) {
+    return { ...next, lastPurchaseReceipt: null };
+  }
+  return next;
 }

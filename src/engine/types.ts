@@ -140,6 +140,19 @@ export interface MatchConfig {
   startingCash: number;
   bankruptLimit: number;
   finishRoundOnWin: boolean;
+  showMonthPopup?: boolean;
+}
+
+export interface PurchaseReceipt {
+  buyerId: string;
+  ownerId: string;
+  shopId: string;
+  tileId: string;
+  storeName: string;
+  grossPaid: number;
+  cashbackCount: number;
+  cashbackRefund: number;
+  refundedItemNames: string[];
 }
 
 export type PencilFace = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 'E';
@@ -185,6 +198,7 @@ export interface GameState {
   tiles: Record<string, Tile>;
   shops: Record<string, Shop>;
   segmentPools: Record<string, string[]>;
+  lastPurchaseReceipt?: PurchaseReceipt | null;
   winnerId: string | null;
   log: string[];
 }

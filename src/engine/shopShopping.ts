@@ -14,7 +14,7 @@ import {
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
 } from './shopHelpers';
-import type { GameState, ItemDef, Player, Shop } from './types';
+import type { GameState, ItemDef, Player, PurchaseReceipt, Shop } from './types';
 
 export function handleDeliverItems(state: GameState, shopId: string, order: Record<string, number>): GameState {
   if (state.phase !== 'SHOP_DELIVER') return state;
@@ -120,17 +120,22 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
   }
 
   let seed = state.seed;
-  let netPaid = 0;
-  let refunds = 0;
+  let grossPaid = 0;
+  let cashbackRefund = 0;
+  const refundedItemNames: string[] = [];
   for (const item of boughtItems) {
+    const price = getEffectiveItemRetailPrice(state, item, shop.ownerId);
+    grossPaid += price;
     const roll = nextRandom(seed);
     seed = roll.nextSeed;
-    if (roll.value < item.cashbackChance) refunds++;
-    else netPaid += getEffectiveItemRetailPrice(state, item, shop.ownerId);
+    if (roll.value < item.cashbackChance) {
+      cashbackRefund += price * 2;
+      refundedItemNames.push(item.name);
+    }
   }
 
   const { rank, activeCount } = computePlayerRank(state, active.id);
-  const basePts = Math.floor(netPaid / SHOP_RULES.pointsPriceDivisor);
+  const basePts = Math.floor(grossPaid / SHOP_RULES.pointsPriceDivisor);
   const rawMax =
     rank === activeCount || rank >= 3 ? basePts + 1 : rank === 1 ? basePts - 1 : basePts;
   const minPts = Math.max(1, rawMax - 4);
@@ -139,7 +144,7 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
   const ptsChanceRoll = nextRandom(seed);
   seed = ptsChanceRoll.nextSeed;
   let ptsAwarded = 0;
-  if (netPaid > 0 && ptsChanceRoll.value < SHOP_RULES.pointsAwardChance) {
+  if (grossPaid > 0 && ptsChanceRoll.value < SHOP_RULES.pointsAwardChance) {
     if (minPts === maxPts) {
       ptsAwarded = minPts;
     } else {
@@ -150,28 +155,44 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
   }
 
   const ownerId = shop.ownerId;
+  const ownerName = state.players.find((p) => p.id === ownerId)?.name ?? 'Owner';
+  const buyerDelta = cashbackRefund - grossPaid;
+  const ownerDelta = grossPaid - cashbackRefund;
   const players: Player[] = state.players.map((p) => {
     if (p.id === active.id) {
-      return { ...p, cash: p.cash - netPaid, points: clampPoints(p.points + ptsAwarded) };
+      return { ...p, cash: p.cash + buyerDelta, points: clampPoints(p.points + ptsAwarded) };
     }
-    if (p.id === ownerId) return { ...p, cash: p.cash + netPaid };
+    if (p.id === ownerId) return { ...p, cash: p.cash + ownerDelta };
     return p;
   });
 
   const updatedShop: Shop = { ...shop, stock: nextStock };
-  const refundNote = refunds > 0 ? ` (${refunds} Cash Back refund!)` : '';
+  const lastPurchaseReceipt: PurchaseReceipt = {
+    buyerId: active.id,
+    ownerId,
+    shopId: shop.id,
+    tileId: shop.tileId,
+    storeName: def.name,
+    grossPaid,
+    cashbackCount: refundedItemNames.length,
+    cashbackRefund,
+    refundedItemNames,
+  };
   const ptsNote = ptsAwarded > 0 ? `, +${ptsAwarded} pts` : '';
+  const logMsg =
+    refundedItemNames.length > 0
+      ? `${active.name} bought ${boughtItems.length} item(s) at ${def.name} for $${grossPaid}${ptsNote} — CASH BACK! ${ownerName} paid back $${cashbackRefund} (${refundedItemNames.join(', ')})!`
+      : `${active.name} bought ${boughtItems.length} item(s) at ${def.name} for $${grossPaid}${ptsNote}.`;
+
   const nextState: GameState = {
     ...state,
     seed,
     players,
     shops: { ...state.shops, [shop.id]: updatedShop },
+    lastPurchaseReceipt,
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
-    log: appendLog(
-      state,
-      `${active.name} bought ${boughtItems.length} item(s) at ${def.name} for $${netPaid}${ptsNote}.${refundNote}`
-    ),
+    log: appendLog(state, logMsg),
   };
 
   if (getShopTotalStock(updatedShop) === 0 && getActivePlayer(nextState).cash >= 0) {

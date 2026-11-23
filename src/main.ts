@@ -13,22 +13,25 @@ import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay
 import { buildBoardShopPick } from './ui/boardPickState';
 import { createFxOverlay } from './ui/fxOverlay';
 import { bindKeyboardControls } from './ui/keyboard';
+import { renderMatchLog } from './ui/matchLogView';
 import {
   extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot, loadStoredSetup,
   sanitizeMatchSetup, saveAutoSavedMatch, saveManualMatchSlot, saveStoredSetup,
 } from './ui/persistence';
 import type { MatchSetupData } from './ui/persistence';
+import { resetPlayersHudCache, stageCashbackHud } from './ui/playerCardView';
 import { renderRouteOverlay } from './ui/routeOverlay';
 import { createSoundFx } from './ui/soundFx';
 import { createLobbyModal } from './ui/lobbyModal';
 import { createSetupModal } from './ui/setupModal';
 import { createTopbar } from './ui/topbar';
+import { createTurnCueTracker, shouldWarnBeforeUnload } from './ui/turnCue';
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
 
 let autoStepEnabled = false, showRoutes = true, guidedWalkActive = false, awaitingRemoteStepAck = false;
-let hoveredEndTileId: string | null = null, stepTimer: number | null = null, ackTimer: number | null = null;
+let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = null, stepTimer: number | null = null, ackTimer: number | null = null;
 let guidedChoices: DirectionChoice[] = [];
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
 let prevRenderedState: GameState | null = null;
@@ -46,12 +49,11 @@ const boardEl = mk('div', 'board-grid'), tokensLayerEl = mk('div', 'tokens-layer
 const routeSvgEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
 routeSvgEl.setAttribute('class', 'route-layer');
 const soundFx = createSoundFx();
+const turnCue = createTurnCueTracker(soundFx);
 const fxOverlay = createFxOverlay(boardEl, tokensLayerEl, soundFx);
 boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl, fxOverlay.el);
 
-const bottomGrid = mk('section', 'bottom-grid'), actionBox = mk('div', 'panel-box'), logBox = mk('div', 'panel-box');
-const logList = mk('ol', 'log-list');
-logBox.append(mk('h3', 'panel-title', 'Match Log'), logList);
+const bottomGrid = mk('section', 'bottom-grid'), actionBox = mk('div', 'panel-box'), logBox = mk('div', 'panel-box calendar-log-panel');
 bottomGrid.append(actionBox, logBox);
 
 function applyHostAction(action: GameAction): GameState {
@@ -75,7 +77,7 @@ const netSession = createMultiplayerSession({
 (window as unknown as Record<string, unknown>).__topShopNet = netSession;
 
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
-  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; tokensLayerEl.innerHTML = ''; fxOverlay.clear();
+  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; hoveredPickShopId = null; turnCue.reset(); resetPlayersHudCache(hudEl); tokensLayerEl.innerHTML = ''; fxOverlay.clear();
   prevRenderedState = null; state = nextState; currentSetup = nextSetup;
   saveStoredSetup(nextSetup); saveAutoSavedMatch(state);
   netSession.broadcastHostState(state);
@@ -185,7 +187,7 @@ function scheduleMovementTick(): void {
 
 function dispatch(action: GameAction): void {
   if (!netSession.isLocalTurn(state)) return;
-  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null;
+  cancelGuidedWalk(); awaitingRemoteStepAck = false; hoveredEndTileId = null; hoveredPickShopId = null;
   netSession.sendOrApplyAction(action);
 }
 
@@ -206,11 +208,12 @@ function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencil
     onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
     readOnly: !canAct, remotePencilSpinning: remoteSpin,
     onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning), onUiChange: refreshPickUi,
+    onHoverShop: (shopId) => { if (hoveredPickShopId !== shopId) { hoveredPickShopId = shopId; paintBoard(); } },
   });
 }
 function paintBoard(preview = computeMovePreview(state), canAct = netSession.isLocalTurn(state)): void {
   renderBoard(boardEl, state, {
-    preview, shopPick: canAct ? buildBoardShopPick(state, dispatch, refreshPickUi) : null,
+    preview, shopPick: canAct ? buildBoardShopPick(state, dispatch, refreshPickUi, hoveredPickShopId) : null,
     onSelectNextStep: (opt) => dispatch(state.phase === 'CHOOSE_DIRECTION' && opt.direction ? { type: 'CHOOSE_DIRECTION', direction: opt.direction } : { type: 'ADVANCE_STEP' }),
     onSelectEndTarget: (target) => {
       if (!netSession.isLocalTurn(state)) return;
@@ -222,27 +225,30 @@ function paintBoard(preview = computeMovePreview(state), canAct = netSession.isL
 function renderSessionUi(): void {
   lobbyModal.refresh(); syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
   const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
+  turnCue.sync(state, canAct);
   if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
     paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin); scheduleMovementTick();
   }
 }
 
 function render(): void {
+  const prev = prevRenderedState;
+  if (prev && prev !== state) stageCashbackHud(hudEl, prev, state);
   const preview = computeMovePreview(state), canAct = netSession.isLocalTurn(state);
   syncHeaderAndHud(); paintBoard(preview, canAct); drawRoutes(preview);
   renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  fxOverlay.playStateDiff(prevRenderedState, state); prevRenderedState = state;
+  fxOverlay.playStateDiff(prev, state); prevRenderedState = state;
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
-  renderActionBox(canAct);
-  logList.innerHTML = ''; for (const entry of state.log) logList.appendChild(mk('li', '', entry));
+  renderActionBox(canAct); turnCue.sync(state, canAct);
+  renderMatchLog(logBox, state);
   scheduleMovementTick();
 }
 
 const syncBoardOverlays = () => { drawRoutes(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars()); };
 window.addEventListener('resize', syncBoardOverlays);
 if (typeof ResizeObserver !== 'undefined') new ResizeObserver(syncBoardOverlays).observe(boardEl);
-window.addEventListener('beforeunload', (e) => { if (netSession.getRole() !== 'offline') { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', (e) => { if (shouldWarnBeforeUnload(state, netSession.getRole(), netSession.getRoster())) { e.preventDefault(); e.returnValue = ''; } });
 render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();
 if (roomParam) lobbyModal.open(roomParam);

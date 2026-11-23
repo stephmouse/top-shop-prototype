@@ -47,6 +47,7 @@ export interface ActionPanelViewOptions {
   remotePencilSpinning?: boolean;
   onPencilSpinChange?: (spinning: boolean) => void;
   onUiChange?: () => void;
+  onHoverShop?: (shopId: string | null) => void;
 }
 
 export function renderActionPanel(
@@ -67,7 +68,17 @@ export function renderActionPanel(
     ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
     : '';
   const waitTag = viewOptions.readOnly && state.phase !== 'GAME_OVER' ? ` · Waiting for ${active.name}...` : '';
-  heading.textContent = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}${waitTag}`;
+  const headingText = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}${waitTag}`;
+  if (!viewOptions.readOnly && state.phase !== 'GAME_OVER') {
+    const turnBadge = document.createElement('span');
+    turnBadge.className = 'turn-cue-badge';
+    turnBadge.style.borderColor = active.color;
+    turnBadge.style.color = active.color;
+    turnBadge.textContent = 'YOUR TURN';
+    heading.append(turnBadge, headingText);
+  } else {
+    heading.textContent = headingText;
+  }
   container.appendChild(heading);
 
   const stack = document.createElement('div');
@@ -155,7 +166,7 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'EVENT_PICK_STORE') {
-    renderEventStorePanel(stack, state, dispatch, viewOptions.onUiChange);
+    renderEventStorePanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
     return;
   }
 

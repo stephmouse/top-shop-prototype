@@ -7,6 +7,9 @@ export interface SoundFxController {
   playVisualEvents: (events: VisualEvent[]) => void;
   playCardFlip: () => void;
   playPencilStop: () => void;
+  playYourTurn: () => void;
+  playCashbackFanfare: () => void;
+  playMonthFlip: () => void;
 }
 
 const MUTE_KEY = 'top_shop_sfx_muted_v1';
@@ -101,7 +104,14 @@ export function createSoundFx(): SoundFxController {
     const moved = events.find((e) => e.type === 'player_moved');
     const payday = events.find((e) => e.type === 'bank_payday');
     const liquidate = events.find((e) => e.type === 'liquidate_forced');
-    const cash = events.find((e) => e.type === 'cash_delta');
+    const cashEvents = events.filter(
+      (e): e is Extract<VisualEvent, { type: 'cash_delta' }> => e.type === 'cash_delta'
+    );
+    const cash =
+      cashEvents.find((e) => e.isActive) ??
+      cashEvents.find((e) => e.isHurt) ??
+      cashEvents[0];
+    const cashback = events.find((e) => e.type === 'cashback_triggered');
     const shop = events.find((e) => e.type === 'shop_changed');
 
     if (moved && !payday) {
@@ -120,6 +130,9 @@ export function createSoundFx(): SoundFxController {
     } else if (cash) {
       if (cash.amount > 0 && !shop) playArp([880, 1175], 'sine', 0.06, 0.12);
       else if (cash.isHurt) tone(240, 0.18, 'triangle', 0, 145, 0.06);
+    } else if (cashback) {
+      // Beat 1 plays the standard hurt purchase sound right before Beat 2's Cash Back twist.
+      tone(240, 0.18, 'triangle', 0, 145, 0.06);
     }
 
     if (shop) {
@@ -139,5 +152,17 @@ export function createSoundFx(): SoundFxController {
     playVisualEvents,
     playCardFlip: () => tone(520, 0.065, 'triangle', 0, 780, 0.05),
     playPencilStop: () => tone(330, 0.055, 'triangle', 0, 520, 0.05),
+    playYourTurn: () => {
+      tone(659, 0.14, 'sine', 0, 659, 0.055);
+      tone(988, 0.22, 'triangle', 0.095, 988, 0.055);
+    },
+    playCashbackFanfare: () => {
+      playArp([523, 659, 784, 988, 1046], 'triangle', 0.055, 0.16);
+      tone(1318, 0.22, 'sine', 0.28, 1568, 0.05);
+    },
+    playMonthFlip: () => {
+      tone(523, 0.07, 'sine', 0, 659, 0.036);
+      tone(784, 0.11, 'triangle', 0.06, 784, 0.032);
+    },
   };
 }
