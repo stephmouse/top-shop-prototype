@@ -15,6 +15,7 @@ import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay
 import { buildBoardShopPick } from './ui/boardPickState';
 import { createFxOverlay } from './ui/fxOverlay';
 import { createHomeModal } from './ui/homeModal';
+import { createHowToPlayModal } from './ui/howToPlayModal';
 import { applyHostSeatEdit, applyUnifiedProfileChange, buildExtendedLocalPlayers } from './ui/hostProfileSync';
 import type { TokenMoveHint } from './ui/hudView';
 import { bindKeyboardControls } from './ui/keyboard';
@@ -45,6 +46,9 @@ let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = n
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false, lastRenderedReconnecting = false;
 let lastRenderedRemoteStop: PencilFace | null = null;
 let prevRenderedState: GameState | null = null;
+const LANDING_LOCK_MS = 380;
+let landingLockUntil = 0;
+let landingLockTimer: number | null = null;
 
 const autoSaved = loadAutoSavedMatch();
 let currentSetup: MatchSetupData = autoSaved ? extractSetupFromState(autoSaved) : loadStoredSetup();
@@ -69,6 +73,18 @@ boardStageEl.append(boardEl, routeSvgEl, tokensLayerEl, fxOverlay.el);
 
 const bottomGrid = mk('section', 'bottom-grid'), actionBox = mk('div', 'panel-box'), logBox = mk('div', 'panel-box calendar-log-panel');
 bottomGrid.append(actionBox, logBox);
+
+function clearLandingLock(): void {
+  if (landingLockTimer !== null) { window.clearTimeout(landingLockTimer); landingLockTimer = null; }
+  landingLockUntil = 0;
+  actionBox.classList.remove('is-landing-guard');
+}
+function armLandingLock(): void {
+  clearLandingLock();
+  landingLockUntil = Date.now() + LANDING_LOCK_MS;
+  actionBox.classList.add('is-landing-guard');
+  landingLockTimer = window.setTimeout(() => { landingLockTimer = null; landingLockUntil = 0; actionBox.classList.remove('is-landing-guard'); }, LANDING_LOCK_MS);
+}
 
 function applyHostAction(action: GameAction): GameState {
   const next = applyAction(state, action);
@@ -100,7 +116,7 @@ const moveDriver = createMovementDriver({
 });
 
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
-  moveDriver.cancel(); moveDriver.clearAwaitingAck(); hoveredEndTileId = null; hoveredPickShopId = null;
+  moveDriver.cancel(); moveDriver.clearAwaitingAck(); clearLandingLock(); hoveredEndTileId = null; hoveredPickShopId = null;
   turnCue.reset(); resetPlayersHudCache(hudEl); tokensLayerEl.innerHTML = ''; fxOverlay.clear();
   prevRenderedState = null; state = nextState; currentSetup = nextSetup;
   saveStoredSetup(nextSetup); saveAutoSavedMatch(state);
@@ -156,10 +172,12 @@ const lobbyModal = createLobbyModal({
   onUpdateHostSeat: updateHostSeat, onOpenMatchSetup: openSetup, onProfileChange: applyUnifiedProfile,
 });
 
+const howToPlayModal = createHowToPlayModal();
 const homeModal = createHomeModal({
   getState: () => state, getProfile: () => loadUserProfile(getPrimaryFallback()),
   onUpdateProfile: applyUnifiedProfile,
   onEditAvatar: (cur, col, onSave, title = 'Customize Your Standee') => avatarModal.open(cur, col, title, onSave),
+  onOpenHowToPlay: () => howToPlayModal.open(),
   onPlayLocal: () => setupModal.open(currentSetup),
   onHostOnline: async (customCode) => {
     const code = await netSession.hostRoom(customCode);
@@ -190,6 +208,7 @@ const topbar = createTopbar({
     });
   },
   onOpenHome: () => { setupModal.close(); lobbyModal.close(); homeModal.open(); },
+  onOpenHowToPlay: () => howToPlayModal.open(),
   onOpenSetup: openSetup, onOpenLobby: () => openLobby(), onSaveMatch: saveCurrentMatch,
   onLoadMatch: () => { const slot = loadManualMatchSlot(); if (slot) loadSavedState(slot.state); },
   onNewMatch: (count) => startMatchFromSetup({
@@ -209,11 +228,12 @@ const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
 };
 
 setupModal.el.addEventListener('click', () => syncTopbar());
-shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, homeModal.el, setupModal.el, lobbyModal.el, avatarModal.el);
+shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, homeModal.el, setupModal.el, lobbyModal.el, avatarModal.el, howToPlayModal.el);
 root.appendChild(shell);
 
 function dispatch(action: GameAction): void {
   if (!netSession.isLocalTurn(state) || netSession.isReconnecting()) return;
+  if (Date.now() < landingLockUntil && action.type !== 'UNDO_STEP' && action.type !== 'CANCEL_MOVE') return;
   if (netSession.getRole() === 'guest') {
     if (moveDriver.isAwaitingAck()) return;
     moveDriver.cancel(); hoveredEndTileId = null; hoveredPickShopId = null; moveDriver.markAwaitingAck();
@@ -226,8 +246,12 @@ function dispatch(action: GameAction): void {
 
 bindKeyboardControls({
   getState: () => state, getActionBox: () => actionBox, dispatch, isMovingPhase: moveDriver.isMovingPhase,
-  isModalOpen: () => avatarModal.isOpen() || homeModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
-  onCloseModal: () => { if (avatarModal.isOpen()) return avatarModal.close(); homeModal.close(); setupModal.close(); lobbyModal.close(); },
+  isModalOpen: () => avatarModal.isOpen() || howToPlayModal.isOpen() || homeModal.isOpen() || setupModal.isOpen() || lobbyModal.isOpen(),
+  onCloseModal: () => {
+    if (avatarModal.isOpen()) return avatarModal.close();
+    if (howToPlayModal.isOpen()) return howToPlayModal.close();
+    homeModal.close(); setupModal.close(); lobbyModal.close();
+  },
   getHoldWaitMs: moveDriver.getHoldWaitMs,
   isAwaitingAck: moveDriver.isAwaitingAck,
 });
@@ -289,6 +313,11 @@ function render(): void {
   syncHeaderAndHud(); paintBoard(preview, canAct); drawRoutes(preview);
   renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars(), moveHints);
   fxOverlay.playStateDiff(prev, state, diffEvents); prevRenderedState = state;
+  if (prev && moveDriver.isMovingPhase(prev.phase) && !moveDriver.isMovingPhase(state.phase) && state.phase !== 'ROLL_PENCIL' && state.phase !== 'GAME_OVER' && canAct) {
+    armLandingLock();
+  } else if (prev && prev.phase !== state.phase) {
+    clearLandingLock();
+  }
   const activeEl = boardStageEl.scrollWidth > boardStageEl.clientWidth ? getBoardTileElement(boardEl, getActivePlayer(state).tileId) : undefined;
   if (activeEl) boardStageEl.scrollTo({ left: Math.max(0, activeEl.offsetLeft - boardStageEl.clientWidth / 2 + activeEl.offsetWidth / 2), behavior: 'smooth' });
   renderActionBox(canAct); turnCue.sync(state, canAct); renderMatchLog(logBox, state); setupModal.refresh(); moveDriver.scheduleTick();

@@ -1,4 +1,5 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { computeOpenCostForLevel } from './helpers';
 import { advanceToNextTurn } from './turn';
 import type { GameState, Shop } from './types';
 
@@ -139,4 +140,27 @@ export function recomputeSegmentChainLevels(
     }
   }
   return shops;
+}
+
+export function computeResultingChainLevel(
+  state: GameState,
+  shopId: string,
+  ownerId: string
+): 1 | 2 | 3 | 4 {
+  const shop = state.shops[shopId];
+  if (!shop) return 1;
+  const hypothetical: Shop = { ...shop, ownerId };
+  const nextShops = { ...state.shops, [shopId]: hypothetical };
+  const chain = collectConnectedChain(state, nextShops, hypothetical);
+  return Math.max(1, Math.min(4, chain.length)) as 1 | 2 | 3 | 4;
+}
+
+export function computeOpenShopCost(
+  state: GameState,
+  shopId: string,
+  ownerId: string,
+  storeTypeId: string
+): { openCost: number; level: 1 | 2 | 3 | 4 } {
+  const level = computeResultingChainLevel(state, shopId, ownerId);
+  return { openCost: computeOpenCostForLevel(storeTypeId, level), level };
 }

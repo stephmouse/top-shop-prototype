@@ -94,7 +94,7 @@ export function createFxOverlay(
     badge.style.left = `${tileEl.offsetLeft + Math.max(12, Math.round(tileEl.offsetWidth / 2))}px`;
     badge.style.top = `${Math.max(4, tileEl.offsetTop + 12 - stackIdx * 18)}px`;
     layer.appendChild(badge);
-    scheduleTimer(() => removeNode(badge), 950);
+    scheduleTimer(() => removeNode(badge), 2050);
   }
 
   function clear(): void {

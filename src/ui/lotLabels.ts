@@ -1,5 +1,5 @@
 import { STORE_TYPES } from '../config/balance';
-import { getAllowedStoreTypeIds } from '../engine/shops';
+import { computeOpenShopCost, computeResultingChainLevel, getAllowedStoreTypeIds } from '../engine/shops';
 import type { GameState, Shop } from '../engine/types';
 
 export interface EmptyLotItem {
@@ -7,6 +7,7 @@ export interface EmptyLotItem {
   spotNum: number;
   coord: string;
   isChainAdjacent: boolean;
+  resultingLevel: 1 | 2 | 3 | 4;
 }
 
 export interface EmptyLotGroup {
@@ -92,13 +93,22 @@ export function groupEmptyLotsBySection(
       .map((id) => STORE_TYPES[id])
       .filter((d): d is NonNullable<typeof d> => Boolean(d))
       .sort((a, b) => a.baseOpenCost - b.baseOpenCost);
+    const costs = lots
+      .flatMap((lot) =>
+        allowedDefs.map((d) => computeOpenShopCost(state, lot.id, activePlayerId, d.id).openCost)
+      )
+      .sort((a, b) => a - b);
+    const minCost = costs[0] ?? 0;
+    const maxCost = costs[costs.length - 1] ?? minCost;
 
     const storeSummary =
       allowedDefs.length === 0
         ? 'No eligible stores'
         : allowedDefs.length === 1
-          ? `${allowedDefs[0]!.name} ($${allowedDefs[0]!.baseOpenCost})`
-          : `${allowedDefs.map((d) => d.name).join(', ')} · $${allowedDefs[0]!.baseOpenCost}–$${allowedDefs[allowedDefs.length - 1]!.baseOpenCost}`;
+          ? minCost === maxCost
+            ? `${allowedDefs[0]!.name} ($${minCost})`
+            : `${allowedDefs[0]!.name} ($${minCost}–$${maxCost})`
+          : `${allowedDefs.map((d) => d.name).join(', ')} · $${minCost}–$${maxCost}`;
 
     const items: EmptyLotItem[] = [...lots]
       .sort((a, b) => (state.tiles[a.tileId]?.col ?? 0) - (state.tiles[b.tileId]?.col ?? 0))
@@ -109,6 +119,7 @@ export function groupEmptyLotsBySection(
           spotNum: Math.max(1, allInSeg.findIndex((s) => s.id === shop.id) + 1),
           coord: tile ? `${tile.floor}F:${tile.col + 1}` : shop.id,
           isChainAdjacent: isAdjacentToOwnStore(state, shop, activePlayerId),
+          resultingLevel: computeResultingChainLevel(state, shop.id, activePlayerId),
         };
       });
 

@@ -13,6 +13,7 @@ export interface HomeModalOptions {
   getProfile: () => UserProfile;
   onUpdateProfile: (next: UserProfile) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onOpenHowToPlay?: () => void;
   onPlayLocal: () => void;
   onHostOnline: (customCode: string) => Promise<string>;
   onJoinOnline: (roomCode: string, profile: UserProfile) => Promise<void>;
@@ -59,7 +60,10 @@ export function createHomeModal(options: HomeModalOptions): HomeModalController 
     mk('h2', 'setup-title home-title', 'TOP SHOP'),
     mk('span', 'setup-muted', 'Mall Tycoon · Local Couch & Online P2P')
   );
-  header.append(titleWrap, mkBtn('View Board', close));
+  const headerBtns = mk('div', 'setup-btn-row');
+  if (options.onOpenHowToPlay) headerBtns.appendChild(mkBtn('How to Play', () => options.onOpenHowToPlay?.()));
+  headerBtns.appendChild(mkBtn('View Board', close));
+  header.append(titleWrap, headerBtns);
   modal.append(header, statusEl, bodyEl);
 
   function showStatus(message: string, isError = false): void {

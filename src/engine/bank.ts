@@ -3,7 +3,13 @@ import { WALK_SOUND_META } from '../config/walkSounds';
 import { canRedeemBankReward } from './bankEligibility';
 import { resolveTargetRival } from './bankHelpers';
 import { applyBankShopEffect } from './bankShopEffects';
-import { appendLog, clampPoints, getActivePlayer, resolveEquippedWalkSound } from './helpers';
+import {
+  appendLog,
+  clampPoints,
+  getActivePlayer,
+  resolveEquippedWalkSound,
+  reversePlayerDirections,
+} from './helpers';
 import { randomInt } from './rng';
 import { resumeAfterPostAction } from './shops';
 import type { GameState, Player } from './types';
@@ -89,11 +95,17 @@ export function handleRedeemBankReward(
     case 'reverse_direction':
       if (eff.scope === 'rival') {
         const rival = resolveTargetRival(state, targetPlayerId)!;
-        patchPlayer(rival.id, { reverseDirNextTurn: true });
-        return resumeAfterPostAction(makeState(`${rival.name} will reverse next turn.`));
+        patchPlayer(rival.id, reversePlayerDirections(rival));
+        return resumeAfterPostAction(makeState(`${rival.name} reversed direction!`));
       }
-      players = players.map((p) => (p.isBankrupt ? p : { ...p, reverseDirNextTurn: true }));
-      return resumeAfterPostAction(makeState('All players reverse next turn.'));
+      players = players.map((p) => {
+        if (p.isBankrupt) return p;
+        if (p.id === active.id && state.pendingPostBankPhase === 'STEPPING') {
+          return { ...p, reverseDirNextTurn: !p.reverseDirNextTurn };
+        }
+        return { ...p, ...reversePlayerDirections(p) };
+      });
+      return resumeAfterPostAction(makeState('All players reversed direction!'));
 
     case 'pencil_override': {
       const target = eff.target === 'self' ? active : resolveTargetRival(state, targetPlayerId)!;

@@ -17,14 +17,99 @@ export type DispatchFn = (action: GameAction) => void;
 function makeBtn(
   label: string,
   onClick: () => void,
-  options: { primary?: boolean; disabled?: boolean } = {}
+  options: { primary?: boolean; disabled?: boolean; className?: string } = {}
 ): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.textContent = label;
-  if (options.primary) btn.className = 'primary';
+  const classes = [options.primary ? 'primary' : '', options.className ?? ''].filter(Boolean);
+  if (classes.length > 0) btn.className = classes.join(' ');
   if (options.disabled) btn.disabled = true;
   btn.addEventListener('click', onClick);
   return btn;
+}
+
+function renderMovementBar(stack: HTMLElement, state: GameState, dispatch: DispatchFn): void {
+  const active = getActivePlayer(state);
+  const dirs = getAvailableDirections(state, active);
+  const canUndo = canCancelMove(state);
+  const isEsc = state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO';
+  const isVerticalFork =
+    state.phase === 'CHOOSE_DIRECTION' && (dirs.includes('up') || dirs.includes('down'));
+
+  const bar = Object.assign(document.createElement('div'), { className: 'move-control-bar' });
+  const pill = Object.assign(document.createElement('span'), {
+    className: 'move-steps-pill',
+    textContent: `${state.remainingSteps} to go`,
+  });
+  const pair = Object.assign(document.createElement('div'), { className: 'move-dir-pair' });
+  const actions = Object.assign(document.createElement('div'), { className: 'move-bar-actions' });
+
+  if (isVerticalFork) {
+    pair.append(
+      makeBtn('↑ Up', () => dispatch({ type: 'CHOOSE_DIRECTION', direction: 'up' }), {
+        primary: true,
+        disabled: !dirs.includes('up'),
+        className: 'move-dir-btn',
+      }),
+      makeBtn('↓ Down', () => dispatch({ type: 'CHOOSE_DIRECTION', direction: 'down' }), {
+        primary: true,
+        disabled: !dirs.includes('down'),
+        className: 'move-dir-btn',
+      })
+    );
+    actions.appendChild(makeBtn('Undo Step', () => dispatch({ type: 'UNDO_STEP' }), { disabled: !canUndo }));
+  } else if (state.phase === 'CHOOSE_DIRECTION') {
+    pair.append(
+      makeBtn('← Left', () => dispatch({ type: 'CHOOSE_DIRECTION', direction: 'left' }), {
+        primary: true,
+        disabled: !dirs.includes('left'),
+        className: 'move-dir-btn',
+      }),
+      makeBtn('→ Right', () => dispatch({ type: 'CHOOSE_DIRECTION', direction: 'right' }), {
+        primary: true,
+        disabled: !dirs.includes('right'),
+        className: 'move-dir-btn',
+      })
+    );
+  } else if (state.phase === 'STEPPING') {
+    const forwardDir = active.horizontalDir ?? (state.tiles[active.tileId]?.neighbors.right ? 'right' : 'left');
+    if (forwardDir === 'left') {
+      pair.append(
+        makeBtn('← Left', () => dispatch({ type: 'ADVANCE_STEP' }), { primary: true, className: 'move-dir-btn' }),
+        makeBtn('→ Back', () => dispatch({ type: 'UNDO_STEP' }), { disabled: !canUndo, className: 'move-dir-btn' })
+      );
+    } else {
+      pair.append(
+        makeBtn('← Back', () => dispatch({ type: 'UNDO_STEP' }), { disabled: !canUndo, className: 'move-dir-btn' }),
+        makeBtn('→ Right', () => dispatch({ type: 'ADVANCE_STEP' }), { primary: true, className: 'move-dir-btn' })
+      );
+    }
+  } else {
+    pair.append(
+      makeBtn('← Left', () => {}, {
+        primary: active.horizontalDir === 'left',
+        disabled: true,
+        className: 'move-dir-btn',
+      }),
+      makeBtn('→ Right', () => {}, {
+        primary: active.horizontalDir === 'right',
+        disabled: true,
+        className: 'move-dir-btn',
+      })
+    );
+    actions.appendChild(
+      Object.assign(document.createElement('span'), {
+        className: 'move-esc-note',
+        textContent: state.phase === 'ESCALATOR_UNDO' ? 'Reversing escalator…' : 'Riding escalator…',
+      })
+    );
+  }
+
+  actions.appendChild(
+    makeBtn('Reset Move (Esc)', () => dispatch({ type: 'CANCEL_MOVE' }), { disabled: !canUndo || isEsc })
+  );
+  bar.append(pill, pair, actions);
+  stack.appendChild(bar);
 }
 
 function appendUndoControls(
@@ -127,37 +212,13 @@ function renderActionPanelBody(
   }
   cancelPencilAnimation();
 
-  if (state.phase === 'CHOOSE_DIRECTION') {
-    const dirs = getAvailableDirections(state, active);
-    const info = document.createElement('span');
-    info.textContent = `Steps left: ${state.remainingSteps}. Choose direction:`;
-    stack.appendChild(info);
-
-    for (const dir of dirs) {
-      stack.appendChild(
-        makeBtn(dir.toUpperCase(), () => dispatch({ type: 'CHOOSE_DIRECTION', direction: dir }), {
-          primary: true,
-        })
-      );
-    }
-    appendUndoControls(stack, state, dispatch);
-    return;
-  }
-
-  if (state.phase === 'STEPPING') {
-    stack.appendChild(
-      makeBtn(`Step (${state.remainingSteps} left)`, () => dispatch({ type: 'ADVANCE_STEP' }), {
-        primary: true,
-      })
-    );
-    appendUndoControls(stack, state, dispatch);
-    return;
-  }
-
-  if (state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') {
-    const note = document.createElement('span');
-    note.textContent = state.phase === 'ESCALATOR_UNDO' ? 'Reversing escalator...' : 'Riding escalator...';
-    stack.appendChild(note);
+  if (
+    state.phase === 'CHOOSE_DIRECTION' ||
+    state.phase === 'STEPPING' ||
+    state.phase === 'ESCALATOR_RIDE' ||
+    state.phase === 'ESCALATOR_UNDO'
+  ) {
+    renderMovementBar(stack, state, dispatch);
     return;
   }
 

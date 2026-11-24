@@ -20,6 +20,7 @@ export interface TopbarOptions {
   onToggleSound?: (enabled: boolean) => void;
   onSelectStage: (stageId: StageId) => void;
   onOpenHome?: () => void;
+  onOpenHowToPlay?: () => void;
   onOpenSetup: () => void;
   onOpenLobby: () => void;
   onSaveMatch: () => void;
@@ -81,6 +82,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
 
   let saveTimer: number | null = null;
   const homeBtn = options.onOpenHome ? makeButton('Home', options.onOpenHome) : null;
+  const howToBtn = options.onOpenHowToPlay ? makeButton('How to Play', options.onOpenHowToPlay) : null;
   const setupBtn = makeButton('Match Setup', options.onOpenSetup, true);
   const onlineBtn = makeButton('Online Lobby', options.onOpenLobby);
   onlineBtn.className = 'topbar-online-btn';
@@ -94,8 +96,9 @@ export function createTopbar(options: TopbarOptions): TopbarController {
     }, 1500);
   });
   const loadBtn = makeButton('Load', options.onLoadMatch);
-  if (homeBtn) controls.append(homeBtn, setupBtn, onlineBtn, saveBtn, loadBtn);
-  else controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
+  if (homeBtn) controls.appendChild(homeBtn);
+  if (howToBtn) controls.appendChild(howToBtn);
+  controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
 
   const newMatchBtns: HTMLButtonElement[] = [];
   for (const count of [2, 3, 4, 5, 6]) {

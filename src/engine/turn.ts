@@ -1,5 +1,5 @@
 import { MONTH_NAMES } from '../config/balance';
-import { appendLog, computePlayerNetWorth, getActivePlayer } from './helpers';
+import { appendLog, computePlayerNetWorth, getActivePlayer, reversePlayerDirections } from './helpers';
 import type { GameState, Shop } from './types';
 
 export function checkVictory(state: GameState): string | null {
@@ -106,8 +106,10 @@ export function advanceToNextTurn(state: GameState): GameState {
     if (incoming.unlockDirNextTurn) {
       hDir = null;
       vDir = null;
-    } else if (incoming.reverseDirNextTurn && hDir) {
-      hDir = hDir === 'left' ? 'right' : 'left';
+    } else if (incoming.reverseDirNextTurn) {
+      const reversed = reversePlayerDirections({ horizontalDir: hDir, verticalDir: vDir });
+      hDir = reversed.horizontalDir;
+      vDir = reversed.verticalDir;
     }
     nextPlayers[nextIndex] = {
       ...incoming,

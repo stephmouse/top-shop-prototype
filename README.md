@@ -66,7 +66,7 @@ On the **Start Hub**, customize your standee, name, and shoes, then choose:
 
 ## Contributing & Local Development
 
-Contributions, playtest reports, bug fixes, and PRs are welcome! Look at [ROADMAP.md](ROADMAP.md) for current milestones and future ideas (such as AI bot opponents and richer 2D canvas visuals).
+Contributions, playtest reports, bug fixes, and PRs are welcome! Look at [ROADMAP.md](ROADMAP.md) for current milestones and future ideas (such as richer 2D canvas visuals).
 
 ### Commands
 ```bash

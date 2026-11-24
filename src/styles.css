@@ -863,6 +863,60 @@ button.primary:hover:not(:disabled) {
   color: #fde68a;
 }
 
+.move-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+
+.move-steps-pill {
+  min-width: 74px;
+  text-align: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  background: #131926;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.move-dir-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.move-dir-btn {
+  min-width: 104px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.move-bar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.move-esc-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.panel-box .action-stack {
+  transition: opacity 160ms ease;
+}
+
+.panel-box.is-landing-guard .action-stack {
+  pointer-events: none;
+  opacity: 0.72;
+}
+
 .lot-group {
   display: grid;
   gap: 6px;
@@ -1511,7 +1565,7 @@ button.primary:hover:not(:disabled) {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
   box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45);
   white-space: nowrap;
-  animation: fx-float-up 950ms ease-out forwards;
+  animation: fx-float-up 2000ms ease-out forwards;
 }
 
 .fx-float-badge.is-gain { background: #2ea043; color: #ffffff; }
@@ -1521,9 +1575,9 @@ button.primary:hover:not(:disabled) {
 
 @keyframes fx-float-up {
   0% { opacity: 0; transform: translate(-50%, 6px) scale(0.85); }
-  15% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
-  75% { opacity: 1; transform: translate(-50%, -22px) scale(1); }
-  100% { opacity: 0; transform: translate(-50%, -34px) scale(0.95); }
+  8% { opacity: 1; transform: translate(-50%, 0) scale(1.05); }
+  80% { opacity: 1; transform: translate(-50%, -26px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -38px) scale(0.95); }
 }
 
 .tile.fx-shop-open { animation: fx-tile-pop 600ms ease; }
@@ -2133,6 +2187,24 @@ button[hidden] {
 .home-card-desc {
   margin: 0;
   line-height: 1.4;
+}
+
+.howto-modal {
+  width: min(740px, 100%);
+}
+
+.howto-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.howto-list strong {
+  color: var(--text);
 }
 
 .setup-online-banner {

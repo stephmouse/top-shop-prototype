@@ -1,12 +1,13 @@
 import { SHOP_RULES, STORE_TYPES } from '../config/balance';
 import {
   computeBuyoutCosts,
+  computeOpenCostForLevel,
   computeShopAssetValue,
   getActivePlayer,
   getEffectiveItemRetailPrice,
   getTile,
 } from '../engine/helpers';
-import { getAllowedStoreTypeIds } from '../engine/shops';
+import { computeResultingChainLevel, getAllowedStoreTypeIds } from '../engine/shops';
 import type { GameState, ItemDef } from '../engine/types';
 import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPickState';
 import {
@@ -32,48 +33,77 @@ export function renderBuySlotPanel(
 
   const list = document.createElement('div');
   list.className = 'card-list';
-
-  if (active.blockNewStoreTurns > 0) {
-    const blocked = document.createElement('div');
-    blocked.textContent = "This store can't be opened due to vandalism.";
-    list.appendChild(blocked);
-  } else {
-    const allowedIds = getAllowedStoreTypeIds(
-      state,
-      active.id,
-      shop.segmentId,
-      isBuyout ? shop.id : undefined
-    );
-    const sortedDefs = allowedIds
-      .map((id) => STORE_TYPES[id])
-      .filter((def): def is NonNullable<typeof def> => Boolean(def))
-      .sort((a, b) => b.baseOpenCost - a.baseOpenCost);
-
-    if (sortedDefs.length === 0) {
-      const noneMsg = document.createElement('div');
-      noneMsg.textContent = 'All store types in this segment are already claimed by rivals.';
-      list.appendChild(noneMsg);
-    }
-    for (const def of sortedDefs) {
-      const { rivalPayout, totalCost } = isBuyout
-        ? computeBuyoutCosts(shop, def.id)
-        : { rivalPayout: 0, totalCost: def.baseOpenCost };
-      const cost = isBuyout ? totalCost : def.baseOpenCost;
-      const label = isBuyout
-        ? `Buyout & Convert to ${def.name} ($${totalCost} = $${rivalPayout} + $${def.baseOpenCost}, auto-stocks)`
-        : `Open ${def.name} ($${cost}, auto-stocks)`;
-      list.appendChild(
-        makePanelButton(
-          label,
-          () => dispatch({ type: isBuyout ? 'BUYOUT_SHOP' : 'OPEN_SHOP', storeTypeId: def.id }),
-          { primary: true, disabled: active.cash < cost }
-        )
-      );
-    }
-  }
-
-  list.appendChild(makePanelButton('Do Not Open / Skip', () => dispatch({ type: 'SKIP_SHOP_SLOT' })));
   container.appendChild(list);
+
+  let confirmStoreTypeId: string | null = null;
+
+  const renderList = () => {
+    list.innerHTML = '';
+
+    if (active.blockNewStoreTurns > 0) {
+      const blocked = document.createElement('div');
+      blocked.textContent = "This store can't be opened due to vandalism.";
+      list.appendChild(blocked);
+    } else {
+      const allowedIds = getAllowedStoreTypeIds(
+        state,
+        active.id,
+        shop.segmentId,
+        isBuyout ? shop.id : undefined
+      );
+      const resultingLevel = computeResultingChainLevel(state, shop.id, active.id);
+      const levelTag = resultingLevel > 1 ? ` L${resultingLevel}` : '';
+      const sortedDefs = allowedIds
+        .map((id) => STORE_TYPES[id])
+        .filter((def): def is NonNullable<typeof def> => Boolean(def))
+        .sort(
+          (a, b) =>
+            computeOpenCostForLevel(b.id, resultingLevel) -
+            computeOpenCostForLevel(a.id, resultingLevel)
+        );
+
+      if (sortedDefs.length === 0) {
+        const noneMsg = document.createElement('div');
+        noneMsg.textContent = 'All store types in this segment are already claimed by rivals.';
+        list.appendChild(noneMsg);
+      } else {
+        const note = document.createElement('div');
+        note.textContent = isBuyout
+          ? 'Choose a store for buyout (click twice to confirm):'
+          : 'Choose a store to open (click twice to confirm):';
+        list.appendChild(note);
+      }
+
+      for (const def of sortedDefs) {
+        const buyout = isBuyout ? computeBuyoutCosts(shop, def.id, resultingLevel) : null;
+        const openCost = buyout ? buyout.openCost : computeOpenCostForLevel(def.id, resultingLevel);
+        const cost = buyout ? buyout.totalCost : openCost;
+        const baseLabel = buyout
+          ? `Buyout & Convert to ${def.name}${levelTag} ($${cost} = $${buyout.rivalPayout} + $${openCost}, auto-stocks)`
+          : `Open ${def.name}${levelTag} ($${cost}, auto-stocks)`;
+        const isConfirming = confirmStoreTypeId === def.id;
+        list.appendChild(
+          makePanelButton(
+            isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
+            () => {
+              if (confirmStoreTypeId !== def.id) {
+                confirmStoreTypeId = def.id;
+                renderList();
+                return;
+              }
+              confirmStoreTypeId = null;
+              dispatch({ type: isBuyout ? 'BUYOUT_SHOP' : 'OPEN_SHOP', storeTypeId: def.id });
+            },
+            { primary: isConfirming, disabled: active.cash < cost }
+          )
+        );
+      }
+    }
+
+    list.appendChild(makePanelButton('Do Not Open / Skip', () => dispatch({ type: 'SKIP_SHOP_SLOT' })));
+  };
+
+  renderList();
 }
 
 export function renderBuyRivalPanel(

@@ -119,4 +119,80 @@ describe('bank rewards, paydays, events, rubber-banding, and calendar', () => {
     expect(state.totalMonths).toBe(1);
     expect(state.month).toBe(1);
   });
+
+  it('reverses both horizontal and vertical directions on Forced U-Turn and Bank reversals', () => {
+    const base = createInitialGameState(PLAYERS, { startingCash: 3000 }, 99, 'stage_0');
+
+    const eventState = {
+      ...base,
+      phase: 'EVENT_PICK' as const,
+      eventChoices: ['eve_044', 'eve_001', 'eve_002'],
+      revealedEventSlot: 0,
+      players: base.players.map((p, i) =>
+        i === 0 ? { ...p, horizontalDir: 'left' as const, verticalDir: 'down' as const } : p
+      ),
+    };
+    const afterEvent = applyAction(eventState, { type: 'PICK_EVENT_CARD', cardId: 'eve_044' });
+    expect(afterEvent.players[0]!.horizontalDir).toBe('right');
+    expect(afterEvent.players[0]!.verticalDir).toBe('up');
+    expect(afterEvent.players[0]!.reverseDirNextTurn).toBe(false);
+
+    const nullAxis = applyAction(
+      {
+        ...eventState,
+        players: base.players.map((p, i) =>
+          i === 0 ? { ...p, horizontalDir: null, verticalDir: 'up' as const } : p
+        ),
+      },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_044' }
+    );
+    expect(nullAxis.players[0]!.horizontalDir).toBeNull();
+    expect(nullAxis.players[0]!.verticalDir).toBe('down');
+
+    const bankState = {
+      ...base,
+      phase: 'BANK_MENU' as const,
+      players: [
+        { ...base.players[0]!, points: 30, horizontalDir: 'right' as const, verticalDir: 'up' as const },
+        { ...base.players[1]!, horizontalDir: 'left' as const, verticalDir: 'down' as const },
+      ],
+    };
+    const rev1 = applyAction(bankState, {
+      type: 'REDEEM_BANK_REWARD',
+      rewardId: 'bank_08_reverse_rival',
+      targetPlayerId: 'p_2',
+    });
+    expect(rev1.players[1]!.horizontalDir).toBe('right');
+    expect(rev1.players[1]!.verticalDir).toBe('up');
+
+    const rev2 = applyAction(
+      { ...rev1, activePlayerIndex: 0, phase: 'BANK_MENU' as const },
+      { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_08_reverse_rival', targetPlayerId: 'p_2' }
+    );
+    expect(rev2.players[1]!.horizontalDir).toBe('left');
+    expect(rev2.players[1]!.verticalDir).toBe('down');
+
+    const revAllPassBank = applyAction(
+      { ...bankState, pendingPostBankPhase: 'STEPPING' as const, remainingSteps: 2 },
+      { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_21_reverse_all' }
+    );
+    expect(revAllPassBank.players[0]!.horizontalDir).toBe('right');
+    expect(revAllPassBank.players[0]!.verticalDir).toBe('up');
+    expect(revAllPassBank.players[0]!.reverseDirNextTurn).toBe(true);
+    expect(revAllPassBank.players[1]!.horizontalDir).toBe('right');
+    expect(revAllPassBank.players[1]!.verticalDir).toBe('up');
+
+    const finishedWalk = applyAction(
+      { ...revAllPassBank, phase: 'SHOP_BUY_SLOT' as const, pendingPostBankPhase: null },
+      { type: 'SKIP_SHOP_SLOT' }
+    );
+    const backToP1 = applyAction(
+      { ...finishedWalk, phase: 'SHOP_BUY_SLOT' as const },
+      { type: 'SKIP_SHOP_SLOT' }
+    );
+    expect(backToP1.activePlayerIndex).toBe(0);
+    expect(backToP1.players[0]!.horizontalDir).toBe('left');
+    expect(backToP1.players[0]!.verticalDir).toBe('down');
+    expect(backToP1.players[0]!.reverseDirNextTurn).toBe(false);
+  });
 });

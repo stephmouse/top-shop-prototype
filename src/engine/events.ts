@@ -8,6 +8,7 @@ import {
   computeShopAssetValue,
   getActivePlayer,
   resolveEquippedWalkSound,
+  reversePlayerDirections,
 } from './helpers';
 import { randomInt } from './rng';
 import {
@@ -193,8 +194,10 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
       return resumeAfterPostAction(nextBase('Direction will unlock next turn.'));
 
     case 'reverse_dir_next':
-      players = players.map((p, i) => (i === state.activePlayerIndex ? { ...p, reverseDirNextTurn: true } : p));
-      return resumeAfterPostAction(nextBase('Direction will reverse next turn.'));
+      players = players.map((p, i) =>
+        i === state.activePlayerIndex ? { ...p, ...reversePlayerDirections(p) } : p
+      );
+      return resumeAfterPostAction(nextBase('Direction reversed!'));
 
     case 'roll_again':
       return { ...nextBase('Spin again!'), phase: 'ROLL_PENCIL' };

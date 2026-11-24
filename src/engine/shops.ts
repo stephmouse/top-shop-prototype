@@ -7,6 +7,8 @@ import {
 } from './helpers';
 import {
   buildStarterStock,
+  computeOpenShopCost,
+  computeResultingChainLevel,
   getAllowedStoreTypeIds,
   getShopTotalStock,
   recomputeSegmentChainLevels,
@@ -16,6 +18,8 @@ import type { GameState, Shop } from './types';
 
 export {
   buildStarterStock,
+  computeOpenShopCost,
+  computeResultingChainLevel,
   getAllowedStoreTypeIds,
   getCheapestItemPrice,
   getConnectedChainShops,
@@ -44,10 +48,11 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   if (!shop || shop.ownerId !== null || !def) return state;
 
   const allowed = getAllowedStoreTypeIds(state, active.id, shop.segmentId);
-  if (!allowed.includes(storeTypeId) || active.cash < def.baseOpenCost) return state;
+  const { openCost } = computeOpenShopCost(state, shop.id, active.id, storeTypeId);
+  if (!allowed.includes(storeTypeId) || active.cash < openCost) return state;
 
   const players = state.players.map((p, idx) =>
-    idx === state.activePlayerIndex ? { ...p, cash: p.cash - def.baseOpenCost } : p
+    idx === state.activePlayerIndex ? { ...p, cash: p.cash - openCost } : p
   );
   const claimedShop: Shop = { ...shop, ownerId: active.id, storeTypeId, stock: {} };
   const interim: GameState = { ...state, players, shops: { ...state.shops, [shop.id]: claimedShop } };
@@ -58,7 +63,7 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   return resumeAfterPostAction({
     ...interim,
     shops: leveledShops,
-    log: appendLog(state, `${active.name} opened ${def.name} L${updatedNewShop.level} (-$${def.baseOpenCost}, stocked).`),
+    log: appendLog(state, `${active.name} opened ${def.name} L${updatedNewShop.level} (-$${openCost}, stocked).`),
   });
 }
 
@@ -76,7 +81,8 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
   const allowed = getAllowedStoreTypeIds(state, active.id, shop.segmentId, shop.id);
   if (!oldDef || !newDef || !allowed.includes(storeTypeId)) return state;
 
-  const { rivalPayout, totalCost } = computeBuyoutCosts(shop, storeTypeId);
+  const resultingLevel = computeResultingChainLevel(state, shop.id, active.id);
+  const { rivalPayout, totalCost } = computeBuyoutCosts(shop, storeTypeId, resultingLevel);
   if (active.cash < totalCost) return state;
 
   const prevOwnerId = shop.ownerId;

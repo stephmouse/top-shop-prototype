@@ -1,6 +1,7 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import {
   buildStarterStock,
+  computeOpenShopCost,
   getAllowedStoreTypeIds,
   getConnectedChainShops,
   getShopTotalStock,
@@ -49,7 +50,7 @@ export function canPlayerOpenWithCash(state: GameState, ownerId: string, cashBud
     (s) =>
       s.ownerId === null &&
       getAllowedStoreTypeIds(state, ownerId, s.segmentId).some(
-        (id) => (STORE_TYPES[id]?.baseOpenCost ?? Infinity) <= cashBudget
+        (id) => computeOpenShopCost(state, s.id, ownerId, id).openCost <= cashBudget
       )
   );
 }

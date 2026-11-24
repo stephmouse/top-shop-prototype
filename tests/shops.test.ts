@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../src/config/balance';
-import { computePlayerRank } from '../src/engine/helpers';
+import { computeOpenCostForLevel, computePlayerRank } from '../src/engine/helpers';
 import { nextRandom } from '../src/engine/rng';
 import { getAllowedStoreTypeIds, getShopTotalStock } from '../src/engine/shops';
 import { applyAction, createInitialGameState } from '../src/engine/state';
@@ -36,7 +36,11 @@ describe('shops, chains, delivery, cashback, buyouts, and liquidation', () => {
 
     expect(getAllowedStoreTypeIds(state, 'p_1', 'f1_a3')).toContain(storeId);
 
+    let expectedTotalOpenCost = 0;
     for (let col = 1; col <= 4; col++) {
+      const cashBefore = state.players[0]!.cash;
+      const stepCost = computeOpenCostForLevel(storeId, col as 1 | 2 | 3 | 4);
+      expectedTotalOpenCost += stepCost;
       state = {
         ...state,
         activePlayerIndex: 0,
@@ -48,6 +52,7 @@ describe('shops, chains, delivery, cashback, buyouts, and liquidation', () => {
       const opened = state.shops[`shop_1_${col}`]!;
       expect(opened.ownerId).toBe('p_1');
       expect(opened.level).toBe(col);
+      expect(cashBefore - state.players[0]!.cash).toBe(stepCost);
       expect(getShopTotalStock(opened)).toBe(STORE_CAPACITY_BY_LEVEL[opened.level]);
       if (col > 1) {
         expect(getShopTotalStock(state.shops.shop_1_1!)).toBe(3);
@@ -55,7 +60,44 @@ describe('shops, chains, delivery, cashback, buyouts, and liquidation', () => {
     }
 
     expect(getAllowedStoreTypeIds(state, 'p_2', 'f1_a3')).not.toContain(storeId);
-    expect(state.players[0]!.cash).toBe(20000 - def.baseOpenCost * 4);
+    expect(state.players[0]!.cash).toBe(20000 - expectedTotalOpenCost);
+    expect(expectedTotalOpenCost).toBeGreaterThan(def.baseOpenCost * 4);
+  });
+
+  it('matches PS1 chain-level open & buyout costs across L1..L4 and bridging', () => {
+    for (const def of Object.values(STORE_TYPES)) {
+      expect(computeOpenCostForLevel(def.id, 1)).toBe(def.baseOpenCost);
+    }
+    expect([1, 2, 3, 4].map((lv) => computeOpenCostForLevel('bakery', lv as 1 | 2 | 3 | 4))).toEqual([240, 380, 600, 920]);
+    expect([1, 2, 3, 4].map((lv) => computeOpenCostForLevel('auto_parts', lv as 1 | 2 | 3 | 4))).toEqual([768, 1216, 1920, 2944]);
+
+    let state = createInitialGameState(PLAYERS, { startingCash: 10000 }, 10, 'stage_0');
+    for (const col of [1, 3]) {
+      state = { ...state, activePlayerIndex: 0, phase: 'SHOP_BUY_SLOT', players: state.players.map((p, i) => (i === 0 ? { ...p, tileId: `f1_c${col}` } : p)) };
+      state = applyAction(state, { type: 'OPEN_SHOP', storeTypeId: 'pancake_house' });
+    }
+    const beforeBridge = state.players[0]!.cash;
+    state = { ...state, activePlayerIndex: 0, phase: 'SHOP_BUY_SLOT', players: state.players.map((p, i) => (i === 0 ? { ...p, tileId: 'f1_c2' } : p)) };
+    state = applyAction(state, { type: 'OPEN_SHOP', storeTypeId: 'pancake_house' });
+    expect(state.shops.shop_1_2!.level).toBe(3);
+    expect(beforeBridge - state.players[0]!.cash).toBe(computeOpenCostForLevel('pancake_house', 3));
+
+    const buyoutBase = createInitialGameState(PLAYERS, { startingCash: 5000 }, 10, 'stage_0');
+    const buyoutState = {
+      ...buyoutBase,
+      activePlayerIndex: 1,
+      phase: 'SHOP_BUY_SLOT' as const,
+      players: buyoutBase.players.map((p, i) => (i === 1 ? { ...p, tileId: 'f1_c2' } : p)),
+      shops: {
+        ...buyoutBase.shops,
+        shop_1_1: { ...buyoutBase.shops.shop_1_1!, ownerId: 'p_2', storeTypeId: 'gameland', level: 1 as const, stock: {} },
+        shop_1_2: { ...buyoutBase.shops.shop_1_2!, ownerId: 'p_1', storeTypeId: 'camera_shop', level: 1 as const, stock: {} },
+      },
+    };
+    const afterBuyout = applyAction(buyoutState, { type: 'BUYOUT_SHOP', storeTypeId: 'gameland' });
+    const rivalPayout = Math.floor(STORE_TYPES.camera_shop!.emptyBaseCost * 1.5);
+    expect(afterBuyout.shops.shop_1_2!.level).toBe(2);
+    expect(afterBuyout.players[1]!.cash).toBe(5000 - rivalPayout - computeOpenCostForLevel('gameland', 2));
   });
 
   it('validates deliveries against level tier, capacity, and cash', () => {

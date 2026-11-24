@@ -1,4 +1,4 @@
-import { PAYDAY_CONFIG, SHOP_RULES, STORE_TYPES } from '../config/balance';
+import { PAYDAY_CONFIG, SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import { isValidWalkSoundStyle, WALK_SOUND_STYLES } from '../config/walkSounds';
@@ -104,17 +104,28 @@ export function computeShopAssetValue(shop: Shop): number {
   return baseValue + stockValue;
 }
 
+export function computeOpenCostForLevel(storeTypeId: string, level: 1 | 2 | 3 | 4): number {
+  const def = STORE_TYPES[storeTypeId];
+  if (!def) return 0;
+  const slots = STORE_CAPACITY_BY_LEVEL[level];
+  const sorted = [...def.items].sort((a, b) => a.retailPrice - b.retailPrice);
+  const stockCost = sorted.slice(0, slots).reduce((sum, item) => sum + item.wholesaleCost, 0);
+  return def.emptyBaseCost + stockCost;
+}
+
 export function computeBuyoutCosts(
   oldShop: Shop,
-  newStoreTypeId: string
-): { rivalPayout: number; totalCost: number } {
+  newStoreTypeId: string,
+  resultingLevel: 1 | 2 | 3 | 4 = 1
+): { rivalPayout: number; openCost: number; totalCost: number } {
   const oldDef = oldShop.storeTypeId ? STORE_TYPES[oldShop.storeTypeId] : undefined;
   const newDef = STORE_TYPES[newStoreTypeId];
-  if (!oldDef || !newDef) return { rivalPayout: 0, totalCost: 0 };
+  if (!oldDef || !newDef) return { rivalPayout: 0, openCost: 0, totalCost: 0 };
 
   const mult = SHOP_RULES.buyoutLevelMultipliers[oldShop.level];
   const rivalPayout = Math.floor(oldDef.emptyBaseCost * mult);
-  return { rivalPayout, totalCost: rivalPayout + newDef.baseOpenCost };
+  const openCost = computeOpenCostForLevel(newStoreTypeId, resultingLevel);
+  return { rivalPayout, openCost, totalCost: rivalPayout + openCost };
 }
 
 export function computePlayerNetWorth(state: GameState, playerId: string): number {
@@ -195,6 +206,17 @@ export function getAvailableDirections(
   if (tile.neighbors.left) dirs.push('left');
   if (tile.neighbors.right) dirs.push('right');
   return dirs;
+}
+
+export function reversePlayerDirections(
+  player: Pick<Player, 'horizontalDir' | 'verticalDir'>
+): Pick<Player, 'horizontalDir' | 'verticalDir'> {
+  return {
+    horizontalDir:
+      player.horizontalDir === 'left' ? 'right' : player.horizontalDir === 'right' ? 'left' : null,
+    verticalDir:
+      player.verticalDir === 'up' ? 'down' : player.verticalDir === 'down' ? 'up' : null,
+  };
 }
 
 export function resolveEquippedWalkSound(

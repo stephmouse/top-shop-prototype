@@ -2,7 +2,7 @@ import { BANK_REWARDS, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/ba
 import type { GameAction } from '../engine/actions';
 import { canRedeemBankReward, getBankRewardTargets } from '../engine/bank';
 import { getActivePlayer } from '../engine/helpers';
-import { getAllowedStoreTypeIds, getShopTotalStock } from '../engine/shops';
+import { computeOpenShopCost, getAllowedStoreTypeIds, getShopTotalStock } from '../engine/shops';
 import type { BankRewardDef, DeliverMode, GameState, Shop } from '../engine/types';
 
 type DispatchFn = (action: GameAction) => void;
@@ -97,7 +97,7 @@ export function getEligibleEventEmptySlots(state: GameState): Shop[] {
       s.ownerId === null &&
       (prompt.allowOwnedSegment ||
         !Object.values(state.shops).some((o) => o.ownerId === active.id && o.segmentId === s.segmentId)) &&
-      getAllowedStoreTypeIds(state, active.id, s.segmentId).some((id) => (STORE_TYPES[id]?.baseOpenCost ?? Infinity) <= payer.cash)
+      getAllowedStoreTypeIds(state, active.id, s.segmentId).some((id) => computeOpenShopCost(state, s.id, active.id, id).openCost <= payer.cash)
   );
 }
 

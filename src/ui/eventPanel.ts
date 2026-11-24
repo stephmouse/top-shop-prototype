@@ -2,7 +2,7 @@ import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { computeEventBaseCash } from '../engine/events';
 import { computeShopAssetValue, getActivePlayer } from '../engine/helpers';
-import { getAllowedStoreTypeIds } from '../engine/shops';
+import { computeOpenShopCost, getAllowedStoreTypeIds } from '../engine/shops';
 import type { EventCardDef, GameState, Shop } from '../engine/types';
 import {
   getEligibleEventEmptySlots,
@@ -167,17 +167,22 @@ export function renderEventStorePanel(
         slotNote.textContent = `Pick store type to open at ${formatLotLabel(state, pickedSlot)}:`;
         list.appendChild(slotNote);
 
-        const allowed = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
-          .map((id) => STORE_TYPES[id])
-          .filter((d): d is NonNullable<typeof d> => Boolean(d))
-          .sort((a, b) => b.baseOpenCost - a.baseOpenCost);
+        const optionsWithCost = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
+          .map((id) => {
+            const def = STORE_TYPES[id];
+            if (!def) return null;
+            const { openCost, level } = computeOpenShopCost(state, pickedSlot.id, active.id, id);
+            return { def, openCost, level };
+          })
+          .filter((x): x is NonNullable<typeof x> => Boolean(x))
+          .sort((a, b) => b.openCost - a.openCost);
 
         const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
-        for (const def of allowed) {
+        for (const { def, openCost, level } of optionsWithCost) {
           const btn = document.createElement('button');
           btn.className = 'primary';
-          btn.disabled = payer.cash < def.baseOpenCost;
-          btn.textContent = `Open ${def.name} ($${def.baseOpenCost}${payerTag})`;
+          btn.disabled = payer.cash < openCost;
+          btn.textContent = `Open ${def.name}${level > 1 ? ` L${level}` : ''} ($${openCost}${payerTag})`;
           btn.addEventListener('click', () => {
             onHoverShop?.(null);
             setEventSelectedShopId(state, null);
@@ -205,7 +210,7 @@ export function renderEventStorePanel(
           for (const item of group.items) {
             const btn = document.createElement('button');
             btn.type = 'button';
-            btn.textContent = `Spot ${item.spotNum} (${item.coord})${item.isChainAdjacent ? ' ★ Chain' : ''}`;
+            btn.textContent = `Spot ${item.spotNum} (${item.coord})${item.isChainAdjacent ? ` ★ Chain L${item.resultingLevel}` : ''}`;
             bindHoverShop(btn, item.shop.id, onHoverShop);
             btn.addEventListener('click', () => {
               onHoverShop?.(null);

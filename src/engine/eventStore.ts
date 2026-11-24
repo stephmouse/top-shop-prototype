@@ -6,6 +6,7 @@ import {
 } from './helpers';
 import {
   buildStarterStock,
+  computeOpenShopCost,
   getAllowedStoreTypeIds,
   getShopTotalStock,
   recomputeSegmentChainLevels,
@@ -81,12 +82,13 @@ export function handleResolveEventStore(
       );
     const allowed = getAllowedStoreTypeIds(state, active.id, shop.segmentId);
     const def = STORE_TYPES[storeTypeId];
-    if (!payer || ownsSeg || !def || !allowed.includes(storeTypeId) || payer.cash < def.baseOpenCost) {
+    const { openCost } = computeOpenShopCost(state, shop.id, active.id, storeTypeId);
+    if (!payer || ownsSeg || !def || !allowed.includes(storeTypeId) || payer.cash < openCost) {
       return state;
     }
 
     const players = state.players.map((p) =>
-      p.id === payer.id ? { ...p, cash: p.cash - def.baseOpenCost } : p
+      p.id === payer.id ? { ...p, cash: p.cash - openCost } : p
     );
     const claimedShop: Shop = {
       ...shop,
@@ -102,7 +104,7 @@ export function handleResolveEventStore(
     const leveled = nextShops[shop.id]!;
     nextShops[shop.id] = { ...leveled, stock: buildStarterStock(storeTypeId, leveled.level) };
 
-    const payerNote = payer.id === active.id ? `-$${def.baseOpenCost}` : `paid $${def.baseOpenCost} by ${payer.name}`;
+    const payerNote = payer.id === active.id ? `-$${openCost}` : `paid $${openCost} by ${payer.name}`;
     return resumeAfterPostAction({
       ...state,
       players,
