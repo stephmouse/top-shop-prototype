@@ -121,6 +121,9 @@ export function createAvatarSyncStore(): AvatarSyncStore {
 }
 
 export const HOST_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 16000] as const;
+export const GUEST_RECONNECT_DELAYS_MS = [1000, 2000, 4000, 8000, 12000] as const;
+export const PING_INTERVAL_MS = 5000;
+export const PONG_TIMEOUT_MS = 12000;
 const TRANSIENT_PEER_ERRORS = new Set(['network', 'disconnected', 'server-error', 'socket-error', 'socket-closed']);
 
 export function isTransientSignalingError(err: { type?: string } | null | undefined): boolean {
@@ -163,6 +166,48 @@ export function createReconnectBackoff(
       const delay = delays[attempts]!;
       attempts++;
       timer = setTimeout(() => { timer = null; onAttempt(); }, delay);
+    },
+  };
+}
+
+export interface HeartbeatMonitor {
+  start: () => void;
+  touch: () => void;
+  stop: () => void;
+}
+
+export function createHeartbeatMonitor(
+  onSendPing: () => void,
+  onTimeout: () => void,
+  intervalMs = PING_INTERVAL_MS,
+  timeoutMs = PONG_TIMEOUT_MS
+): HeartbeatMonitor {
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let lastAlive = 0;
+
+  const stop = () => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+
+  return {
+    stop,
+    touch: () => {
+      lastAlive = Date.now();
+    },
+    start: () => {
+      stop();
+      lastAlive = Date.now();
+      timer = setInterval(() => {
+        if (Date.now() - lastAlive >= timeoutMs) {
+          stop();
+          onTimeout();
+          return;
+        }
+        onSendPing();
+      }, intervalMs);
     },
   };
 }

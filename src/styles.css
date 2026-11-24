@@ -852,6 +852,17 @@ button.primary:hover:not(:disabled) {
   gap: 8px;
 }
 
+.net-reconnect-banner {
+  padding: 7px 10px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(241, 196, 15, 0.14);
+  border: 1px solid rgba(241, 196, 15, 0.5);
+  color: #fde68a;
+}
+
 .lot-group {
   display: grid;
   gap: 6px;

@@ -42,7 +42,7 @@ if (!root) throw new Error('Missing #app root element');
 
 let autoStepEnabled = false, showRoutes = true, suppressSyncRender = false;
 let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = null;
-let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
+let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false, lastRenderedReconnecting = false;
 let lastRenderedRemoteStop: PencilFace | null = null;
 let prevRenderedState: GameState | null = null;
 
@@ -83,7 +83,8 @@ function broadcastSuppressed(nextState: GameState): void {
 const netSession = createMultiplayerSession({
   getState: () => state,
   onApplyHostAction: applyHostAction,
-  onReceiveRemoteState: (remoteState) => { moveDriver.clearAckTimer(); moveDriver.clearAwaitingAck(); state = remoteState; lobbyModal.refresh(); render(); },
+  onReceiveRemoteState: (remoteState) => { const prev = state; moveDriver.onRemoteStateAccepted(prev, remoteState); state = remoteState; lobbyModal.refresh(); render(); },
+  onActionAck: () => { moveDriver.clearAckTimer(); moveDriver.clearAwaitingAck(); },
   onSyncHostState: (synced) => { state = synced; saveAutoSavedMatch(state); if (!suppressSyncRender) render(); },
   onSessionChange: () => renderSessionUi(),
   onError: (msg) => {
@@ -203,6 +204,7 @@ const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
     role: netSession.getRole(), roomCode: netSession.getRoomCode(),
     peerCount: roster?.peers.filter((p) => p.connected).length ?? 0,
     waitingCount: roster?.peers.filter((p) => p.connected && !roster.seatOwners.includes(p.clientToken)).length ?? 0,
+    reconnecting: netSession.isReconnecting(),
   });
 };
 
@@ -211,7 +213,13 @@ shell.append(topbar.el, hudEl, boardStageEl, bottomGrid, homeModal.el, setupModa
 root.appendChild(shell);
 
 function dispatch(action: GameAction): void {
-  if (!netSession.isLocalTurn(state)) return;
+  if (!netSession.isLocalTurn(state) || netSession.isReconnecting()) return;
+  if (netSession.getRole() === 'guest') {
+    if (moveDriver.isAwaitingAck()) return;
+    moveDriver.cancel(); hoveredEndTileId = null; hoveredPickShopId = null; moveDriver.markAwaitingAck();
+    if (!netSession.sendOrApplyAction(action)) { moveDriver.clearAckTimer(); moveDriver.clearAwaitingAck(); }
+    return;
+  }
   moveDriver.cancel(); moveDriver.clearAwaitingAck(); hoveredEndTileId = null; hoveredPickShopId = null;
   netSession.sendOrApplyAction(action);
 }
@@ -234,10 +242,11 @@ function renderActionBox(
   remoteSpin = netSession.isRemotePencilSpinning(),
   remoteStop = netSession.getRemotePencilStopFace()
 ): void {
-  lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin; lastRenderedRemoteStop = remoteStop;
+  const reconnecting = netSession.isReconnecting();
+  lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin; lastRenderedRemoteStop = remoteStop; lastRenderedReconnecting = reconnecting;
   renderActionPanel(actionBox, state, dispatch, {
     onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
-    readOnly: !canAct, remotePencilSpinning: remoteSpin, remotePencilStopFace: remoteStop,
+    readOnly: !canAct, reconnecting, remotePencilSpinning: remoteSpin, remotePencilStopFace: remoteStop,
     onPencilSpinChange: (spinning, stopFace) => netSession.notifyPencilSpin(spinning, stopFace),
     onPencilLanded: (face) => soundFx.playPencilStop(face === 'E'),
     onUiChange: refreshPickUi,
@@ -255,14 +264,14 @@ function paintBoard(preview = computeMovePreview(state), canAct = netSession.isL
 function renderSessionUi(): void {
   lobbyModal.refresh(); setupModal.refresh(); homeModal.refresh();
   syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning(), remoteStop = netSession.getRemotePencilStopFace();
+  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning(), remoteStop = netSession.getRemotePencilStopFace(), reconnecting = netSession.isReconnecting();
   turnCue.sync(state, canAct);
   const remotePencilChanged = !canAct && (remoteSpin !== lastRenderedRemoteSpin || remoteStop !== lastRenderedRemoteStop);
-  if (canAct === lastRenderedCanAct && state.phase === 'ROLL_PENCIL' && remotePencilChanged && updateRemotePencil(remoteSpin, remoteStop)) {
+  if (canAct === lastRenderedCanAct && reconnecting === lastRenderedReconnecting && state.phase === 'ROLL_PENCIL' && remotePencilChanged && updateRemotePencil(remoteSpin, remoteStop)) {
     lastRenderedRemoteSpin = remoteSpin; lastRenderedRemoteStop = remoteStop;
     return;
   }
-  if (canAct !== lastRenderedCanAct || remotePencilChanged || state.phase === 'GAME_OVER') {
+  if (canAct !== lastRenderedCanAct || reconnecting !== lastRenderedReconnecting || remotePencilChanged || state.phase === 'GAME_OVER') {
     paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin, remoteStop); moveDriver.scheduleTick();
   }
 }

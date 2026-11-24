@@ -3,8 +3,9 @@ import type { AvatarSpec } from '../config/avatarTypes';
 import { MAX_PLAYERS, MIN_PLAYERS, PENCIL_FACES } from '../config/balance';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
-import type { GameState, PencilFace } from '../engine/types';
-import { isValidGameState } from '../ui/persistence';
+import type { PencilFace } from '../engine/types';
+import { isValidWireGameState } from './wireState';
+import type { WireGameState } from './wireState';
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const PEER_ID_PREFIX = 'topshop-v1-';
@@ -34,15 +35,17 @@ export type ClientToHostMessage =
   | { type: 'HELLO'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'UPDATE_PROFILE'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
-  | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean; stopFace?: PencilFace };
+  | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean; stopFace?: PencilFace }
+  | { type: 'PING'; clientToken: string; ts: number };
 
 export type HostToClientMessage =
-  | { type: 'WELCOME'; seq: number; roster: RoomRoster; state: GameState }
-  | { type: 'STATE_SYNC'; seq: number; roster: RoomRoster; state: GameState; pencilSpinning: boolean }
+  | { type: 'WELCOME'; seq: number; roster: RoomRoster; state: WireGameState }
+  | { type: 'STATE_SYNC'; seq: number; roster: RoomRoster; state: WireGameState; pencilSpinning: boolean }
   | { type: 'ROSTER_SYNC'; roster: RoomRoster }
   | { type: 'AVATAR_SYNC'; avatars: Record<string, string> }
   | { type: 'AVATAR_PUT'; key: string; dataUrl: string | null }
   | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number; stopFace?: PencilFace }
+  | { type: 'PONG'; ts: number }
   | { type: 'ERROR'; message: string };
 
 export function generateRoomCode(length = 6): string {
@@ -205,6 +208,7 @@ export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
     return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 && isValidGameAction(raw.action);
   }
   if (raw.type === 'UI_PENCIL_SPIN') return typeof raw.spinning === 'boolean' && isOptionalPencilFace(raw.stopFace);
+  if (raw.type === 'PING') return typeof raw.ts === 'number' && Number.isFinite(raw.ts);
   return false;
 }
 
@@ -222,14 +226,14 @@ function isValidAvatarMap(raw: unknown): raw is Record<string, string> {
 export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
   if (!isRecord(raw) || typeof raw.type !== 'string') return false;
   if (raw.type === 'WELCOME') {
-    return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && isValidRoster(raw.roster) && isValidGameState(raw.state);
+    return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && isValidRoster(raw.roster) && isValidWireGameState(raw.state);
   }
   if (raw.type === 'STATE_SYNC') {
     return (
       typeof raw.seq === 'number' &&
       Number.isInteger(raw.seq) &&
       isValidRoster(raw.roster) &&
-      isValidGameState(raw.state) &&
+      isValidWireGameState(raw.state) &&
       typeof raw.pencilSpinning === 'boolean'
     );
   }
@@ -246,6 +250,7 @@ export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
       isOptionalPencilFace(raw.stopFace)
     );
   }
+  if (raw.type === 'PONG') return typeof raw.ts === 'number' && Number.isFinite(raw.ts);
   if (raw.type === 'ERROR') return typeof raw.message === 'string' && raw.message.length <= 200;
   return false;
 }

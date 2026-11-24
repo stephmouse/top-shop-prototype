@@ -44,6 +44,7 @@ function appendUndoControls(
 export interface ActionPanelViewOptions {
   onOpenSetup?: () => void;
   readOnly?: boolean;
+  reconnecting?: boolean;
   remotePencilSpinning?: boolean;
   remotePencilStopFace?: PencilFace | null;
   onPencilSpinChange?: (spinning: boolean, stopFace?: PencilFace) => void;
@@ -69,7 +70,11 @@ export function renderActionPanel(
   const saleTag = state.globalSale
     ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
     : '';
-  const waitTag = viewOptions.readOnly && state.phase !== 'GAME_OVER' ? ` · Waiting for ${active.name}...` : '';
+  const waitTag = viewOptions.reconnecting
+    ? ' · Reconnecting to host…'
+    : viewOptions.readOnly && state.phase !== 'GAME_OVER'
+      ? ` · Waiting for ${active.name}...`
+      : '';
   const headingText = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}${waitTag}`;
   if (!viewOptions.readOnly && state.phase !== 'GAME_OVER') {
     const turnBadge = document.createElement('span');
@@ -82,6 +87,13 @@ export function renderActionPanel(
     heading.textContent = headingText;
   }
   container.appendChild(heading);
+
+  if (viewOptions.reconnecting) {
+    const notice = document.createElement('div');
+    notice.className = 'net-reconnect-banner';
+    notice.textContent = 'Connection lost — reconnecting to host…';
+    container.appendChild(notice);
+  }
 
   const stack = document.createElement('div');
   stack.className = 'action-stack';

@@ -7,6 +7,7 @@ export interface TopbarNetInfo {
   roomCode: string | null;
   peerCount: number;
   waitingCount?: number;
+  reconnecting?: boolean;
 }
 
 export interface TopbarOptions {
@@ -121,6 +122,9 @@ export function createTopbar(options: TopbarOptions): TopbarController {
         const waitSuffix = waiting > 0 ? ` · +${waiting} waiting` : '';
         onlineBtn.textContent = `Online: ${netInfo.roomCode ?? ''} (Host · ${netInfo.peerCount}G${waitSuffix})`;
         onlineBtn.className = `topbar-online-btn is-online${waiting > 0 ? ' has-waiting' : ''}`;
+      } else if (isGuest && netInfo?.reconnecting) {
+        onlineBtn.textContent = `Reconnecting: ${netInfo.roomCode ?? ''}…`;
+        onlineBtn.className = 'topbar-online-btn is-online has-waiting';
       } else if (isGuest) {
         onlineBtn.textContent = `Online: ${netInfo.roomCode ?? ''} (Guest)`;
         onlineBtn.className = 'topbar-online-btn is-online';
