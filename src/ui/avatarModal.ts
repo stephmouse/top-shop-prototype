@@ -31,6 +31,30 @@ export interface AvatarModalController {
   isOpen: () => boolean;
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function createCameraSvg(size: number): Element {
+  if (typeof document.createElementNS !== 'function') return mk('span', '');
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', String(size));
+  svg.setAttribute('height', String(size));
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '2');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+  const body = document.createElementNS(SVG_NS, 'path');
+  body.setAttribute('d', 'M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z');
+  const lens = document.createElementNS(SVG_NS, 'circle');
+  lens.setAttribute('cx', '12');
+  lens.setAttribute('cy', '13');
+  lens.setAttribute('r', '4');
+  svg.append(body, lens);
+  return svg;
+}
+
 const mk = <K extends keyof HTMLElementTagNameMap>(tag: K, className: string, textContent = '') =>
   Object.assign(document.createElement(tag), { className, textContent });
 
@@ -81,22 +105,28 @@ export function createAvatarModal(options?: AvatarModalOptions): AvatarModalCont
 
   const layout = mk('div', 'avatar-modal-layout');
   const previewCol = mk('div', 'avatar-preview-col');
+  const previewWrap = mk('div', 'avatar-preview-wrap');
   const previewFrame = mk('div', 'avatar-preview-frame');
-  const quickBtns = mk('div', 'setup-btn-row');
-  const paletteBtn = Object.assign(mk('button', '', 'Species Palette'), { type: 'button' as const });
-  const randomBtn = Object.assign(mk('button', '', 'Randomize'), { type: 'button' as const });
-  quickBtns.append(paletteBtn, randomBtn);
-
-  const photoBtns = mk('div', 'setup-btn-row');
-  const uploadBtn = Object.assign(mk('button', '', 'Upload Photo…'), { type: 'button' as const });
-  const clearPhotoBtn = Object.assign(mk('button', '', 'Clear Photo'), { type: 'button' as const, hidden: true });
+  const uploadBtn = Object.assign(mk('button', 'avatar-upload-btn'), {
+    type: 'button' as const,
+    title: 'Upload avatar',
+  });
+  uploadBtn.setAttribute('aria-label', 'Upload avatar');
+  const uploadTooltip = mk('span', 'avatar-upload-tooltip', 'Upload avatar');
+  uploadBtn.append(createCameraSvg(16), uploadTooltip);
   const fileInput = Object.assign(document.createElement('input'), {
     type: 'file',
     accept: 'image/png,image/jpeg,image/webp,image/gif,image/avif',
     hidden: true,
   });
-  photoBtns.append(uploadBtn, clearPhotoBtn, fileInput);
-  previewCol.append(previewFrame, quickBtns, photoBtns);
+  previewWrap.append(previewFrame, uploadBtn, fileInput);
+
+  const quickBtns = mk('div', 'setup-btn-row');
+  const paletteBtn = Object.assign(mk('button', '', 'Species Palette'), { type: 'button' as const });
+  const randomBtn = Object.assign(mk('button', '', 'Randomize'), { type: 'button' as const });
+  const clearPhotoBtn = Object.assign(mk('button', '', 'Clear Photo'), { type: 'button' as const, hidden: true });
+  quickBtns.append(paletteBtn, randomBtn, clearPhotoBtn);
+  previewCol.append(previewWrap, quickBtns);
 
   const controlsCol = mk('div', 'avatar-controls-col');
   const errorEl = Object.assign(mk('div', 'setup-status is-error'), { hidden: true });

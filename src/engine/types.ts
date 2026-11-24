@@ -151,7 +151,9 @@ export interface PurchaseReceipt {
   shopId: string;
   tileId: string;
   storeName: string;
+  itemName?: string;
   grossPaid: number;
+  pointsAwarded?: number;
   cashbackCount: number;
   cashbackRefund: number;
   refundedItemNames: string[];
@@ -190,6 +192,7 @@ export interface GameState {
   deliverMode: DeliverMode | null;
   deliverPreferredShopId: string | null;
   deliveredShopIdsThisTurn: string[];
+  rivalItemsBoughtThisTurn?: number;
   eventChoices: string[];
   revealedEventSlot: number | null;
   eventStorePrompt: EventStorePrompt | null;

@@ -133,15 +133,28 @@ export function computePlayerNetWorth(state: GameState, playerId: string): numbe
 export function computePlayerRank(
   state: GameState,
   playerId: string
-): { rank: number; activeCount: number } {
+): { rank: number; maxRank: number; activeCount: number } {
   const active = state.players.filter((p) => !p.isBankrupt);
   const netWorthById = new Map(active.map((p) => [p.id, computePlayerNetWorth(state, p.id)]));
   const sorted = [...active].sort(
     (a, b) => (netWorthById.get(b.id) ?? 0) - (netWorthById.get(a.id) ?? 0)
   );
-  const idx = sorted.findIndex((p) => p.id === playerId);
+  const ranksById = new Map<string, number>();
+  let maxRank = 1;
+  let prevRank = 1;
+  let prevNetWorth = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    const p = sorted[i]!;
+    const netWorth = netWorthById.get(p.id) ?? 0;
+    const assigned = i > 0 && netWorth === prevNetWorth ? prevRank : i + 1;
+    ranksById.set(p.id, assigned);
+    prevRank = assigned;
+    prevNetWorth = netWorth;
+    maxRank = assigned;
+  }
   return {
-    rank: idx >= 0 ? idx + 1 : active.length,
+    rank: ranksById.get(playerId) ?? maxRank,
+    maxRank,
     activeCount: Math.max(1, active.length),
   };
 }

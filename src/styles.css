@@ -830,6 +830,28 @@ button.primary:hover:not(:disabled) {
   margin-top: 2px;
 }
 
+.rival-purchase-banner {
+  padding: 7px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(88, 166, 255, 0.14);
+  border: 1px solid rgba(88, 166, 255, 0.45);
+  color: #cfe8ff;
+}
+
+.rival-purchase-banner.is-cashback {
+  background: rgba(46, 204, 113, 0.16);
+  border-color: rgba(46, 204, 113, 0.55);
+  color: #b7f5cf;
+}
+
+.rival-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .lot-group {
   display: grid;
   gap: 6px;
@@ -1129,6 +1151,60 @@ button.primary:hover:not(:disabled) {
   gap: 6px;
   font-size: 13px;
   padding: 6px 0;
+}
+
+.setup-has-tooltip {
+  position: relative;
+  cursor: pointer;
+}
+
+.setup-info-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  border: 1px solid #475569;
+  background: #0d1017;
+  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.setup-has-tooltip:hover .setup-info-hint,
+.setup-has-tooltip:focus-within .setup-info-hint {
+  color: #f8fafc;
+  border-color: #60a5fa;
+  background: #1d4ed8;
+}
+
+.setup-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  width: min(260px, 75vw);
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: #0b0e14;
+  border: 1px solid #475569;
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.55);
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 20;
+}
+
+.setup-has-tooltip:hover .setup-tooltip,
+.setup-has-tooltip:focus-within .setup-tooltip {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .setup-players-list {
@@ -1568,6 +1644,23 @@ button.primary:hover:not(:disabled) {
   gap: 10px;
 }
 
+.avatar-preview-col .setup-btn-row {
+  width: 100%;
+  max-width: 160px;
+  flex-direction: column;
+  align-items: stretch;
+}
+.avatar-preview-col .setup-btn-row button {
+  width: 100%;
+  text-align: center;
+}
+
+.avatar-preview-wrap {
+  position: relative;
+  width: 140px;
+  height: 140px;
+}
+
 .avatar-preview-frame {
   width: 140px;
   height: 140px;
@@ -1576,6 +1669,58 @@ button.primary:hover:not(:disabled) {
   overflow: hidden;
   background: #141b29;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.avatar-upload-btn {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  background: #1f2937;
+  border: 2px solid #94a3b8;
+  color: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.5);
+  transition: background 140ms ease, border-color 140ms ease, transform 140ms ease, box-shadow 140ms ease;
+}
+.avatar-upload-btn:hover,
+.avatar-upload-btn:focus-visible {
+  background: #2563eb;
+  border-color: #93c5fd;
+  transform: scale(1.08);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.55);
+  outline: none;
+}
+
+.avatar-upload-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, 4px);
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #0b0e14;
+  border: 1px solid #475569;
+  color: #f8fafc;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 5;
+}
+.avatar-upload-btn:hover .avatar-upload-tooltip,
+.avatar-upload-btn:focus-visible .avatar-upload-tooltip {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 
 .avatar-controls-col {

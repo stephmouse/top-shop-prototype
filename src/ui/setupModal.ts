@@ -68,7 +68,7 @@ const MODAL_TEMPLATE = `
       <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="100" data-role="cash" /></label>
       <label class="setup-field"><span class="setup-field-label">Bankrupt Limit</span><input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" /></label>
       <label class="setup-field"><span class="setup-field-label">First Turn</span><select class="setup-select" data-role="first-player"></select></label>
-      <label class="setup-checkbox-field"><input type="checkbox" data-role="finish-round" /> Finish Round on Win</label>
+      <label class="setup-checkbox-field setup-has-tooltip"><input type="checkbox" data-role="finish-round" aria-describedby="finish-round-tip" /> Finish Round on Win <span class="setup-info-hint" aria-hidden="true">?</span><span id="finish-round-tip" class="setup-tooltip" role="tooltip">When someone reaches Target Assets, let the rest of the round finish so everyone gets equal turns. Highest Net Assets wins.</span></label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="month-popup" /> Show Month Popups</label>
     </div>
   </section>

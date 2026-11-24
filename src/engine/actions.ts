@@ -1,5 +1,5 @@
 import { stripAvatarCustomImage } from '../config/avatarTypes';
-import { PENCIL_FACES, SHOP_RULES } from '../config/balance';
+import { PENCIL_FACES } from '../config/balance';
 import type { GameState, HorizontalDir, PencilFace, VerticalDir } from './types';
 
 export type DirectionChoice = HorizontalDir | VerticalDir;
@@ -23,6 +23,7 @@ export type GameAction =
   | { type: 'DELIVER_ITEMS'; shopId: string; order: Record<string, number> }
   | { type: 'SKIP_DELIVER' }
   | { type: 'BUY_RIVAL_ITEMS'; itemIds: string[] }
+  | { type: 'FINISH_RIVAL_SHOP' }
   | { type: 'SELL_SHOP_LIQUIDATE'; shopId: string };
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -73,6 +74,7 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
     case 'CLOSE_BANK_MENU':
     case 'SKIP_SHOP_SLOT':
     case 'SKIP_DELIVER':
+    case 'FINISH_RIVAL_SHOP':
       return true;
     case 'RESOLVE_ELEVATOR':
       return typeof raw.ride === 'boolean';
@@ -101,8 +103,7 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
     case 'BUY_RIVAL_ITEMS':
       return (
         Array.isArray(raw.itemIds) &&
-        raw.itemIds.length >= 1 &&
-        raw.itemIds.length <= SHOP_RULES.maxItemsPerVisit &&
+        raw.itemIds.length === 1 &&
         raw.itemIds.every(isNonEmptyString)
       );
     case 'SELL_SHOP_LIQUIDATE':

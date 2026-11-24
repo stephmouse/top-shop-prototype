@@ -50,6 +50,7 @@ export function resumeAfterPostAction(state: GameState): GameState {
     deliverMode: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
+    rivalItemsBoughtThisTurn: 0,
   };
 
   if (committed.pendingPostBankPhase === 'STEPPING' && committed.remainingSteps > 0) {

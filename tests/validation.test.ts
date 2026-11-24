@@ -16,11 +16,13 @@ describe('action validation, persistence sanitization, and engine purity', () =>
   it('validates game actions and rejects malformed or prototype-polluting payloads', () => {
     expect(isValidGameAction({ type: 'ROLL_PENCIL', chosenFace: 'E' })).toBe(true);
     expect(isValidGameAction({ type: 'REVEAL_EVENT_CARD', slotIndex: 2 })).toBe(true);
-    expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a', 'b'] })).toBe(true);
+    expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a'] })).toBe(true);
+    expect(isValidGameAction({ type: 'FINISH_RIVAL_SHOP' })).toBe(true);
     expect(isValidGameAction({ type: 'DELIVER_ITEMS', shopId: 'shop_1_1', order: { item_1: 2 } })).toBe(true);
 
     expect(isValidGameAction({ type: 'REVEAL_EVENT_CARD', slotIndex: 3 })).toBe(false);
-    expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a', 'b', 'c'] })).toBe(false);
+    expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a', 'b'] })).toBe(false);
+    expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: [] })).toBe(false);
     expect(isValidGameAction({ type: 'DELIVER_ITEMS', shopId: 'shop_1_1', order: { item_1: -1 } })).toBe(false);
     expect(
       isValidGameAction({

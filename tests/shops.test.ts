@@ -1,10 +1,32 @@
 import { describe, expect, it } from 'vitest';
-import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../src/config/balance';
+import { SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../src/config/balance';
+import { computePlayerRank } from '../src/engine/helpers';
 import { nextRandom } from '../src/engine/rng';
 import { getAllowedStoreTypeIds, getShopTotalStock } from '../src/engine/shops';
 import { applyAction, createInitialGameState } from '../src/engine/state';
 
 const PLAYERS = [{ name: 'Alice' }, { name: 'Bob' }];
+
+function findSeedForTwoItemRolls(
+  cbChance: number,
+  cb1: boolean,
+  pts1: boolean,
+  cb2: boolean,
+  pts2: boolean
+): number {
+  for (let seed = 1; seed < 500000; seed++) {
+    const r1 = nextRandom(seed);
+    if ((r1.value < cbChance) !== cb1) continue;
+    const r2 = nextRandom(r1.nextSeed);
+    if ((r2.value < SHOP_RULES.pointsAwardChance) !== pts1) continue;
+    const r3 = nextRandom(r2.nextSeed);
+    if ((r3.value < cbChance) !== cb2) continue;
+    const r4 = nextRandom(r3.nextSeed);
+    if ((r4.value < SHOP_RULES.pointsAwardChance) !== pts2) continue;
+    return seed;
+  }
+  throw new Error('Failed to find matching seed');
+}
 
 describe('shops, chains, delivery, cashback, buyouts, and liquidation', () => {
   it('upgrades adjacent same-owner shops L1 -> L4 and enforces segment exclusivity', () => {
@@ -158,5 +180,109 @@ describe('shops, chains, delivery, cashback, buyouts, and liquidation', () => {
     expect(bankruptEnd.players[0]!.isBankrupt).toBe(true);
     expect(bankruptEnd.phase).toBe('GAME_OVER');
     expect(bankruptEnd.winnerId).toBe('p_2');
+  });
+
+  it('purchases rival items one at a time, rolling Shopping Points and Cash Back per item', () => {
+    const bun = STORE_TYPES.bakery!.items[0]!;
+    const makeState = (seed: number, stockQty = 3) => {
+      const base = createInitialGameState(PLAYERS, { startingCash: 5000 }, seed, 'stage_0');
+      return {
+        ...base,
+        activePlayerIndex: 1,
+        phase: 'SHOP_BUY_RIVAL' as const,
+        players: base.players.map((p, i) => (i === 1 ? { ...p, tileId: 'f1_c1' } : p)),
+        shops: {
+          ...base.shops,
+          shop_1_1: {
+            ...base.shops.shop_1_1!,
+            ownerId: 'p_1',
+            storeTypeId: 'bakery',
+            level: 1 as const,
+            stock: { [bun.id]: stockQty },
+          },
+        },
+      };
+    };
+
+    const initial = makeState(findSeedForTwoItemRolls(bun.cashbackChance, false, true, false, true));
+    expect(applyAction(initial, { type: 'FINISH_RIVAL_SHOP' })).toBe(initial);
+    expect(applyAction(initial, { type: 'BUY_RIVAL_ITEMS', itemIds: [bun.id, bun.id] })).toBe(initial);
+
+    const after1 = applyAction(initial, { type: 'BUY_RIVAL_ITEMS', itemIds: [bun.id] });
+    expect(after1.phase).toBe('SHOP_BUY_RIVAL');
+    expect(after1.rivalItemsBoughtThisTurn).toBe(1);
+    expect(after1.players[1]!.points).toBe(1);
+    expect(after1.lastPurchaseReceipt?.itemName).toBe(bun.name);
+    expect(after1.lastPurchaseReceipt?.pointsAwarded).toBe(1);
+
+    const afterLeave = applyAction(after1, { type: 'FINISH_RIVAL_SHOP' });
+    expect(afterLeave.phase).toBe('ROLL_PENCIL');
+    expect(afterLeave.activePlayerIndex).toBe(0);
+    expect(afterLeave.rivalItemsBoughtThisTurn).toBe(0);
+    expect(afterLeave.lastPurchaseReceipt).toBeNull();
+
+    const after2 = applyAction(after1, { type: 'BUY_RIVAL_ITEMS', itemIds: [bun.id] });
+    expect(after2.phase).toBe('ROLL_PENCIL');
+    expect(after2.rivalItemsBoughtThisTurn).toBe(0);
+    expect(after2.players[1]!.points).toBe(2);
+
+    const buyTwoSeq = (seed: number, stockQty = 3) => {
+      const s1 = applyAction(makeState(seed, stockQty), { type: 'BUY_RIVAL_ITEMS', itemIds: [bun.id] });
+      return applyAction(s1, { type: 'BUY_RIVAL_ITEMS', itemIds: [bun.id] });
+    };
+    expect(buyTwoSeq(findSeedForTwoItemRolls(bun.cashbackChance, false, true, false, false)).players[1]!.points).toBe(1);
+    expect(buyTwoSeq(findSeedForTwoItemRolls(bun.cashbackChance, false, false, false, false)).players[1]!.points).toBe(0);
+
+    const cbSecond = buyTwoSeq(findSeedForTwoItemRolls(bun.cashbackChance, false, false, true, false));
+    expect(cbSecond.lastPurchaseReceipt?.cashbackCount).toBe(1);
+    expect(cbSecond.lastPurchaseReceipt?.cashbackRefund).toBe(bun.retailPrice * 2);
+    expect(cbSecond.players[1]!.cash).toBe(5000);
+
+    const cbBothEmpty = buyTwoSeq(findSeedForTwoItemRolls(bun.cashbackChance, true, false, true, false), 2);
+    expect(cbBothEmpty.phase).toBe('SHOP_BUY_SLOT');
+    expect(cbBothEmpty.rivalItemsBoughtThisTurn).toBe(0);
+    expect(cbBothEmpty.players[1]!.cash).toBe(5000 + bun.retailPrice * 2);
+  });
+
+  it('uses PS1 competition ranking with tie-sharing and rank offsets for Shopping Points', () => {
+    const fourPlayers = [{ name: 'A' }, { name: 'B' }, { name: 'C' }, { name: 'D' }];
+    const tied = createInitialGameState(fourPlayers, { startingCash: 3000 }, 1, 'stage_0');
+    expect(computePlayerRank(tied, 'p_1')).toEqual({ rank: 1, maxRank: 1, activeCount: 4 });
+    expect(computePlayerRank(tied, 'p_4')).toEqual({ rank: 1, maxRank: 1, activeCount: 4 });
+
+    const withTies = {
+      ...tied,
+      players: tied.players.map((p, i) => ({ ...p, cash: [5000, 3000, 2000, 2000][i]! })),
+    };
+    expect(computePlayerRank(withTies, 'p_3')).toEqual({ rank: 3, maxRank: 3, activeCount: 4 });
+    expect(computePlayerRank(withTies, 'p_4')).toEqual({ rank: 3, maxRank: 3, activeCount: 4 });
+
+    const secSys = STORE_TYPES.auto_parts!.items[5]!; // retail $2048 -> basePts = 10
+    const bounds: Array<[number, number, number]> = [[0, 4, 8], [1, 5, 9], [2, 6, 10], [3, 7, 11]];
+    for (const [idx, minExp, maxExp] of bounds) {
+      const seen = new Set<number>();
+      for (let seed = 1; seed <= 80; seed++) {
+        const base = createInitialGameState(fourPlayers, { startingCash: 2000 }, seed, 'stage_0');
+        const ownerIdx = idx === 0 ? 1 : 0;
+        const testState = {
+          ...base,
+          activePlayerIndex: idx,
+          phase: 'SHOP_BUY_RIVAL' as const,
+          players: base.players.map((p, i) => ({
+            ...p,
+            cash: [8000, 6000, 4000, 2000][i]!,
+            tileId: i === idx ? 'f1_c1' : p.tileId,
+          })),
+          shops: {
+            ...base.shops,
+            shop_1_1: { ...base.shops.shop_1_1!, ownerId: `p_${ownerIdx + 1}`, storeTypeId: 'auto_parts', level: 4 as const, stock: { [secSys.id]: 1 } },
+          },
+        };
+        const pts = applyAction(testState, { type: 'BUY_RIVAL_ITEMS', itemIds: [secSys.id] }).players[idx]!.points;
+        if (pts > 0) seen.add(pts);
+      }
+      expect(Math.min(...seen)).toBe(minExp);
+      expect(Math.max(...seen)).toBe(maxExp);
+    }
   });
 });

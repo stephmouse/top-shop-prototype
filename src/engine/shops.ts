@@ -27,6 +27,7 @@ export {
 export {
   handleBuyRivalItems,
   handleDeliverItems,
+  handleFinishRivalShop,
   handleSellShopLiquidate,
   handleSkipDeliver,
 } from './shopShopping';

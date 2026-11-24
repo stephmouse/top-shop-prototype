@@ -199,7 +199,7 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'LIQUIDATE_ASSETS') {
-    renderLiquidatePanel(stack, state, dispatch, viewOptions.onUiChange);
+    renderLiquidatePanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
     return;
   }
 

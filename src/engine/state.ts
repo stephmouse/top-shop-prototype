@@ -23,6 +23,7 @@ import {
   handleBuyoutShop,
   handleBuyRivalItems,
   handleDeliverItems,
+  handleFinishRivalShop,
   handleOpenShop,
   handleSellShopLiquidate,
   handleSkipDeliver,
@@ -117,6 +118,7 @@ export function createInitialGameState(
     deliverMode: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
+    rivalItemsBoughtThisTurn: 0,
     eventChoices: [],
     revealedEventSlot: null,
     eventStorePrompt: null,
@@ -171,6 +173,8 @@ function dispatchAction(state: GameState, action: GameAction): GameState {
       return handleSkipDeliver(state);
     case 'BUY_RIVAL_ITEMS':
       return handleBuyRivalItems(state, action.itemIds);
+    case 'FINISH_RIVAL_SHOP':
+      return handleFinishRivalShop(state);
     case 'SELL_SHOP_LIQUIDATE':
       return handleSellShopLiquidate(state, action.shopId);
     default:

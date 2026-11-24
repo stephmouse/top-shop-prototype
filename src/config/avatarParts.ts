@@ -177,22 +177,72 @@ export const MARKING_HEAD_SHAPES: Record<AvatarMarking, readonly ShapeSpec[]> = 
   shoulder_spots: [HEAD_MUZZLE],
 };
 
+const MEDIUM_BACK_HAIR = sh(
+  'M 12 28 C 11 16 20 11 32 11 C 44 11 53 16 52 28 C 54 36 54 45 48 49 L 44 45 L 20 45 L 16 49 C 10 45 10 36 12 28 Z',
+  'hair',
+  'dark',
+  1.4
+);
+const LONG_BACK_HAIR = sh(
+  'M 12 28 C 11 15 20 11 32 11 C 44 11 53 15 52 28 C 56 39 57 52 54 64 H 10 C 7 52 8 39 12 28 Z',
+  'hair',
+  'dark',
+  1.4
+);
+
 export const HAIR_BACK_SHAPES: Record<AvatarHair, readonly ShapeSpec[]> = {
-  none: [], tuft: [], spiky: [],
-  medium: [sh('M 14 22 C 10 30 10 43 15 47 L 19 42 Z M 50 22 C 54 30 54 43 49 47 L 45 42 Z', 'hair', 'dark', 1.4)],
-  medium_bangs: [sh('M 14 22 C 10 30 10 43 15 47 L 19 42 Z M 50 22 C 54 30 54 43 49 47 L 45 42 Z', 'hair', 'dark', 1.4)],
-  long: [sh('M 14 20 C 8 33 7 50 11 64 H 20 L 18 44 Z M 50 20 C 56 33 57 50 53 64 H 44 L 46 44 Z', 'hair', 'dark', 1.4)],
-  long_bangs: [sh('M 14 20 C 8 33 7 50 11 64 H 20 L 18 44 Z M 50 20 C 56 33 57 50 53 64 H 44 L 46 44 Z', 'hair', 'dark', 1.4)],
+  none: [],
+  tuft: [],
+  spiky: [],
+  medium: [MEDIUM_BACK_HAIR],
+  medium_bangs: [MEDIUM_BACK_HAIR],
+  long: [LONG_BACK_HAIR],
+  long_bangs: [LONG_BACK_HAIR],
 };
 
 export const HAIR_FRONT_SHAPES: Record<AvatarHair, readonly ShapeSpec[]> = {
   none: [],
-  tuft: [sh('M 28 15 C 29 9 33 9 33 14 C 35 10 38 12 36 16 Z', 'hair', 'dark', 1.2)],
-  spiky: [sh('M 21 20 L 22 9 L 28 15 L 32 7 L 36 15 L 42 9 L 43 20 Q 32 18 21 20 Z', 'hair', 'dark', 1.3)],
-  medium: [sh('M 18 23 C 22 13 31 12 32 19 C 33 12 42 13 46 23 C 42 18 35 19 32 23 C 29 19 22 18 18 23 Z', 'hair', 'dark', 1.3)],
-  medium_bangs: [sh('M 19 25 C 20 13 44 13 45 25 L 40 22 L 36 25 L 32 21 L 28 25 L 24 22 Z', 'hair', 'dark', 1.3)],
-  long: [sh('M 18 23 C 22 13 31 12 32 19 C 33 12 42 13 46 23 C 42 18 35 19 32 23 C 29 19 22 18 18 23 Z', 'hair', 'dark', 1.3)],
-  long_bangs: [sh('M 19 25 C 20 13 44 13 45 25 L 40 22 L 36 25 L 32 21 L 28 25 L 24 22 Z', 'hair', 'dark', 1.3)],
+  tuft: [sh('M 26 16 C 27 9 32 8 33 13 C 35 9 39 11 38 16 C 34 15 30 15 26 16 Z', 'hair', 'dark', 1.2)],
+  spiky: [
+    sh(
+      'M 15 27 C 15 19 18 14 21 15 L 22 8 L 28 13 L 32 6 L 36 13 L 42 8 L 43 15 C 46 14 49 19 49 27 C 46 21 43 20 40 22 L 36 18 L 32 22 L 28 18 L 24 22 C 21 20 18 21 15 27 Z',
+      'hair',
+      'dark',
+      1.3
+    ),
+  ],
+  medium: [
+    sh(
+      'M 12.5 34 C 12 20 19 12 32 12 C 45 12 52 20 51.5 34 C 49.5 36 47.5 33 47 28 C 46 22 41 18 33 19 L 32 21 L 31 19 C 23 18 18 22 17 28 C 16.5 33 14.5 36 12.5 34 Z',
+      'hair',
+      'dark',
+      1.3
+    ),
+  ],
+  medium_bangs: [
+    sh(
+      'M 12.5 35 C 12 20 19 12 32 12 C 45 12 52 20 51.5 35 C 49 36 47.5 33 47 26.5 L 44 25 L 41 25.5 L 38 22.5 L 35 25.5 L 32 22 L 29 25.5 L 26 22.5 L 23 25.5 L 20 25 L 17 26.5 C 16.5 33 15 36 12.5 35 Z',
+      'hair',
+      'dark',
+      1.3
+    ),
+  ],
+  long: [
+    sh(
+      'M 12 40 C 11.5 22 19 12 32 12 C 45 12 52.5 22 52 40 C 49.5 41 47.5 37 47.5 29 C 46.5 22 41 18 33 19 L 32 21.5 L 31 19 C 23 18 17.5 22 16.5 29 C 16.5 37 14.5 41 12 40 Z',
+      'hair',
+      'dark',
+      1.3
+    ),
+  ],
+  long_bangs: [
+    sh(
+      'M 12 41 C 11.5 22 19 12 32 12 C 45 12 52.5 22 52 41 C 49.5 42 47.5 37 47.5 26.5 L 44 25 L 41 25.5 L 38 22.5 L 35 25.5 L 32 22 L 29 25.5 L 26 22.5 L 23 25.5 L 20 25 L 16.5 26.5 C 16.5 37 14.5 42 12 41 Z',
+      'hair',
+      'dark',
+      1.3
+    ),
+  ],
 };
 
 export const ACCESSORY_SHAPES: Record<AvatarAccessory, readonly ShapeSpec[]> = {

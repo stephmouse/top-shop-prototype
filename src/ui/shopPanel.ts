@@ -106,39 +106,51 @@ export function renderBuyRivalPanel(
     }
   }
 
-  const maxPick = Math.min(SHOP_RULES.maxItemsPerVisit, slots.length);
-  const selectedSlots = new Set<number>();
+  const boughtCount = state.rivalItemsBoughtThisTurn ?? 0;
+  const receipt = state.lastPurchaseReceipt;
+  if (boughtCount > 0 && receipt?.shopId === shop.id) {
+    const banner = document.createElement('div');
+    const isCb = receipt.cashbackCount > 0;
+    banner.className = `rival-purchase-banner${isCb ? ' is-cashback' : ''}`;
+    const ptsText =
+      receipt.pointsAwarded && receipt.pointsAwarded > 0
+        ? `+${receipt.pointsAwarded} pt${receipt.pointsAwarded === 1 ? '' : 's'}`
+        : 'No points';
+    const cbText = isCb ? ` · CASH BACK! +$${receipt.cashbackRefund}` : '';
+    banner.textContent = `Bought ${receipt.itemName ?? 'item'} (-$${receipt.grossPaid}) · ${ptsText}${cbText}`;
+    list.appendChild(banner);
+  }
+
+  let selectedSlotIdx: number | null = null;
   const summary = document.createElement('div');
   const grid = document.createElement('div');
   grid.className = 'rival-shelf-grid';
   const buyBtn = makePanelButton(
-    'Purchase Selected',
-    () =>
-      dispatch({
-        type: 'BUY_RIVAL_ITEMS',
-        itemIds: Array.from(selectedSlots).map((idx) => slots[idx]!.item.id),
-      }),
+    'Buy Selected',
+    () => {
+      if (selectedSlotIdx === null) return;
+      dispatch({ type: 'BUY_RIVAL_ITEMS', itemIds: [slots[selectedSlotIdx]!.item.id] });
+    },
     { primary: true }
   );
 
   const slotButtons: Array<{ btn: HTMLButtonElement; slot: ShelfSlot; statusEl: HTMLSpanElement }> = [];
 
   const refresh = () => {
-    let total = 0;
-    for (const idx of selectedSlots) {
-      total += slots[idx]?.price ?? 0;
-    }
-    const atCap = selectedSlots.size >= SHOP_RULES.maxItemsPerVisit;
+    const chosen = selectedSlotIdx !== null ? slots[selectedSlotIdx] : undefined;
     for (const { btn, slot, statusEl } of slotButtons) {
-      const picked = selectedSlots.has(slot.slotIdx);
+      const picked = slot.slotIdx === selectedSlotIdx;
       btn.className = `rival-item-card${picked ? ' is-selected' : ''}`;
-      btn.disabled = !picked && atCap;
-      statusEl.textContent = picked ? '✓ Selected' : 'Click to buy';
+      statusEl.textContent = picked ? '✓ Selected' : 'Click to select';
     }
-    const buyoutNote =
-      selectedSlots.size > 0 && selectedSlots.size === slots.length ? ' · Clears store for buyout!' : '';
-    summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | Selected: ${selectedSlots.size}/${maxPick} (Must buy 1–${maxPick}) | Total: $${total}${buyoutNote}`;
-    buyBtn.disabled = selectedSlots.size < 1 || selectedSlots.size > SHOP_RULES.maxItemsPerVisit;
+    const stepText =
+      boughtCount === 0
+        ? `Item 1 of ${SHOP_RULES.maxItemsPerVisit} (Required)`
+        : `Optional item ${boughtCount + 1} of ${SHOP_RULES.maxItemsPerVisit}`;
+    const buyoutNote = slots.length === 1 ? ' · Clears store for buyout!' : '';
+    summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | ${stepText}${buyoutNote}`;
+    buyBtn.textContent = chosen ? `Buy ${chosen.item.name} ($${chosen.price})` : 'Buy Selected';
+    buyBtn.disabled = !chosen;
   };
 
   for (const slot of slots) {
@@ -155,8 +167,7 @@ export function renderBuyRivalPanel(
     statusEl.className = 'rival-item-pick';
     btn.append(nameEl, metaEl, statusEl);
     btn.addEventListener('click', () => {
-      if (selectedSlots.has(slot.slotIdx)) selectedSlots.delete(slot.slotIdx);
-      else if (selectedSlots.size < SHOP_RULES.maxItemsPerVisit) selectedSlots.add(slot.slotIdx);
+      selectedSlotIdx = selectedSlotIdx === slot.slotIdx ? null : slot.slotIdx;
       refresh();
     });
     slotButtons.push({ btn, slot, statusEl });
@@ -164,7 +175,15 @@ export function renderBuyRivalPanel(
   }
 
   refresh();
-  list.append(summary, grid, buyBtn);
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'rival-actions-row';
+  actionsRow.appendChild(buyBtn);
+  if (boughtCount >= 1) {
+    actionsRow.appendChild(
+      makePanelButton('Leave Shop', () => dispatch({ type: 'FINISH_RIVAL_SHOP' }))
+    );
+  }
+  list.append(summary, grid, actionsRow);
   container.appendChild(list);
 }
 
@@ -172,7 +191,8 @@ export function renderLiquidatePanel(
   container: HTMLElement,
   state: GameState,
   dispatch: DispatchFn,
-  onUiChange?: () => void
+  onUiChange?: () => void,
+  onHoverShop?: (shopId: string | null) => void
 ): void {
   const active = getActivePlayer(state);
   const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
@@ -195,10 +215,20 @@ export function renderLiquidatePanel(
       const payout = Math.floor(computeShopAssetValue(s) * SHOP_RULES.sellLiquidationRate);
       const isConfirming = confirmId === s.id;
       const label = `Sell ${loc} ${def?.name ?? 'Store'} L${s.level} (+$${payout})`;
-      const btn = makePanelButton(isConfirming ? `Confirm? ${label}` : label, () =>
-        handleLiquidatePickClick(state, s.id, dispatch, notify),
+      const btn = makePanelButton(
+        isConfirming ? `Confirm? ${label}` : label,
+        () => {
+          onHoverShop?.(null);
+          handleLiquidatePickClick(state, s.id, dispatch, notify);
+        },
         { primary: isConfirming }
       );
+      if (onHoverShop) {
+        btn.addEventListener('mouseenter', () => onHoverShop(s.id));
+        btn.addEventListener('mouseleave', () => onHoverShop(null));
+        btn.addEventListener('focus', () => onHoverShop(s.id));
+        btn.addEventListener('blur', () => onHoverShop(null));
+      }
       btn.style.borderLeft = `4px solid ${active.color}`;
       list.appendChild(btn);
     }
