@@ -16,6 +16,7 @@ const VIEW_SIZE = 200;
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
 const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const TARGET_PORTRAIT_CHARS = 12000;
 
 const ENCODE_LADDER: ReadonlyArray<{ size: number; mime: string; q?: number }> = [
   { size: 96, mime: 'image/webp', q: 0.86 }, { size: 96, mime: 'image/webp', q: 0.72 },
@@ -39,6 +40,7 @@ function validateImageFile(file: File): string | null {
 
 function encodeScaledPortrait(img: HTMLImageElement, srcX: number, srcY: number, srcW: number, srcH: number): string | null {
   const offscreen = document.createElement('canvas');
+  let fallback: string | null = null;
   for (const step of ENCODE_LADDER) {
     offscreen.width = step.size; offscreen.height = step.size;
     const octx = offscreen.getContext?.('2d');
@@ -49,9 +51,12 @@ function encodeScaledPortrait(img: HTMLImageElement, srcX: number, srcY: number,
     octx.imageSmoothingQuality = 'high';
     octx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, step.size, step.size);
     const url = step.q !== undefined ? offscreen.toDataURL(step.mime, step.q) : offscreen.toDataURL(step.mime);
-    if (url.startsWith(`data:${step.mime};`) && isValidCustomImageDataUrl(url)) return url;
+    if (url.startsWith(`data:${step.mime};`) && isValidCustomImageDataUrl(url)) {
+      if (url.length <= TARGET_PORTRAIT_CHARS) return url;
+      fallback ??= url;
+    }
   }
-  return null;
+  return fallback;
 }
 
 export function createImageCropper(options: ImageCropperOptions): ImageCropperController {

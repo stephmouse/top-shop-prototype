@@ -1,9 +1,9 @@
 import { isValidAvatarSpec, isValidCustomImageDataUrl } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
-import { MAX_PLAYERS, MIN_PLAYERS } from '../config/balance';
+import { MAX_PLAYERS, MIN_PLAYERS, PENCIL_FACES } from '../config/balance';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
-import type { GameState } from '../engine/types';
+import type { GameState, PencilFace } from '../engine/types';
 import { isValidGameState } from '../ui/persistence';
 
 export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -34,14 +34,15 @@ export type ClientToHostMessage =
   | { type: 'HELLO'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'UPDATE_PROFILE'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
-  | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean };
+  | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean; stopFace?: PencilFace };
 
 export type HostToClientMessage =
   | { type: 'WELCOME'; seq: number; roster: RoomRoster; state: GameState }
   | { type: 'STATE_SYNC'; seq: number; roster: RoomRoster; state: GameState; pencilSpinning: boolean }
   | { type: 'ROSTER_SYNC'; roster: RoomRoster }
   | { type: 'AVATAR_SYNC'; avatars: Record<string, string> }
-  | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number }
+  | { type: 'AVATAR_PUT'; key: string; dataUrl: string | null }
+  | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number; stopFace?: PencilFace }
   | { type: 'ERROR'; message: string };
 
 export function generateRoomCode(length = 6): string {
@@ -186,6 +187,10 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
   );
 }
 
+function isOptionalPencilFace(raw: unknown): raw is PencilFace | undefined {
+  return raw === undefined || PENCIL_FACES.includes(raw as PencilFace);
+}
+
 export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
   if (!isRecord(raw) || !isShortStr(raw.clientToken, 64) || typeof raw.type !== 'string') return false;
   if (raw.type === 'HELLO' || raw.type === 'UPDATE_PROFILE') {
@@ -199,22 +204,19 @@ export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
   if (raw.type === 'ACTION_REQUEST') {
     return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 && isValidGameAction(raw.action);
   }
-  if (raw.type === 'UI_PENCIL_SPIN') return typeof raw.spinning === 'boolean';
+  if (raw.type === 'UI_PENCIL_SPIN') return typeof raw.spinning === 'boolean' && isOptionalPencilFace(raw.stopFace);
   return false;
+}
+
+function isValidAvatarKey(key: unknown): key is string {
+  return isShortStr(key, 64) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
 }
 
 function isValidAvatarMap(raw: unknown): raw is Record<string, string> {
   if (!isRecord(raw)) return false;
   const entries = Object.entries(raw);
   if (entries.length > MAX_ROOM_PEERS + MAX_PLAYERS) return false;
-  return entries.every(
-    ([key, val]) =>
-      isShortStr(key, 64) &&
-      key !== '__proto__' &&
-      key !== 'constructor' &&
-      key !== 'prototype' &&
-      isValidCustomImageDataUrl(val)
-  );
+  return entries.every(([key, val]) => isValidAvatarKey(key) && isValidCustomImageDataUrl(val));
 }
 
 export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
@@ -233,8 +235,16 @@ export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
   }
   if (raw.type === 'ROSTER_SYNC') return isValidRoster(raw.roster);
   if (raw.type === 'AVATAR_SYNC') return isValidAvatarMap(raw.avatars);
+  if (raw.type === 'AVATAR_PUT') {
+    return isValidAvatarKey(raw.key) && (raw.dataUrl === null || isValidCustomImageDataUrl(raw.dataUrl));
+  }
   if (raw.type === 'UI_PENCIL_SPIN') {
-    return typeof raw.spinning === 'boolean' && typeof raw.activePlayerIndex === 'number' && Number.isInteger(raw.activePlayerIndex);
+    return (
+      typeof raw.spinning === 'boolean' &&
+      typeof raw.activePlayerIndex === 'number' &&
+      Number.isInteger(raw.activePlayerIndex) &&
+      isOptionalPencilFace(raw.stopFace)
+    );
   }
   if (raw.type === 'ERROR') return typeof raw.message === 'string' && raw.message.length <= 200;
   return false;

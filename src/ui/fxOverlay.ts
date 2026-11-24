@@ -115,7 +115,7 @@ export function createFxOverlay(
       if (prev.phase === 'EVENT_PICK' && (prev.revealedEventSlot ?? null) === null && (next.revealedEventSlot ?? null) !== null) {
         soundFx.playCardFlip();
       } else if (prev.phase === 'ROLL_PENCIL' && next.phase !== 'ROLL_PENCIL') {
-        soundFx.playPencilStop();
+        soundFx.playPencilStop(next.lastRoll === 'E', true);
       }
     }
 

@@ -4,7 +4,7 @@ import { stripAvatarCustomImage } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
 import { isValidGameAction, redactStateForClient } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
-import type { GameState } from '../engine/types';
+import type { GameState, PencilFace } from '../engine/types';
 import { applyPeerSeatProfiles, createAvatarSyncStore, createReconnectBackoff, isTransientSignalingError, PEER_ICE_CONFIG } from './avatarSync';
 import type { ReconnectBackoff } from './avatarSync';
 import {
@@ -31,13 +31,14 @@ export interface MultiplayerSession {
   getRoomCode: () => string | null;
   getCustomAvatars: () => Record<string, string>;
   isRemotePencilSpinning: () => boolean;
+  getRemotePencilStopFace: () => PencilFace | null;
   isLocalTurn: (state: GameState) => boolean;
   shouldTickEscalator: () => boolean;
   hostRoom: (customCode?: string) => Promise<string>;
   joinRoom: (roomCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }) => Promise<void>;
   sendOrApplyAction: (action: GameAction) => boolean;
   broadcastHostState: (nextState: GameState) => void;
-  notifyPencilSpin: (spinning: boolean) => void;
+  notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
   assignSeat: (seatIndex: number, ownerToken: string) => void;
   updateMyProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
   kickPeer: (clientToken: string) => void;
@@ -47,6 +48,7 @@ export interface MultiplayerSession {
 export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks): MultiplayerSession {
   let clientToken = getOrCreateClientToken(), role: NetRole = 'offline', roomCode: string | null = null;
   let seq = 0, generation = 0, openConns = 0, remotePencilSpinning = false;
+  let remotePencilStopFace: PencilFace | null = null;
   let roster: RoomRoster | null = null, peer: Peer | null = null, hostConn: DataConnection | null = null, hostBackoff: ReconnectBackoff | null = null;
   const connByToken = new Map<string, DataConnection>(), avatarSync = createAvatarSyncStore();
 
@@ -54,20 +56,27 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     generation++; openConns = 0; hostBackoff?.cancel(); hostBackoff = null;
     for (const c of connByToken.values()) c.close();
     connByToken.clear(); avatarSync.clear(); hostConn?.close(); peer?.destroy();
-    hostConn = null; peer = null; role = 'offline'; roomCode = null; roster = null; seq = 0; remotePencilSpinning = false;
+    hostConn = null; peer = null; role = 'offline'; roomCode = null; roster = null; seq = 0; remotePencilSpinning = false; remotePencilStopFace = null;
   }
 
   function broadcastToGuests(msg: HostToClientMessage, excludeToken?: string): void {
     for (const [token, conn] of connByToken.entries()) if (token !== excludeToken && conn.open) conn.send(msg);
   }
   function clearRemoteSpin(activeIdx = callbacks.getState().activePlayerIndex): void {
-    if (!remotePencilSpinning) return;
-    remotePencilSpinning = false; broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning: false, activePlayerIndex: activeIdx });
+    if (!remotePencilSpinning && remotePencilStopFace === null) return;
+    remotePencilSpinning = false; remotePencilStopFace = null;
+    broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning: false, activePlayerIndex: activeIdx });
   }
-  function syncAvatars(forceTarget?: DataConnection): void {
-    const { map, changed } = avatarSync.refreshHostMap(callbacks.getState(), roster);
-    if (changed) broadcastToGuests({ type: 'AVATAR_SYNC', avatars: map });
-    else if (forceTarget?.open && Object.keys(map).length > 0) forceTarget.send({ type: 'AVATAR_SYNC', avatars: map });
+  function syncAvatars(forceTarget?: DataConnection, excludeToken?: string): void {
+    const { map, diffs } = avatarSync.refreshHostMap(callbacks.getState(), roster);
+    for (const diff of diffs) {
+      broadcastToGuests({ type: 'AVATAR_PUT', key: diff.key, dataUrl: diff.dataUrl }, excludeToken);
+    }
+    if (forceTarget?.open) {
+      for (const [key, dataUrl] of Object.entries(map)) {
+        forceTarget.send({ type: 'AVATAR_PUT', key, dataUrl } satisfies HostToClientMessage);
+      }
+    }
   }
   function syncSeatProfiles(baseState = callbacks.getState()): { state: GameState; changed: boolean } {
     const next = applyPeerSeatProfiles(baseState, roster);
@@ -78,7 +87,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     if (role !== 'host' || !roster) return;
     roster = resizeRosterSeats(roster, nextState.players.length);
     const { state: synced } = syncSeatProfiles(nextState);
-    seq++; remotePencilSpinning = false;
+    seq++; remotePencilSpinning = false; remotePencilStopFace = null;
     broadcastToGuests({ type: 'STATE_SYNC', seq, roster, state: redactStateForClient(synced), pencilSpinning: false }); syncAvatars();
   }
 
@@ -102,7 +111,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         conn.send({ type: 'WELCOME', seq, roster, state: redactStateForClient(synced) });
         if (seatChanged) broadcastToGuests({ type: 'STATE_SYNC', seq, roster, state: redactStateForClient(synced), pencilSpinning: remotePencilSpinning }, boundToken);
         else broadcastToGuests({ type: 'ROSTER_SYNC', roster }, boundToken);
-        syncAvatars(conn); callbacks.onSessionChange(); return;
+        syncAvatars(conn, boundToken); callbacks.onSessionChange(); return;
       }
       if (boundToken !== raw.clientToken) return;
       if (raw.type === 'UPDATE_PROFILE') {
@@ -123,7 +132,13 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
         if (raw.seq !== seq || curState.phase === 'ESCALATOR_RIDE' || curState.phase === 'ESCALATOR_UNDO') return;
         const nextState = callbacks.onApplyHostAction(raw.action); if (nextState !== curState) syncHostState(nextState);
       } else if (raw.type === 'UI_PENCIL_SPIN') {
-        remotePencilSpinning = raw.spinning; broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning: raw.spinning, activePlayerIndex: curState.activePlayerIndex }, boundToken); callbacks.onSessionChange();
+        remotePencilSpinning = raw.spinning;
+        remotePencilStopFace = raw.spinning ? null : (raw.stopFace ?? null);
+        broadcastToGuests(
+          { type: 'UI_PENCIL_SPIN', spinning: raw.spinning, activePlayerIndex: curState.activePlayerIndex, ...(raw.stopFace !== undefined ? { stopFace: raw.stopFace } : {}) },
+          boundToken
+        );
+        callbacks.onSessionChange();
       }
     });
     const handleDrop = () => {
@@ -199,12 +214,14 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
           if (gen !== generation || !isValidHostMessage(raw)) return;
           if (raw.type === 'WELCOME' || raw.type === 'STATE_SYNC') {
             if (raw.type === 'STATE_SYNC' && raw.seq <= seq) return;
-            seq = raw.seq; roster = raw.roster; remotePencilSpinning = raw.type === 'STATE_SYNC' ? raw.pencilSpinning : false;
+            if (raw.type === 'WELCOME') avatarSync.clear();
+            seq = raw.seq; roster = raw.roster; remotePencilSpinning = raw.type === 'STATE_SYNC' ? raw.pencilSpinning : false; remotePencilStopFace = null;
             if (!settled) { settled = true; clearTimeout(timer); resolve(); }
             callbacks.onReceiveRemoteState(raw.state, raw.seq);
           } else if (raw.type === 'ROSTER_SYNC') { roster = raw.roster; callbacks.onSessionChange(); }
           else if (raw.type === 'AVATAR_SYNC') { avatarSync.setRemoteMap(raw.avatars); callbacks.onSessionChange(); }
-          else if (raw.type === 'UI_PENCIL_SPIN') { remotePencilSpinning = raw.spinning; callbacks.onSessionChange(); }
+          else if (raw.type === 'AVATAR_PUT') { if (avatarSync.applyRemotePut(raw.key, raw.dataUrl)) callbacks.onSessionChange(); }
+          else if (raw.type === 'UI_PENCIL_SPIN') { remotePencilSpinning = raw.spinning; remotePencilStopFace = raw.spinning ? null : (raw.stopFace ?? null); callbacks.onSessionChange(); }
           else if (raw.type === 'ERROR') { if (!settled) fail(raw.message); else callbacks.onError?.(raw.message); }
         });
         conn.on('close', () => { if (gen === generation) fail('Connection to host closed.'); });
@@ -220,7 +237,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
 
   return {
     getRole: () => role, getRoster: () => roster, getClientToken: () => clientToken, getSeq: () => seq, getRoomCode: () => roomCode,
-    getCustomAvatars: () => avatarSync.getMap(), isRemotePencilSpinning: () => remotePencilSpinning,
+    getCustomAvatars: () => avatarSync.getMap(), isRemotePencilSpinning: () => remotePencilSpinning, getRemotePencilStopFace: () => remotePencilStopFace,
     isLocalTurn: (state) => canClientAct(role, roster, clientToken, state.activePlayerIndex), shouldTickEscalator: () => role !== 'guest', hostRoom, joinRoom,
     sendOrApplyAction: (action) => {
       const curState = callbacks.getState();
@@ -231,10 +248,14 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       hostConn.send({ type: 'ACTION_REQUEST', clientToken, seq, action } satisfies ClientToHostMessage); return true;
     },
     broadcastHostState: (nextState) => syncHostState(nextState),
-    notifyPencilSpin: (spinning) => {
+    notifyPencilSpin: (spinning, stopFace) => {
       const cur = callbacks.getState();
-      if (role === 'host') { remotePencilSpinning = spinning; broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning, activePlayerIndex: cur.activePlayerIndex }); }
-      else if (role === 'guest' && hostConn?.open && canClientAct(role, roster, clientToken, cur.activePlayerIndex)) hostConn.send({ type: 'UI_PENCIL_SPIN', clientToken, spinning } satisfies ClientToHostMessage);
+      if (role === 'host') {
+        remotePencilSpinning = spinning; remotePencilStopFace = spinning ? null : (stopFace ?? null);
+        broadcastToGuests({ type: 'UI_PENCIL_SPIN', spinning, activePlayerIndex: cur.activePlayerIndex, ...(stopFace !== undefined ? { stopFace } : {}) });
+      } else if (role === 'guest' && hostConn?.open && canClientAct(role, roster, clientToken, cur.activePlayerIndex)) {
+        hostConn.send({ type: 'UI_PENCIL_SPIN', clientToken, spinning, ...(stopFace !== undefined ? { stopFace } : {}) } satisfies ClientToHostMessage);
+      }
     },
     assignSeat: (seatIndex, ownerToken) => {
       if (role !== 'host' || !roster) return;

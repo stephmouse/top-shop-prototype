@@ -8,31 +8,72 @@ type DispatchFn = (action: GameAction) => void;
 const FACE_COUNT = 9;
 const FACE_ANGLE = 360 / FACE_COUNT; // 40deg
 const PRISM_RADIUS_PX = 27.5; // 20px / (2 * tan(20deg))
+const LANDED_HOLD_MS = 500;
 
 let activeRafId: number | null = null;
+let activeHoldTimerId: number | null = null;
+let activeRemoteController: {
+  isConnected: () => boolean;
+  startSpin: () => void;
+  stopOnFace: (face: PencilFace) => void;
+} | null = null;
 
-function cancelActiveAnimation(): void {
+export function cancelPencilAnimation(): void {
   if (activeRafId !== null) {
     cancelAnimationFrame(activeRafId);
     activeRafId = null;
   }
+  if (activeHoldTimerId !== null) {
+    window.clearTimeout(activeHoldTimerId);
+    activeHoldTimerId = null;
+  }
+  activeRemoteController = null;
+}
+
+export function updateRemotePencil(spinning: boolean, stopFace: PencilFace | null): boolean {
+  if (!activeRemoteController || !activeRemoteController.isConnected()) {
+    activeRemoteController = null;
+    return false;
+  }
+  if (spinning) {
+    activeRemoteController.startSpin();
+    return true;
+  }
+  if (stopFace !== null) {
+    activeRemoteController.stopOnFace(stopFace);
+    return true;
+  }
+  return false;
 }
 
 function getFacesForPlayer(state: GameState): readonly PencilFace[] {
   const active = getActivePlayer(state);
-  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'ones_twos') {
-    return [1, 2, 1, 2, 1, 2, 1, 2, 1];
-  }
-  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'event_only') {
-    return ['E', 'E', 'E', 'E', 'E', 'E', 'E', 'E', 'E'];
-  }
+  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'ones_twos') return [1, 2, 1, 2, 1, 2, 1, 2, 1];
+  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'event_only') return ['E', 'E', 'E', 'E', 'E', 'E', 'E', 'E', 'E'];
   return PENCIL_FACES;
+}
+
+function computeStopTargetAngle(
+  currentAngle: number,
+  targetFace: PencilFace,
+  faces: readonly PencilFace[],
+  coastDeg: number
+): number {
+  const baseSlot = Math.ceil((currentAngle + coastDeg) / FACE_ANGLE);
+  for (let offset = 0; offset < FACE_COUNT; offset++) {
+    const slot = baseSlot + offset;
+    const faceIdx = ((slot % FACE_COUNT) + FACE_COUNT) % FACE_COUNT;
+    if (faces[faceIdx] === targetFace) return slot * FACE_ANGLE;
+  }
+  return baseSlot * FACE_ANGLE;
 }
 
 export interface PencilPanelOptions {
   readOnly?: boolean;
   remoteSpinning?: boolean;
-  onSpinChange?: (spinning: boolean) => void;
+  remoteStopFace?: PencilFace | null;
+  onSpinChange?: (spinning: boolean, stopFace?: PencilFace) => void;
+  onLanded?: (face: PencilFace) => void;
 }
 
 export function renderPencilPanel(
@@ -41,16 +82,16 @@ export function renderPencilPanel(
   dispatch: DispatchFn,
   options: PencilPanelOptions = {}
 ): void {
-  cancelActiveAnimation();
+  cancelPencilAnimation();
 
   const active = getActivePlayer(state);
   const faces = getFacesForPlayer(state);
   const isSlow = active.pencilTurnsLeft > 0 && active.pencilMode === 'slow';
   const speedDegPerSec = isSlow ? 180 : 900;
   const coastDeg = isSlow ? 0 : 120;
-  const decelDurationMs = isSlow ? 80 : 320;
+  let stopDurationMs = isSlow ? 80 : 320;
 
-  let spinPhase: 'idle' | 'spinning' | 'stopping' = 'idle';
+  let spinPhase: 'idle' | 'spinning' | 'stopping' | 'landed' = 'idle';
   let angleDeg = (((state.turnNumber * 3 + state.activePlayerIndex) % FACE_COUNT) * FACE_ANGLE) % 360;
   let lastFrameTs = 0;
   let stopStartTs = 0;
@@ -58,26 +99,13 @@ export function renderPencilPanel(
   let stopToAngle = angleDeg;
   let chosenFace: PencilFace = faces[0]!;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'pencil-panel';
-
-  const stage = document.createElement('div');
-  stage.className = 'pencil-stage';
-
-  const assembly = document.createElement('div');
-  assembly.className = 'pencil-assembly';
-
-  const eraser = document.createElement('div');
-  eraser.className = 'pencil-eraser';
-
-  const ferrule = document.createElement('div');
-  ferrule.className = 'pencil-ferrule';
-
-  const prismWrap = document.createElement('div');
-  prismWrap.className = 'pencil-prism-wrap';
-
-  const prism = document.createElement('div');
-  prism.className = 'pencil-prism';
+  const wrap = Object.assign(document.createElement('div'), { className: 'pencil-panel' });
+  const stage = Object.assign(document.createElement('div'), { className: 'pencil-stage' });
+  const assembly = Object.assign(document.createElement('div'), { className: 'pencil-assembly' });
+  const eraser = Object.assign(document.createElement('div'), { className: 'pencil-eraser' });
+  const ferrule = Object.assign(document.createElement('div'), { className: 'pencil-ferrule' });
+  const prismWrap = Object.assign(document.createElement('div'), { className: 'pencil-prism-wrap' });
+  const prism = Object.assign(document.createElement('div'), { className: 'pencil-prism' });
 
   faces.forEach((face, idx) => {
     const el = document.createElement('div');
@@ -88,41 +116,23 @@ export function renderPencilPanel(
     prism.appendChild(el);
   });
 
-  const targetBar = document.createElement('div');
-  targetBar.className = 'pencil-target-bar';
-
-  const tipWood = document.createElement('div');
-  tipWood.className = 'pencil-tip-wood';
-  const tipLead = document.createElement('div');
-  tipLead.className = 'pencil-tip-lead';
-  tipWood.appendChild(tipLead);
-
-  prismWrap.appendChild(prism);
-  prismWrap.appendChild(targetBar);
-  assembly.appendChild(eraser);
-  assembly.appendChild(ferrule);
-  assembly.appendChild(prismWrap);
-  assembly.appendChild(tipWood);
+  const targetBar = Object.assign(document.createElement('div'), { className: 'pencil-target-bar' });
+  const tipWood = Object.assign(document.createElement('div'), { className: 'pencil-tip-wood' });
+  tipWood.appendChild(Object.assign(document.createElement('div'), { className: 'pencil-tip-lead' }));
+  prismWrap.append(prism, targetBar);
+  assembly.append(eraser, ferrule, prismWrap, tipWood);
   stage.appendChild(assembly);
   wrap.appendChild(stage);
 
-  const controls = document.createElement('div');
-  controls.className = 'action-stack';
-
-  const primaryBtn = document.createElement('button');
-  primaryBtn.className = 'primary';
+  const controls = Object.assign(document.createElement('div'), { className: 'action-stack' });
+  const primaryBtn = Object.assign(document.createElement('button'), { className: 'primary', textContent: 'Spin Pencil (Space)' });
   primaryBtn.dataset.pencilPrimary = 'true';
-  primaryBtn.textContent = 'Spin Pencil (Space)';
-
-  const quickBtn = document.createElement('button');
-  quickBtn.textContent = 'Quick Roll';
+  const quickBtn = Object.assign(document.createElement('button'), { textContent: 'Quick Roll' });
   quickBtn.addEventListener('click', () => {
-    cancelActiveAnimation();
+    cancelPencilAnimation();
     dispatch({ type: 'ROLL_PENCIL' });
   });
-
-  controls.appendChild(primaryBtn);
-  controls.appendChild(quickBtn);
+  controls.append(primaryBtn, quickBtn);
 
   if (active.pencilTurnsLeft > 0 && active.pencilMode !== 'normal') {
     const modeNote = document.createElement('span');
@@ -134,20 +144,30 @@ export function renderPencilPanel(
           : `Curse: E only (${active.pencilTurnsLeft}T)`;
     controls.appendChild(modeNote);
   }
-
   wrap.appendChild(controls);
   container.appendChild(wrap);
 
-  const applyAngle = (deg: number) => {
-    prism.style.transform = `rotateX(${-deg}deg)`;
-  };
+  const applyAngle = (deg: number) => { prism.style.transform = `rotateX(${-deg}deg)`; };
   applyAngle(angleDeg);
 
-  const tick = (ts: number) => {
-    if (!stage.isConnected) {
-      cancelActiveAnimation();
-      return;
+  const finishLanding = () => {
+    if (activeRafId !== null) { cancelAnimationFrame(activeRafId); activeRafId = null; }
+    spinPhase = 'landed';
+    stage.classList.remove('is-spinning');
+    stage.classList.add('is-landed');
+    if (chosenFace === 'E') stage.classList.add('is-event-landed');
+    primaryBtn.textContent = chosenFace === 'E' ? 'Rolled E (Event)!' : `Rolled ${chosenFace}!`;
+    options.onLanded?.(chosenFace);
+    if (!options.readOnly) {
+      activeHoldTimerId = window.setTimeout(() => {
+        activeHoldTimerId = null;
+        dispatch({ type: 'ROLL_PENCIL', chosenFace });
+      }, LANDED_HOLD_MS);
     }
+  };
+
+  const tick = (ts: number) => {
+    if (!stage.isConnected) { cancelPencilAnimation(); return; }
     if (lastFrameTs === 0) lastFrameTs = ts;
     const dtSec = Math.min(0.05, (ts - lastFrameTs) / 1000);
     lastFrameTs = ts;
@@ -160,33 +180,45 @@ export function renderPencilPanel(
     }
 
     if (spinPhase === 'stopping') {
-      const elapsed = ts - stopStartTs;
-      const t = Math.min(1, elapsed / decelDurationMs);
-      const eased = 1 - Math.pow(1 - t, 3);
-      angleDeg = stopFromAngle + (stopToAngle - stopFromAngle) * eased;
+      const t = Math.min(1, (ts - stopStartTs) / stopDurationMs);
+      angleDeg = stopFromAngle + (stopToAngle - stopFromAngle) * (1 - Math.pow(1 - t, 3));
       applyAngle(angleDeg);
-
-      if (t >= 1) {
-        cancelActiveAnimation();
-        dispatch({ type: 'ROLL_PENCIL', chosenFace });
-        return;
-      }
+      if (t >= 1) { finishLanding(); return; }
       activeRafId = requestAnimationFrame(tick);
     }
+  };
+
+  const startRemoteSpin = () => {
+    if (spinPhase === 'spinning') return;
+    spinPhase = 'spinning';
+    lastFrameTs = 0;
+    stage.classList.remove('is-landed', 'is-event-landed');
+    stage.classList.add('is-spinning');
+    primaryBtn.textContent = 'Spinning...';
+    if (activeRafId === null) activeRafId = requestAnimationFrame(tick);
+  };
+
+  const startRemoteStop = (face: PencilFace) => {
+    if (spinPhase === 'landed' && chosenFace === face) return;
+    spinPhase = 'stopping';
+    chosenFace = face;
+    stopStartTs = performance.now();
+    stopFromAngle = angleDeg;
+    stopToAngle = computeStopTargetAngle(angleDeg, face, faces, coastDeg);
+    const delta = Math.max(0, stopToAngle - stopFromAngle);
+    stopDurationMs = isSlow ? Math.max(80, Math.min(220, delta * 0.7)) : Math.max(240, Math.min(360, 210 + delta * 0.32));
+    stage.classList.remove('is-spinning', 'is-landed', 'is-event-landed');
+    primaryBtn.textContent = 'Stopping...';
+    if (activeRafId === null) activeRafId = requestAnimationFrame(tick);
   };
 
   if (options.readOnly) {
     primaryBtn.disabled = true;
     quickBtn.disabled = true;
-    if (options.remoteSpinning) {
-      spinPhase = 'spinning';
-      lastFrameTs = 0;
-      stage.classList.add('is-spinning');
-      primaryBtn.textContent = 'Spinning...';
-      activeRafId = requestAnimationFrame(tick);
-    } else {
-      primaryBtn.textContent = 'Waiting for Roll...';
-    }
+    activeRemoteController = { isConnected: () => stage.isConnected, startSpin: startRemoteSpin, stopOnFace: startRemoteStop };
+    if (options.remoteSpinning) startRemoteSpin();
+    else if (options.remoteStopFace !== undefined && options.remoteStopFace !== null) startRemoteStop(options.remoteStopFace);
+    else primaryBtn.textContent = 'Waiting for Roll...';
     return;
   }
 
@@ -201,6 +233,7 @@ export function renderPencilPanel(
       activeRafId = requestAnimationFrame(tick);
     } else if (spinPhase === 'spinning') {
       spinPhase = 'stopping';
+      stopDurationMs = isSlow ? 80 : 320;
       stopStartTs = performance.now();
       stopFromAngle = angleDeg;
       const snappedSlot = Math.round((angleDeg + coastDeg) / FACE_ANGLE);
@@ -210,6 +243,7 @@ export function renderPencilPanel(
       stage.classList.remove('is-spinning');
       primaryBtn.disabled = true;
       primaryBtn.textContent = 'Stopping...';
+      options.onSpinChange?.(false, chosenFace);
     }
   });
 }

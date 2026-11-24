@@ -5,7 +5,7 @@ import type { GameAction } from './engine/actions';
 import { getActivePlayer } from './engine/helpers';
 import { computeMovePreview } from './engine/movePreview';
 import { applyAction, createInitialGameState } from './engine/state';
-import type { GameState } from './engine/types';
+import type { GameState, PencilFace } from './engine/types';
 import { HOST_TOKEN } from './net/protocol';
 import type { ConnectedPeerInfo } from './net/protocol';
 import { createMultiplayerSession } from './net/session';
@@ -21,6 +21,7 @@ import { bindKeyboardControls } from './ui/keyboard';
 import { createLobbyModal } from './ui/lobbyModal';
 import { renderMatchLog } from './ui/matchLogView';
 import { createMovementDriver } from './ui/movementDriver';
+import { updateRemotePencil } from './ui/pencilView';
 import {
   clearAutoSavedMatch, extractSetupFromState, loadAutoSavedMatch, loadManualMatchSlot,
   loadStoredSetup, sanitizeMatchSetup, saveAutoSavedMatch, saveManualMatchSlot, saveStoredSetup,
@@ -42,6 +43,7 @@ if (!root) throw new Error('Missing #app root element');
 let autoStepEnabled = false, showRoutes = true, suppressSyncRender = false;
 let hoveredEndTileId: string | null = null, hoveredPickShopId: string | null = null;
 let lastRenderedCanAct: boolean | null = null, lastRenderedRemoteSpin = false;
+let lastRenderedRemoteStop: PencilFace | null = null;
 let prevRenderedState: GameState | null = null;
 
 const autoSaved = loadAutoSavedMatch();
@@ -227,12 +229,18 @@ function syncHeaderAndHud(): void {
   renderPlayersHud(hudEl, state, { role: netSession.getRole(), roster: netSession.getRoster(), myClientToken: netSession.getClientToken(), customAvatars: netSession.getCustomAvatars() });
 }
 const refreshPickUi = () => { const canAct = netSession.isLocalTurn(state); paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct); };
-function renderActionBox(canAct: boolean, remoteSpin = netSession.isRemotePencilSpinning()): void {
-  lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin;
+function renderActionBox(
+  canAct: boolean,
+  remoteSpin = netSession.isRemotePencilSpinning(),
+  remoteStop = netSession.getRemotePencilStopFace()
+): void {
+  lastRenderedCanAct = canAct; lastRenderedRemoteSpin = remoteSpin; lastRenderedRemoteStop = remoteStop;
   renderActionPanel(actionBox, state, dispatch, {
     onOpenSetup: netSession.getRole() === 'guest' ? undefined : openSetup,
-    readOnly: !canAct, remotePencilSpinning: remoteSpin,
-    onPencilSpinChange: (spinning) => netSession.notifyPencilSpin(spinning), onUiChange: refreshPickUi,
+    readOnly: !canAct, remotePencilSpinning: remoteSpin, remotePencilStopFace: remoteStop,
+    onPencilSpinChange: (spinning, stopFace) => netSession.notifyPencilSpin(spinning, stopFace),
+    onPencilLanded: (face) => soundFx.playPencilStop(face === 'E'),
+    onUiChange: refreshPickUi,
     onHoverShop: (shopId) => { if (hoveredPickShopId !== shopId) { hoveredPickShopId = shopId; paintBoard(); } },
   });
 }
@@ -247,10 +255,15 @@ function paintBoard(preview = computeMovePreview(state), canAct = netSession.isL
 function renderSessionUi(): void {
   lobbyModal.refresh(); setupModal.refresh(); homeModal.refresh();
   syncHeaderAndHud(); renderTokensOverlay(tokensLayerEl, boardEl, state, netSession.getRoster(), netSession.getCustomAvatars());
-  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning();
+  const canAct = netSession.isLocalTurn(state), remoteSpin = netSession.isRemotePencilSpinning(), remoteStop = netSession.getRemotePencilStopFace();
   turnCue.sync(state, canAct);
-  if (canAct !== lastRenderedCanAct || (!canAct && remoteSpin !== lastRenderedRemoteSpin) || state.phase === 'GAME_OVER') {
-    paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin); moveDriver.scheduleTick();
+  const remotePencilChanged = !canAct && (remoteSpin !== lastRenderedRemoteSpin || remoteStop !== lastRenderedRemoteStop);
+  if (canAct === lastRenderedCanAct && state.phase === 'ROLL_PENCIL' && remotePencilChanged && updateRemotePencil(remoteSpin, remoteStop)) {
+    lastRenderedRemoteSpin = remoteSpin; lastRenderedRemoteStop = remoteStop;
+    return;
+  }
+  if (canAct !== lastRenderedCanAct || remotePencilChanged || state.phase === 'GAME_OVER') {
+    paintBoard(computeMovePreview(state), canAct); renderActionBox(canAct, remoteSpin, remoteStop); moveDriver.scheduleTick();
   }
 }
 function render(): void {

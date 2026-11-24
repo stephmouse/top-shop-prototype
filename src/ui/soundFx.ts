@@ -9,7 +9,7 @@ export interface SoundFxController {
   toggleMuted: () => boolean;
   playVisualEvents: (events: VisualEvent[]) => void;
   playCardFlip: () => void;
-  playPencilStop: () => void;
+  playPencilStop: (isEvent?: boolean, fromStateDiff?: boolean) => void;
   playYourTurn: () => void;
   playCashbackFanfare: () => void;
   playMonthFlip: () => void;
@@ -30,6 +30,7 @@ export function createSoundFx(): SoundFxController {
   let muted = readInitialMute();
   let ctx: AudioContext | null = null;
   let chirpAlt = false;
+  let lastPencilStopAt = 0;
 
   function ensureContext(): AudioContext | null {
     if (muted || typeof window === 'undefined') return null;
@@ -152,7 +153,18 @@ export function createSoundFx(): SoundFxController {
     toggleMuted: () => { setMuted(!muted); return muted; },
     playVisualEvents,
     playCardFlip: () => tone(520, 0.065, 'triangle', 0, 780, 0.05),
-    playPencilStop: () => tone(330, 0.055, 'triangle', 0, 520, 0.05),
+    playPencilStop: (isEvent = false, fromStateDiff = false) => {
+      const nowMs = Date.now();
+      if (fromStateDiff && nowMs - lastPencilStopAt < 1100) return;
+      lastPencilStopAt = nowMs;
+      if (isEvent) {
+        tone(440, 0.08, 'triangle', 0, 587, 0.052);
+        tone(880, 0.16, 'sine', 0.065, 1046, 0.052);
+      } else {
+        tone(260, 0.04, 'triangle', 0, 180, 0.048);
+        tone(523, 0.09, 'sine', 0.03, 659, 0.05);
+      }
+    },
     playYourTurn: () => {
       tone(659, 0.14, 'sine', 0, 659, 0.055);
       tone(988, 0.22, 'triangle', 0.095, 988, 0.055);

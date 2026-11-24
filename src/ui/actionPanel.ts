@@ -1,10 +1,10 @@
 import type { GameAction } from '../engine/actions';
 import { formatCalendarDate } from '../engine/eventDraw';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
-import type { GameState } from '../engine/types';
+import type { GameState, PencilFace } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
 import { renderEventPickPanel, renderEventStorePanel } from './eventPanel';
-import { renderPencilPanel } from './pencilView';
+import { cancelPencilAnimation, renderPencilPanel } from './pencilView';
 import {
   renderBuyRivalPanel,
   renderBuySlotPanel,
@@ -45,7 +45,9 @@ export interface ActionPanelViewOptions {
   onOpenSetup?: () => void;
   readOnly?: boolean;
   remotePencilSpinning?: boolean;
-  onPencilSpinChange?: (spinning: boolean) => void;
+  remotePencilStopFace?: PencilFace | null;
+  onPencilSpinChange?: (spinning: boolean, stopFace?: PencilFace) => void;
+  onPencilLanded?: (face: PencilFace) => void;
   onUiChange?: () => void;
   onHoverShop?: (shopId: string | null) => void;
 }
@@ -105,10 +107,13 @@ function renderActionPanelBody(
     renderPencilPanel(stack, state, dispatch, {
       readOnly: viewOptions.readOnly,
       remoteSpinning: viewOptions.remotePencilSpinning,
+      remoteStopFace: viewOptions.remotePencilStopFace,
       onSpinChange: viewOptions.onPencilSpinChange,
+      onLanded: viewOptions.onPencilLanded,
     });
     return;
   }
+  cancelPencilAnimation();
 
   if (state.phase === 'CHOOSE_DIRECTION') {
     const dirs = getAvailableDirections(state, active);

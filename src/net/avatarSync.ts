@@ -1,6 +1,7 @@
 import { isValidCustomImageDataUrl } from '../config/avatarTypes';
+import { MAX_PLAYERS } from '../config/balance';
 import type { GameState } from '../engine/types';
-import { HEX_COLOR_RE, HOST_TOKEN } from './protocol';
+import { HEX_COLOR_RE, HOST_TOKEN, MAX_ROOM_PEERS } from './protocol';
 import type { RoomRoster } from './protocol';
 
 export const PEER_ICE_CONFIG: RTCConfiguration = {
@@ -32,13 +33,28 @@ export function applyPeerSeatProfiles(state: GameState, roster: RoomRoster | nul
   return changed ? { ...state, players } : state;
 }
 
+export interface AvatarPutEntry {
+  key: string;
+  dataUrl: string | null;
+}
+
 export interface AvatarSyncStore {
   clear: () => void;
   getMap: () => Record<string, string>;
   setPeerImage: (clientToken: string, customImage?: string) => void;
   removePeerImage: (clientToken: string) => void;
-  refreshHostMap: (state: GameState, roster: RoomRoster | null) => { map: Record<string, string>; changed: boolean };
+  refreshHostMap: (
+    state: GameState,
+    roster: RoomRoster | null
+  ) => { map: Record<string, string>; diffs: AvatarPutEntry[]; changed: boolean };
   setRemoteMap: (avatars: Record<string, string>) => void;
+  applyRemotePut: (key: string, dataUrl: string | null) => boolean;
+}
+
+const MAX_AVATAR_KEYS = MAX_ROOM_PEERS + MAX_PLAYERS;
+
+function isSafeAvatarKey(key: string): boolean {
+  return key.length > 0 && key.length <= 64 && key !== '__proto__' && key !== 'constructor' && key !== 'prototype';
 }
 
 export function createAvatarSyncStore(): AvatarSyncStore {
@@ -70,18 +86,36 @@ export function createAvatarSyncStore(): AvatarSyncStore {
           if (isValidCustomImageDataUrl(img)) next[peer.clientToken] = img;
         }
       }
-      const nextKeys = Object.keys(next);
-      const prevKeys = Object.keys(currentMap);
-      const changed = nextKeys.length !== prevKeys.length || nextKeys.some((k) => currentMap[k] !== next[k]);
+      const diffs: AvatarPutEntry[] = [];
+      for (const [key, dataUrl] of Object.entries(next)) {
+        if (currentMap[key] !== dataUrl) diffs.push({ key, dataUrl });
+      }
+      for (const key of Object.keys(currentMap)) {
+        if (!(key in next)) diffs.push({ key, dataUrl: null });
+      }
       currentMap = next;
-      return { map: currentMap, changed };
+      return { map: currentMap, diffs, changed: diffs.length > 0 };
     },
     setRemoteMap: (avatars) => {
       const clean: Record<string, string> = {};
       for (const [key, val] of Object.entries(avatars)) {
-        if (isValidCustomImageDataUrl(val)) clean[key] = val;
+        if (isSafeAvatarKey(key) && isValidCustomImageDataUrl(val)) clean[key] = val;
       }
       currentMap = clean;
+    },
+    applyRemotePut: (key, dataUrl) => {
+      if (!isSafeAvatarKey(key)) return false;
+      if (dataUrl === null) {
+        if (!(key in currentMap)) return false;
+        const next = { ...currentMap };
+        delete next[key];
+        currentMap = next;
+        return true;
+      }
+      if (!isValidCustomImageDataUrl(dataUrl) || currentMap[key] === dataUrl) return false;
+      if (!(key in currentMap) && Object.keys(currentMap).length >= MAX_AVATAR_KEYS) return false;
+      currentMap = { ...currentMap, [key]: dataUrl };
+      return true;
     },
   };
 }
