@@ -11,7 +11,7 @@
   - `src/config/`: All tunable numbers, store/item catalogs, event cards, bank rewards, and map layouts.
   - `src/engine/`: Pure, deterministic, action-driven state machine (`applyAction(state, action)`). **Zero DOM/browser references** so it can later run in a WebRTC host or server.
   - `src/ui/` & `src/main.ts`: DOM/CSS Grid/SVG rendering and input handling only.
-- **File Size & Readability:** Split modules cleanly by responsibility (aiming for ~250 lines per file), never by cramming multiple statements onto one line.
+- **File Size & Readability:** Split files that mix multiple responsibilities cleanly by concern (aiming for ~250 lines where natural, without artificially fragmenting cohesive single-responsibility modules), and never cram multiple statements onto one line.
 - **Client Tokens Are Secrets:** Guest `clientToken` values are bearer credentials shared only between the owning client and the host. Never broadcast `clientToken`s or PeerJS `peerId`s in `RoomRoster`, logs, or UI state—always use host-assigned opaque public IDs (`guest_N`).
 - **Placeholder Visuals:** Use CSS Grid, color-coding, and SVG overlays rather than external art assets or heavy frameworks.
 

@@ -340,16 +340,17 @@ describe('hostRouter security and session flows', () => {
     expect(h.router.getRoster().seatOwners[1]).toBe(HOST_TOKEN);
     expect(h.router.getCustomAvatars().guest_1).toBeUndefined();
 
-    // Token mapping was cleared on kick, so rejoining gets a fresh public ID
+    // Banned token cannot rejoin immediately after being kicked
     const rejoin = h.openMockConn();
     h.router.handleClientMessage(
       { type: 'HELLO', clientToken: tokenA, name: 'Alice', color: '#3498db' },
       rejoin.sender
     );
-    const rejoinWelcome = rejoin.sent.find((m) => m.type === 'WELCOME');
-    expect(rejoinWelcome?.type === 'WELCOME' ? rejoinWelcome.myPeerId : null).toBe('guest_2');
+    expect(rejoin.closed).toBe(true);
+    expect(rejoin.sent).toEqual([{ type: 'ERROR', message: 'You were removed by the host.' }]);
+    expect(h.router.getRoster().peers).toHaveLength(0);
 
-    for (let i = 1; i < MAX_ROOM_PEERS; i++) {
+    for (let i = 0; i < MAX_ROOM_PEERS; i++) {
       const c = h.openMockConn();
       h.router.handleClientMessage(
         { type: 'HELLO', clientToken: `room_member_token_${i}`, name: `P${i}`, color: '#3498db' },
@@ -365,5 +366,47 @@ describe('hostRouter security and session flows', () => {
     );
     expect(overflow.closed).toBe(true);
     expect(overflow.sent).toEqual([{ type: 'ERROR', message: 'Room is full.' }]);
+  });
+
+  it('evicts disconnected ghost peers when room is at MAX_ROOM_PEERS (preferring spectators first)', () => {
+    const h = createHarness();
+    for (let i = 0; i < MAX_ROOM_PEERS; i++) {
+      const c = h.openMockConn();
+      h.router.handleClientMessage(
+        { type: 'HELLO', clientToken: `member_token_00${i}`, name: `P${i}`, color: '#3498db' },
+        c.sender
+      );
+      expect(c.closed).toBe(false);
+    }
+
+    // guest_1 claimed seat 1; guest_2..guest_8 are spectators. Disconnect both guest_1 and guest_2.
+    h.router.handlePeerDisconnect('guest_1');
+    h.router.handlePeerDisconnect('guest_2');
+
+    // New joiner must succeed by evicting disconnected spectator guest_2 first, preserving seated guest_1.
+    const newcomer = h.openMockConn();
+    h.router.handleClientMessage(
+      { type: 'HELLO', clientToken: 'fresh_token_009', name: 'Newcomer', color: '#2ecc71' },
+      newcomer.sender
+    );
+    expect(newcomer.closed).toBe(false);
+    expect(newcomer.sent.find((m) => m.type === 'WELCOME')).toBeDefined();
+    expect(h.router.getRoster().peers).toHaveLength(MAX_ROOM_PEERS);
+    expect(h.router.getRoster().peers.some((p) => p.id === 'guest_2')).toBe(false);
+    expect(h.router.getRoster().peers.some((p) => p.id === 'guest_1')).toBe(true);
+    expect(h.router.getRoster().seatOwners[1]).toBe('guest_1');
+
+    // Disconnect every connected peer (0 online); another fresh joiner must still succeed.
+    for (const peer of h.router.getRoster().peers) {
+      if (peer.connected) h.router.handlePeerDisconnect(peer.id);
+    }
+    const afterAllLeft = h.openMockConn();
+    h.router.handleClientMessage(
+      { type: 'HELLO', clientToken: 'fresh_token_010', name: 'LateJoin', color: '#9b59b6' },
+      afterAllLeft.sender
+    );
+    expect(afterAllLeft.closed).toBe(false);
+    expect(afterAllLeft.sent.find((m) => m.type === 'WELCOME')).toBeDefined();
+    expect(h.router.getRoster().peers).toHaveLength(MAX_ROOM_PEERS);
   });
 });

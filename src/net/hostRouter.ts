@@ -58,8 +58,28 @@ export function createHostRouter(
   let remotePencilSpinning = false;
   let remotePencilStopFace: PencilFace | null = null;
   const tokenToPublicId = new Map<string, string>();
+  const bannedTokens = new Set<string>();
   const avatarSync = createAvatarSyncStore();
   avatarSync.refreshHostMap(initialState, roster);
+
+  function deleteTokenMappingsForPeer(publicId: string, ban: boolean): void {
+    for (const [token, mappedId] of tokenToPublicId.entries()) {
+      if (mappedId !== publicId) continue;
+      tokenToPublicId.delete(token);
+      if (ban) bannedTokens.add(token);
+    }
+  }
+
+  function evictDisconnectedPeer(): boolean {
+    const victim =
+      roster.peers.find((p) => !p.connected && !roster.seatOwners.includes(p.id)) ??
+      roster.peers.find((p) => !p.connected);
+    if (!victim) return false;
+    avatarSync.removePeerImage(victim.id);
+    deleteTokenMappingsForPeer(victim.id, false);
+    roster = removePeerFromRoster(roster, victim.id);
+    return true;
+  }
 
   function sendTargetSync(sender: HostPeerSender, curState = callbacks.getState()): void {
     sender.send({
@@ -123,11 +143,16 @@ export function createHostRouter(
   }
 
   function handleHello(msg: Extract<ClientToHostMessage, { type: 'HELLO' }>, sender: HostPeerSender): void {
+    if (bannedTokens.has(msg.clientToken)) {
+      sender.send({ type: 'ERROR', message: 'You were removed by the host.' });
+      sender.close();
+      return;
+    }
     let publicId = tokenToPublicId.get(msg.clientToken);
     if (sender.boundPublicId !== null && sender.boundPublicId !== publicId) return;
 
     if (!publicId) {
-      if (roster.peers.length >= MAX_ROOM_PEERS) {
+      if (roster.peers.length >= MAX_ROOM_PEERS && !evictDisconnectedPeer()) {
         sender.send({ type: 'ERROR', message: 'Room is full.' });
         sender.close();
         return;
@@ -319,9 +344,7 @@ export function createHostRouter(
       callbacks.sendToPeer(publicId, { type: 'ERROR', message: 'You were removed by the host.' });
       callbacks.closePeer(publicId);
       avatarSync.removePeerImage(publicId);
-      for (const [token, mappedId] of tokenToPublicId.entries()) {
-        if (mappedId === publicId) tokenToPublicId.delete(token);
-      }
+      deleteTokenMappingsForPeer(publicId, true);
       roster = removePeerFromRoster(roster, publicId);
       callbacks.broadcast({ type: 'ROSTER_SYNC', roster });
       syncAvatars();

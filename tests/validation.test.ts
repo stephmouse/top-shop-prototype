@@ -172,6 +172,82 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     expect(parseManualMatchEnvelope({ ...manual, schemaVersion: 2 })).toBeNull();
   });
 
+  it('guards GameState, Player, and Shop schema keys against SAVE_SCHEMA_VERSION', () => {
+    const schemaHint = 'GameState/Player/Shop keys changed — update src/ui/stateValidation.ts and bump SAVE_SCHEMA_VERSION.';
+    expect(SAVE_SCHEMA_VERSION).toBe(1);
+
+    const state = createInitialGameState([{ name: 'A' }, { name: 'B' }], {}, 1, 'stage_0');
+    expect(Object.keys(state).sort(), schemaHint).toEqual([
+      'activePlayerIndex',
+      'config',
+      'deliverMode',
+      'deliverPreferredShopId',
+      'deliveredShopIdsThisTurn',
+      'elevatorLock',
+      'eventChoices',
+      'eventStorePrompt',
+      'globalSale',
+      'hadBranchChoiceThisTurn',
+      'lastPurchaseReceipt',
+      'lastRoll',
+      'log',
+      'mapId',
+      'month',
+      'moveHistory',
+      'pendingBankRefundPts',
+      'pendingPostBankPhase',
+      'pendingUndoSnapshot',
+      'phase',
+      'players',
+      'remainingSteps',
+      'revealedEventSlot',
+      'rivalItemsBoughtThisTurn',
+      'roundStartPlayerIndex',
+      'seed',
+      'segmentPools',
+      'shops',
+      'tiles',
+      'totalMonths',
+      'turnNumber',
+      'winnerId',
+      'year',
+    ]);
+    expect(Object.keys(state.players[0]!).sort(), schemaHint).toEqual([
+      'bankVisits',
+      'blockDeliveryTurns',
+      'blockNewStoreTurns',
+      'cash',
+      'chirpSandals',
+      'color',
+      'doubleNextPayday',
+      'doublePriceTurns',
+      'horizontalDir',
+      'id',
+      'isBankrupt',
+      'isBot',
+      'name',
+      'pencilMode',
+      'pencilTurnsLeft',
+      'points',
+      'reverseDirNextTurn',
+      'skipNextPayday',
+      'stepsSincePayday',
+      'tileId',
+      'unlockDirNextTurn',
+      'verticalDir',
+    ]);
+    expect(Object.keys(Object.values(state.shops)[0]!).sort(), schemaHint).toEqual([
+      'id',
+      'isClosedTurns',
+      'level',
+      'ownerId',
+      'segmentId',
+      'stock',
+      'storeTypeId',
+      'tileId',
+    ]);
+  });
+
   it('keeps src/engine completely free of browser and DOM references', () => {
     const entries = Object.entries(ENGINE_SOURCES);
     expect(entries.length).toBeGreaterThan(0);
