@@ -58,15 +58,12 @@ export function createHostRouter(
   let remotePencilSpinning = false;
   let remotePencilStopFace: PencilFace | null = null;
   const tokenToPublicId = new Map<string, string>();
-  const bannedTokens = new Set<string>();
   const avatarSync = createAvatarSyncStore();
   avatarSync.refreshHostMap(initialState, roster);
 
-  function deleteTokenMappingsForPeer(publicId: string, ban: boolean): void {
+  function deleteTokenMappingsForPeer(publicId: string): void {
     for (const [token, mappedId] of tokenToPublicId.entries()) {
-      if (mappedId !== publicId) continue;
-      tokenToPublicId.delete(token);
-      if (ban) bannedTokens.add(token);
+      if (mappedId === publicId) tokenToPublicId.delete(token);
     }
   }
 
@@ -76,7 +73,7 @@ export function createHostRouter(
       roster.peers.find((p) => !p.connected);
     if (!victim) return false;
     avatarSync.removePeerImage(victim.id);
-    deleteTokenMappingsForPeer(victim.id, false);
+    deleteTokenMappingsForPeer(victim.id);
     roster = removePeerFromRoster(roster, victim.id);
     return true;
   }
@@ -143,11 +140,6 @@ export function createHostRouter(
   }
 
   function handleHello(msg: Extract<ClientToHostMessage, { type: 'HELLO' }>, sender: HostPeerSender): void {
-    if (bannedTokens.has(msg.clientToken)) {
-      sender.send({ type: 'ERROR', message: 'You were removed by the host.' });
-      sender.close();
-      return;
-    }
     let publicId = tokenToPublicId.get(msg.clientToken);
     if (sender.boundPublicId !== null && sender.boundPublicId !== publicId) return;
 
@@ -344,7 +336,7 @@ export function createHostRouter(
       callbacks.sendToPeer(publicId, { type: 'ERROR', message: 'You were removed by the host.' });
       callbacks.closePeer(publicId);
       avatarSync.removePeerImage(publicId);
-      deleteTokenMappingsForPeer(publicId, true);
+      deleteTokenMappingsForPeer(publicId);
       roster = removePeerFromRoster(roster, publicId);
       callbacks.broadcast({ type: 'ROSTER_SYNC', roster });
       syncAvatars();

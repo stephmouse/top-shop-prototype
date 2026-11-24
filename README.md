@@ -45,7 +45,7 @@ On the **Start Hub**, customize your standee, name, and shoes, then choose:
 > **Online Multiplayer Note:** Anyone is welcome to jump in and host a match anytime—online rooms simply connect via private Room Codes / invite links with friends rather than a public server browser or random matchmaking.
 
 ### Multiplayer Trust & Privacy Model
-- **Private Friend Lobbies:** Rooms are host-authoritative (`applyAction` runs on the host; RNG seed and unrevealed event cards are redacted from guest syncs; guest `clientToken`s are kept private on the host while rosters use opaque `guest_N` IDs).
+- **Private Friend Lobbies:** Rooms are host-authoritative (`applyAction` runs on the host; RNG seed and unrevealed event cards are redacted from guest syncs; guest `clientToken`s are kept private on the host while rosters use opaque `guest_N` IDs). Kicking a guest drops their connection and returns their seats to the host without a permanent ban—to exclude someone, close the room and open a new Room Code.
 - **Skill-Stop Trust Trade-off:** Guests submit their skill-stopped Pencil Die face (`chosenFace`) for snappy 3D spin stops, so lobbies are designed for trusted friends rather than cheat-resistant public matchmaking.
 - **Direct P2P IP Visibility:** Online play currently uses STUN-only WebRTC (`PeerJS`), meaning the host and connected guests exchange direct IP addresses during ICE negotiation. Full IP hiding and strict-NAT traversal require a TURN relay (`iceTransportPolicy: 'relay'`), planned in [ROADMAP.md](ROADMAP.md).
 

@@ -42,18 +42,16 @@
 
 ## Future Networking Milestone — TURN Relay, NAT Traversal & IP Privacy (Phase 3B)
 
-Deferred while friend playtesting is active on private lobbies; required before sharing rooms publicly:
+Deferred while friend playtesting goes smoothly on direct connections; useful when friends play over mobile or restricted Wi-Fi:
 
-### Why STUN-Only Blocks Public Hosting
+### Why STUN-Only Can Drop Friend Connections
 1. **CGNAT & Strict NAT Failures:** Players on 4G/5G carrier-grade NAT (CGNAT), symmetric NATs, or restricted campus/corporate Wi-Fi often cannot establish direct STUN-only P2P connections and hit the 15-second join timeout.
-2. **Host & Guest IP Address Exposure:** Even with `clientToken` and PeerJS `peerId` removed from broadcast `RoomRoster` payloads, direct WebRTC ICE negotiation (`host` and `srflx` candidates) still exposes real IP addresses between the host and each connected guest at the browser `RTCPeerConnection` layer.
+2. **Host & Guest IP Address Exposure:** Even with `clientToken` and PeerJS `peerId` removed from broadcast `RoomRoster` payloads, direct WebRTC ICE negotiation (`host` and `srflx` candidates) exchanges real IP addresses between the host and each connected guest at the browser `RTCPeerConnection` layer.
 
 ### Planned Architecture (Safe for Static GitHub Pages)
 1. **Ephemeral TURN Credential Worker:** Never embed static TURN credentials in the public client bundle. Deploy a lightweight serverless endpoint (e.g., a Cloudflare Worker calling Cloudflare Calls TURN API, or Metered.ca short-lived credentials) with origin checks and rate limiting that returns short-lived `iceServers` entries.
 2. **Runtime ICE Config Loader (`src/net/iceConfig.ts` / `src/net/avatarSync.ts`):** Fetch short-lived `iceServers` from a configurable `VITE_TURN_CREDENTIAL_URL` when hosting or joining, falling back cleanly to STUN-only when unset for local development and private playtesting.
-3. **Optional IP-Privacy Relay Mode (`iceTransportPolicy: 'relay'`):** When TURN credentials are active, pass `iceTransportPolicy: 'relay'` into PeerJS's `RTCPeerConnection` config (as an opt-in Lobby toggle or default for public rooms) so browsers emit only `relay` ICE candidates and never expose raw host or guest IP addresses to each other.
-4. **Public-Lobby Anti-Cheat Follow-Up (Optional):** If opening rooms beyond trusted friends, replace client-trusted `chosenFace` in `ROLL_PENCIL` with host-derived stop timing (or host-rolled faces) and update the `README.md` trust model accordingly.
-5. **Per-Connection Rate & Broadcast Limits (`src/net/hostRouter.ts`):** Add a per-peer cooldown on `UPDATE_PROFILE` (to prevent repeated ~12–16 KB `AVATAR_PUT` and roster rebroadcast amplification) plus basic per-connection message burst caps before opening rooms to untrusted players.
+3. **Optional IP-Privacy Relay Mode (`iceTransportPolicy: 'relay'`):** When TURN credentials are active, support passing `iceTransportPolicy: 'relay'` into PeerJS's `RTCPeerConnection` config (as an opt-in Lobby toggle) so browsers emit only `relay` ICE candidates and never expose raw host or guest IP addresses to each other.
 
 ## Future / Optional (Maybe Later)
 - **Tier 3 — Hybrid 2D Animated Mall Cross-Section (PixiJS + HTML/CSS UI):** Replace the CSS Grid board with a 2D WebGL canvas (`PixiJS`) featuring animated scrolling escalator treads, moving elevator cars between floors, walking customers/cashiers inside open stores, character reaction portraits on Events/Bank visits, illustrated icons across all 264 items, and smooth camera zoom/pan for larger stages (`16×4`, `11×5`), while keeping menus/modals in HTML/CSS.

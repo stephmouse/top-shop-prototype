@@ -340,17 +340,16 @@ describe('hostRouter security and session flows', () => {
     expect(h.router.getRoster().seatOwners[1]).toBe(HOST_TOKEN);
     expect(h.router.getCustomAvatars().guest_1).toBeUndefined();
 
-    // Banned token cannot rejoin immediately after being kicked
+    // Token mapping was cleared on kick, so a friend who glitched out can still rejoin cleanly
     const rejoin = h.openMockConn();
     h.router.handleClientMessage(
       { type: 'HELLO', clientToken: tokenA, name: 'Alice', color: '#3498db' },
       rejoin.sender
     );
-    expect(rejoin.closed).toBe(true);
-    expect(rejoin.sent).toEqual([{ type: 'ERROR', message: 'You were removed by the host.' }]);
-    expect(h.router.getRoster().peers).toHaveLength(0);
+    const rejoinWelcome = rejoin.sent.find((m) => m.type === 'WELCOME');
+    expect(rejoinWelcome?.type === 'WELCOME' ? rejoinWelcome.myPeerId : null).toBe('guest_2');
 
-    for (let i = 0; i < MAX_ROOM_PEERS; i++) {
+    for (let i = 1; i < MAX_ROOM_PEERS; i++) {
       const c = h.openMockConn();
       h.router.handleClientMessage(
         { type: 'HELLO', clientToken: `room_member_token_${i}`, name: `P${i}`, color: '#3498db' },
