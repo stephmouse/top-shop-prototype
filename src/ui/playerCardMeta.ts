@@ -14,9 +14,9 @@ export function makeMetaChip(text: string, variant: MetaChipVariant): HTMLElemen
 
 export function resolveNetBadge(idx: number, netInfo?: HudNetInfo): { cls: string; text: string } | null {
   if (!netInfo || netInfo.role === 'offline' || !netInfo.roster) return null;
-  const isMine = canClientAct(netInfo.role, netInfo.roster, netInfo.myClientToken, idx);
+  const isMine = canClientAct(netInfo.role, netInfo.roster, netInfo.myPeerId, idx);
   const ownerToken = netInfo.roster.seatOwners[idx] ?? HOST_TOKEN;
-  const peer = netInfo.roster.peers.find((p) => p.clientToken === ownerToken);
+  const peer = netInfo.roster.peers.find((p) => p.id === ownerToken);
   if (isMine) return { cls: 'net-seat-badge is-you', text: 'YOU' };
   if (ownerToken === HOST_TOKEN) return { cls: 'net-seat-badge is-host', text: 'HOST' };
   if (peer) {

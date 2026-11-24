@@ -16,9 +16,9 @@ export function applyPeerSeatProfiles(state: GameState, roster: RoomRoster | nul
   if (!roster) return state;
   let changed = false;
   const players = state.players.map((player, idx) => {
-    const ownerToken = roster.seatOwners[idx];
-    if (!ownerToken || ownerToken === HOST_TOKEN) return player;
-    const peer = roster.peers.find((p) => p.clientToken === ownerToken);
+    const ownerId = roster.seatOwners[idx];
+    if (!ownerId || ownerId === HOST_TOKEN) return player;
+    const peer = roster.peers.find((p) => p.id === ownerId);
     if (!peer) return player;
     const nextName = peer.name.trim() || player.name;
     const nextColor = HEX_COLOR_RE.test(peer.color) ? peer.color : player.color;
@@ -41,8 +41,8 @@ export interface AvatarPutEntry {
 export interface AvatarSyncStore {
   clear: () => void;
   getMap: () => Record<string, string>;
-  setPeerImage: (clientToken: string, customImage?: string) => void;
-  removePeerImage: (clientToken: string) => void;
+  setPeerImage: (peerId: string, customImage?: string) => void;
+  removePeerImage: (peerId: string) => void;
   refreshHostMap: (
     state: GameState,
     roster: RoomRoster | null
@@ -67,12 +67,12 @@ export function createAvatarSyncStore(): AvatarSyncStore {
       currentMap = {};
     },
     getMap: () => ({ ...currentMap }),
-    setPeerImage: (clientToken, customImage) => {
-      if (isValidCustomImageDataUrl(customImage)) peerImages.set(clientToken, customImage);
-      else peerImages.delete(clientToken);
+    setPeerImage: (peerId, customImage) => {
+      if (isValidCustomImageDataUrl(customImage)) peerImages.set(peerId, customImage);
+      else peerImages.delete(peerId);
     },
-    removePeerImage: (clientToken) => {
-      peerImages.delete(clientToken);
+    removePeerImage: (peerId) => {
+      peerImages.delete(peerId);
     },
     refreshHostMap: (state, roster) => {
       const next: Record<string, string> = {};
@@ -82,8 +82,8 @@ export function createAvatarSyncStore(): AvatarSyncStore {
       }
       if (roster) {
         for (const peer of roster.peers) {
-          const img = peerImages.get(peer.clientToken);
-          if (isValidCustomImageDataUrl(img)) next[peer.clientToken] = img;
+          const img = peerImages.get(peer.id);
+          if (isValidCustomImageDataUrl(img)) next[peer.id] = img;
         }
       }
       const diffs: AvatarPutEntry[] = [];

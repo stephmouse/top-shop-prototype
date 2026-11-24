@@ -10,8 +10,8 @@ A consolidated, scannable task list of remaining future/optional work pulled fro
 
 - [x] **Incremental `AVATAR_PUT` Portrait Sync** (`src/net/avatarSync.ts`, `src/net/protocol.ts`, `src/net/session.ts`, `src/ui/imageCropper.ts`)
   - Replaced full-map `AVATAR_SYNC` broadcasts with incremental `{ type: 'AVATAR_PUT', key, dataUrl }` updates/deletes (and per-entry initial sync on join) plus a `12 KB` portrait target in `imageCropper.ts` to stay well inside WebRTC SCTP safe single-message limits across browsers.
-- [ ] **Optional TURN Relay for Strict Mobile / Campus NATs** (`src/net/avatarSync.ts`)
-  - Add optional TURN relay credentials (e.g., Metered.ca or Cloudflare Calls TURN) to `PEER_ICE_CONFIG` if friends on 4G/5G CGNAT or restricted Wi-Fi hit the 15-second join timeout on pure STUN.
+- [ ] **High Priority Before Public Launch — TURN Relay & Relay-Only IP Privacy (`Phase 3B`)** (`src/net/avatarSync.ts`, `ROADMAP.md`)
+  - Replace STUN-only `PEER_ICE_CONFIG` with an ephemeral TURN-credential endpoint (e.g., Cloudflare Worker + Cloudflare Calls TURN, or Metered.ca) and optional `iceTransportPolicy: 'relay'` mode so strict mobile/campus CGNAT players can connect reliably and host/guest IP addresses are not exposed directly over WebRTC ICE. Deferred until after initial friend playtesting; see full design in `ROADMAP.md`.
 - [ ] *(Optional / Low Priority)* **Pencil Roll Trust Hardening** (`src/engine/movementLanding.ts`)
   - Currently `handleRollPencil` trusts `chosenFace` sent by Guests so the 3D skill-stop stays snappy. Intentional UX trade-off for private friend lobbies—only worth hardening if untrusted players ever connect.
 

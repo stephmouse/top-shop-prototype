@@ -3,8 +3,22 @@ import { getDefaultAvatarForSeat } from '../src/config/avatarTypes';
 import { isValidGameAction } from '../src/engine/actions';
 import { createInitialGameState } from '../src/engine/state';
 import { createAvatarSyncStore } from '../src/net/avatarSync';
-import { createDefaultRoster, isValidClientMessage, isValidHostMessage } from '../src/net/protocol';
-import { createDefaultMatchSetup, isValidGameState, sanitizeMatchSetup } from '../src/ui/persistence';
+import {
+  createDefaultRoster,
+  generateRoomCode,
+  HOST_TOKEN,
+  isValidClientMessage,
+  isValidHostMessage,
+  ROOM_CODE_ALPHABET,
+} from '../src/net/protocol';
+import {
+  createDefaultMatchSetup,
+  isValidGameState,
+  parseAutoSavedMatch,
+  parseManualMatchEnvelope,
+  sanitizeMatchSetup,
+  SAVE_SCHEMA_VERSION,
+} from '../src/ui/persistence';
 
 const ENGINE_SOURCES = import.meta.glob('../src/engine/*.ts', {
   query: '?raw',
@@ -37,8 +51,27 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     expect(isValidClientMessage({ type: 'UI_PENCIL_SPIN', clientToken: 'tok_12345', spinning: false, stopFace: 6 })).toBe(true);
     expect(isValidClientMessage({ type: 'UI_PENCIL_SPIN', clientToken: 'tok_12345', spinning: false, stopFace: 'E' })).toBe(true);
     expect(isValidClientMessage({ type: 'UI_PENCIL_SPIN', clientToken: 'tok_12345', spinning: false, stopFace: 9 })).toBe(false);
+    expect(isValidClientMessage({ type: 'HELLO', clientToken: HOST_TOKEN, name: 'Spoof', color: '#3498db' })).toBe(false);
+    expect(isValidClientMessage({ type: 'HELLO', clientToken: 'short', name: 'Short', color: '#3498db' })).toBe(false);
     expect(isValidHostMessage({ type: 'UI_PENCIL_SPIN', spinning: false, activePlayerIndex: 0, stopFace: 4 })).toBe(true);
     expect(isValidHostMessage({ type: 'UI_PENCIL_SPIN', spinning: false, activePlayerIndex: 0, stopFace: 'X' })).toBe(false);
+
+    const sampleRoster = createDefaultRoster('ROOM42', 2);
+    const sampleState = createInitialGameState([{ name: 'A' }, { name: 'B' }], {}, 1, 'stage_0');
+    expect(
+      isValidHostMessage({ type: 'WELCOME', seq: 1, roster: sampleRoster, state: { ...sampleState, players: [] } })
+    ).toBe(false);
+    expect(
+      isValidHostMessage({ type: 'WELCOME', seq: 1, myPeerId: HOST_TOKEN, roster: sampleRoster, state: sampleState })
+    ).toBe(false);
+
+    for (let i = 0; i < 10; i++) {
+      const code = generateRoomCode();
+      expect(code).toHaveLength(6);
+      for (const ch of code) {
+        expect(ROOM_CODE_ALPHABET.includes(ch)).toBe(true);
+      }
+    }
 
     const sampleImg = `data:image/webp;base64,${'A'.repeat(40)}`;
     expect(isValidHostMessage({ type: 'AVATAR_PUT', key: 'p_1', dataUrl: sampleImg })).toBe(true);
@@ -54,7 +87,7 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     const guestStore = createAvatarSyncStore();
     const roster = {
       ...createDefaultRoster('ROOM42', 2),
-      peers: [{ clientToken: 'peer_1', peerId: 'pid_1', name: 'Bob', color: '#3498db', connected: true }],
+      peers: [{ id: 'guest_1', name: 'Bob', color: '#3498db', connected: true }],
     };
     const stateWithImg = createInitialGameState(
       [{ name: 'Alice', avatar: { ...getDefaultAvatarForSeat(0), customImage: imgA } }, { name: 'Bob' }],
@@ -72,18 +105,18 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     expect(noop.changed).toBe(false);
     expect(noop.diffs).toEqual([]);
 
-    hostStore.setPeerImage('peer_1', imgB);
+    hostStore.setPeerImage('guest_1', imgB);
     const addedPeer = hostStore.refreshHostMap(stateWithImg, roster);
-    expect(addedPeer.diffs).toEqual([{ key: 'peer_1', dataUrl: imgB }]);
+    expect(addedPeer.diffs).toEqual([{ key: 'guest_1', dataUrl: imgB }]);
     for (const d of addedPeer.diffs) expect(guestStore.applyRemotePut(d.key, d.dataUrl)).toBe(true);
-    expect(guestStore.getMap()).toEqual({ p_1: imgA, peer_1: imgB });
+    expect(guestStore.getMap()).toEqual({ p_1: imgA, guest_1: imgB });
 
-    hostStore.removePeerImage('peer_1');
+    hostStore.removePeerImage('guest_1');
     const removedPeer = hostStore.refreshHostMap(stateWithImg, roster);
-    expect(removedPeer.diffs).toEqual([{ key: 'peer_1', dataUrl: null }]);
+    expect(removedPeer.diffs).toEqual([{ key: 'guest_1', dataUrl: null }]);
     for (const d of removedPeer.diffs) expect(guestStore.applyRemotePut(d.key, d.dataUrl)).toBe(true);
     expect(guestStore.getMap()).toEqual({ p_1: imgA });
-    expect(guestStore.applyRemotePut('peer_1', null)).toBe(false);
+    expect(guestStore.applyRemotePut('guest_1', null)).toBe(false);
     expect(guestStore.applyRemotePut('__proto__', imgA)).toBe(false);
   });
 
@@ -113,6 +146,30 @@ describe('action validation, persistence sanitization, and engine purity', () =>
         players: [{ ...state.players[0]!, tileId: 'bad_tile' }, state.players[1]!],
       })
     ).toBe(false);
+    expect(isValidGameState({ ...state, phase: 'BAD_PHASE' })).toBe(false);
+    expect(
+      isValidGameState({
+        ...state,
+        players: [{ ...state.players[0]!, cash: Number.NaN }, state.players[1]!],
+      })
+    ).toBe(false);
+    const firstShopKey = Object.keys(state.shops)[0]!;
+    expect(
+      isValidGameState({
+        ...state,
+        shops: { ...state.shops, [firstShopKey]: { ...state.shops[firstShopKey]!, level: 9 } },
+      })
+    ).toBe(false);
+
+    expect(parseAutoSavedMatch({ schemaVersion: SAVE_SCHEMA_VERSION, state })).toEqual(state);
+    expect(parseAutoSavedMatch(state)).toBeNull();
+    expect(parseAutoSavedMatch({ schemaVersion: 0, state })).toBeNull();
+    expect(parseAutoSavedMatch({ schemaVersion: SAVE_SCHEMA_VERSION + 1, state })).toBeNull();
+
+    const manual = { schemaVersion: SAVE_SCHEMA_VERSION, savedAt: '2026-11-24T12:00:00.000Z', state };
+    expect(parseManualMatchEnvelope(manual)).toEqual(manual);
+    expect(parseManualMatchEnvelope({ savedAt: '2026-11-24T12:00:00.000Z', state })).toBeNull();
+    expect(parseManualMatchEnvelope({ ...manual, schemaVersion: 2 })).toBeNull();
   });
 
   it('keeps src/engine completely free of browser and DOM references', () => {

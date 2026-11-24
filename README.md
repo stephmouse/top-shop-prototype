@@ -44,6 +44,11 @@ On the **Start Hub**, customize your standee, name, and shoes, then choose:
 
 > **Online Multiplayer Note:** Anyone is welcome to jump in and host a match anytime—online rooms simply connect via private Room Codes / invite links with friends rather than a public server browser or random matchmaking.
 
+### Multiplayer Trust & Privacy Model
+- **Private Friend Lobbies:** Rooms are host-authoritative (`applyAction` runs on the host; RNG seed and unrevealed event cards are redacted from guest syncs; guest `clientToken`s are kept private on the host while rosters use opaque `guest_N` IDs).
+- **Skill-Stop Trust Trade-off:** Guests submit their skill-stopped Pencil Die face (`chosenFace`) for snappy 3D spin stops, so lobbies are designed for trusted friends rather than cheat-resistant public matchmaking.
+- **Direct P2P IP Visibility:** Online play currently uses STUN-only WebRTC (`PeerJS`), meaning the host and connected guests exchange direct IP addresses during ICE negotiation. Full IP hiding and strict-NAT traversal require a TURN relay (`iceTransportPolicy: 'relay'`), planned in [ROADMAP.md](ROADMAP.md).
+
 ### Gameplay Basics
 1. **Goal:** Be the first player to reach the **Target Assets** goal (Cash + Owned Store Asset Value), or outlast rivals until the **Bankrupt Limit** is met.
 2. **Roll & Move:** Spin and stop the **Pencil Die** (`1`–`8` steps, or `E` for an Event card). Your horizontal (`←` / `→`) and vertical (`↑` / `↓`) directions lock as you move until you pass/land on the **Bank**, stop at an **Elevator**, or hit a direction-unlocking Event.
@@ -83,7 +88,7 @@ npm run preview    # Preview the production bundle locally
 - **`src/engine/`** — Pure, deterministic, **DOM-free** state machine (`applyAction(state, action)`). Must contain zero `window`/`document`/DOM references so state stays portable across PeerJS hosts or dedicated servers.
 - **`src/net/`** — Host-authoritative PeerJS WebRTC transport, message/action validation, reconnect backoff, and session-scoped `AVATAR_SYNC`.
 - **`src/ui/` & `src/main.ts`** — DOM/CSS Grid/SVG rendering, animations, Web Audio synthesis, image cropper, modals, and `localStorage` persistence.
-- **Before opening a PR:** Keep individual modules concise (aim for under ~250 lines by splitting cleanly), preserve original US PS1 game spellings unless fixing verified bugs, and run `npm run build` cleanly with zero TypeScript errors.
+- **Before opening a PR:** Split modules cleanly by responsibility (never by cramming statements onto single lines), preserve original US PS1 game spellings unless fixing verified bugs, and run `npm run build` cleanly with zero TypeScript errors.
 
 ### Deployment (GitHub Pages)
 `.github/workflows/deploy.yml` builds `dist/` (with `base: './'` in `vite.config.ts`) on **Node 22** when manually triggered via **Actions → Deploy Static Site to GitHub Pages** (`workflow_dispatch`).

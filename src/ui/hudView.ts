@@ -21,7 +21,7 @@ export interface TokenMoveHint {
 export interface HudNetInfo {
   role: NetRole;
   roster: RoomRoster | null;
-  myClientToken: string;
+  myPeerId: string;
   customAvatars?: Readonly<Record<string, string>>;
 }
 
@@ -35,7 +35,7 @@ export function resolvePlayerAvatar(
   const seatAvatar = sanitizeAvatarSpec(player?.avatar, playerIdx);
   const ownerToken = roster?.seatOwners[playerIdx];
   if (ownerToken && ownerToken !== HOST_TOKEN) {
-    const peer = roster?.peers.find((p) => p.clientToken === ownerToken);
+    const peer = roster?.peers.find((p) => p.id === ownerToken);
     if (peer) {
       const base = peer.avatar ? sanitizeAvatarSpec(peer.avatar, playerIdx) : stripAvatarCustomImage(seatAvatar)!;
       const remoteImg = customAvatars?.[ownerToken];

@@ -59,7 +59,7 @@ describe('wire state compaction, heartbeat, and guided-walk ack resilience', () 
     expect(isValidClientMessage({ type: 'PING', clientToken: 'tok_12345', ts: 123456 })).toBe(true);
     expect(isValidClientMessage({ type: 'PING', clientToken: 'tok_12345', ts: Number.NaN })).toBe(false);
     expect(isValidHostMessage({ type: 'PONG', ts: 123456 })).toBe(true);
-    expect(isValidHostMessage({ type: 'WELCOME', seq: 1, roster, state: wire })).toBe(true);
+    expect(isValidHostMessage({ type: 'WELCOME', seq: 1, myPeerId: 'guest_1', roster, state: wire })).toBe(true);
     expect(isValidHostMessage({ type: 'STATE_SYNC', seq: 2, roster, state: wire, pencilSpinning: false })).toBe(true);
   });
 

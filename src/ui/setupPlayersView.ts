@@ -25,7 +25,7 @@ export function getGuestPeerForSeat(
   if (!online || online.role !== 'host' || !online.roster) return null;
   const ownerToken = online.roster.seatOwners[seatIdx];
   if (!ownerToken || ownerToken === HOST_TOKEN) return null;
-  return online.roster.peers.find((p) => p.clientToken === ownerToken) ?? null;
+  return online.roster.peers.find((p) => p.id === ownerToken) ?? null;
 }
 
 export function renderSetupPlayersList(
@@ -50,7 +50,7 @@ export function renderSetupPlayersList(
     if (guestPeer) {
       const gColor = guestPeer.color;
       const baseAv = sanitizeAvatarSpec(guestPeer.avatar, idx);
-      const remoteImg = online?.customAvatars[guestPeer.clientToken];
+      const remoteImg = online?.customAvatars[guestPeer.id];
       const gAvatar = isValidCustomImageDataUrl(remoteImg) ? { ...baseAv, customImage: remoteImg } : baseAv;
 
       const avatarBtn = Object.assign(document.createElement('button'), {

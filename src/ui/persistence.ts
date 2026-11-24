@@ -4,16 +4,21 @@ import { DEFAULT_STAGE_ID, getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { PlayerSetupInput } from '../engine/state';
 import type { GameState, MatchConfig } from '../engine/types';
+import {
+  isValidGameState,
+  parseAutoSavedMatch,
+  parseManualMatchEnvelope,
+  SAVE_SCHEMA_VERSION,
+} from './stateValidation';
+import type { AutoSavedMatchEnvelope, SavedMatchEnvelope } from './stateValidation';
+
+export { isValidGameState, parseAutoSavedMatch, parseManualMatchEnvelope, SAVE_SCHEMA_VERSION };
+export type { AutoSavedMatchEnvelope, SavedMatchEnvelope };
 
 export interface MatchSetupData {
   stageId: StageId;
   players: PlayerSetupInput[];
   config: MatchConfig;
-}
-
-export interface SavedMatchEnvelope {
-  savedAt: string;
-  state: GameState;
 }
 
 export const SETUP_STORAGE_KEY = 'top_shop_setup_v1';
@@ -122,37 +127,6 @@ export function extractSetupFromState(state: GameState): MatchSetupData {
   return sanitized ?? createDefaultMatchSetup();
 }
 
-export function isValidGameState(raw: unknown): raw is GameState {
-  if (!isRecord(raw)) return false;
-  if (typeof raw.seed !== 'number' || !Number.isFinite(raw.seed)) return false;
-  if (typeof raw.mapId !== 'string' || !OFFICIAL_STAGES.some((s) => s.id === raw.mapId)) return false;
-  if (typeof raw.turnNumber !== 'number' || !Number.isFinite(raw.turnNumber) || raw.turnNumber < 1) {
-    return false;
-  }
-  if (typeof raw.month !== 'number' || !Number.isFinite(raw.month)) return false;
-  if (typeof raw.year !== 'number' || !Number.isFinite(raw.year)) return false;
-  if (typeof raw.totalMonths !== 'number' || !Number.isFinite(raw.totalMonths)) return false;
-  if (typeof raw.phase !== 'string') return false;
-  if (!isRecord(raw.config) || typeof raw.config.targetAssets !== 'number') return false;
-  if (!Array.isArray(raw.players) || raw.players.length < MIN_PLAYERS || raw.players.length > MAX_PLAYERS) return false;
-  if (
-    typeof raw.activePlayerIndex !== 'number' ||
-    !Number.isInteger(raw.activePlayerIndex) ||
-    raw.activePlayerIndex < 0 ||
-    raw.activePlayerIndex >= raw.players.length
-  ) {
-    return false;
-  }
-  if (!isRecord(raw.tiles) || !isRecord(raw.shops) || !isRecord(raw.segmentPools)) return false;
-  if (!Array.isArray(raw.log) || !Array.isArray(raw.moveHistory) || !Array.isArray(raw.eventChoices)) return false;
-  if (!Array.isArray(raw.deliveredShopIdsThisTurn)) return false;
-  const tilesObj = raw.tiles;
-  if (!raw.players.every((p) => isRecord(p) && typeof p.id === 'string' && typeof p.tileId === 'string' && Object.prototype.hasOwnProperty.call(tilesObj, p.tileId))) {
-    return false;
-  }
-  return true;
-}
-
 export function loadStoredSetup(): MatchSetupData {
   const storage = getStorage();
   if (!storage) return createDefaultMatchSetup();
@@ -181,8 +155,7 @@ export function loadAutoSavedMatch(): GameState | null {
   try {
     const raw = storage.getItem(ACTIVE_MATCH_STORAGE_KEY);
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    return isValidGameState(parsed) ? parsed : null;
+    return parseAutoSavedMatch(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -192,7 +165,8 @@ export function saveAutoSavedMatch(state: GameState): void {
   const storage = getStorage();
   if (!storage) return;
   try {
-    storage.setItem(ACTIVE_MATCH_STORAGE_KEY, JSON.stringify(state));
+    const envelope: AutoSavedMatchEnvelope = { schemaVersion: SAVE_SCHEMA_VERSION, state };
+    storage.setItem(ACTIVE_MATCH_STORAGE_KEY, JSON.stringify(envelope));
   } catch {
     // Ignore storage quota/availability errors
   }
@@ -214,18 +188,18 @@ export function loadManualMatchSlot(): SavedMatchEnvelope | null {
   try {
     const raw = storage.getItem(SAVED_MATCH_STORAGE_KEY);
     if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!isRecord(parsed) || typeof parsed.savedAt !== 'string' || !isValidGameState(parsed.state)) {
-      return null;
-    }
-    return { savedAt: parsed.savedAt, state: parsed.state };
+    return parseManualMatchEnvelope(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
 export function saveManualMatchSlot(state: GameState): SavedMatchEnvelope {
-  const envelope: SavedMatchEnvelope = { savedAt: new Date().toISOString(), state };
+  const envelope: SavedMatchEnvelope = {
+    schemaVersion: SAVE_SCHEMA_VERSION,
+    savedAt: new Date().toISOString(),
+    state,
+  };
   const storage = getStorage();
   if (storage) {
     try {
@@ -248,7 +222,7 @@ export function clearManualMatchSlot(): void {
 }
 
 export function serializeSetupConfigJson(setup: MatchSetupData): string {
-  return JSON.stringify({ version: 1, ...setup }, null, 2);
+  return JSON.stringify({ version: 1, schemaVersion: SAVE_SCHEMA_VERSION, ...setup }, null, 2);
 }
 
 export function parseSetupConfigJson(jsonText: string): MatchSetupData {

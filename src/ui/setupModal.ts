@@ -52,8 +52,11 @@ const MODAL_TEMPLATE = `
     <div class="setup-row-between">
       <h3 class="setup-section-title">Players</h3>
       <div class="setup-count-group" data-role="counts">
-        <button type="button" data-count="2">2P</button><button type="button" data-count="3">3P</button><button type="button" data-count="4">4P</button>
-        <button type="button" data-count="5">5P</button><button type="button" data-count="6">6P</button>
+        <button type="button" data-count="2">2P</button>
+        <button type="button" data-count="3">3P</button>
+        <button type="button" data-count="4">4P</button>
+        <button type="button" data-count="5">5P</button>
+        <button type="button" data-count="6">6P</button>
       </div>
     </div>
     <div class="setup-players-list" data-role="players-list"></div>
@@ -64,11 +67,31 @@ const MODAL_TEMPLATE = `
       <button type="button" data-role="reset">Reset Defaults</button>
     </div>
     <div class="setup-grid">
-      <label class="setup-field"><span class="setup-field-label">Target Assets ($)</span><input class="setup-input" type="number" min="1000" max="1000000" step="100" data-role="target" /></label>
-      <label class="setup-field"><span class="setup-field-label">Starting Cash ($)</span><input class="setup-input" type="number" min="500" max="500000" step="100" data-role="cash" /></label>
-      <label class="setup-field"><span class="setup-field-label">Bankrupt Limit</span><input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" /></label>
-      <label class="setup-field"><span class="setup-field-label">First Turn</span><select class="setup-select" data-role="first-player"></select></label>
-      <label class="setup-checkbox-field setup-has-tooltip"><input type="checkbox" data-role="finish-round" aria-describedby="finish-round-tip" /> Finish Round on Win <span class="setup-info-hint" aria-hidden="true">?</span><span id="finish-round-tip" class="setup-tooltip" role="tooltip">When someone reaches Target Assets, let the rest of the round finish so everyone gets equal turns. Highest Net Assets wins.</span></label>
+      <label class="setup-field">
+        <span class="setup-field-label">Target Assets ($)</span>
+        <input class="setup-input" type="number" min="1000" max="1000000" step="100" data-role="target" />
+      </label>
+      <label class="setup-field">
+        <span class="setup-field-label">Starting Cash ($)</span>
+        <input class="setup-input" type="number" min="500" max="500000" step="100" data-role="cash" />
+      </label>
+      <label class="setup-field">
+        <span class="setup-field-label">Bankrupt Limit</span>
+        <input class="setup-input" type="number" min="1" step="1" data-role="bankrupt" />
+      </label>
+      <label class="setup-field">
+        <span class="setup-field-label">First Turn</span>
+        <select class="setup-select" data-role="first-player"></select>
+      </label>
+      <label class="setup-checkbox-field setup-has-tooltip">
+        <input type="checkbox" data-role="finish-round" aria-describedby="finish-round-tip" />
+        Finish Round on Win
+        <span class="setup-info-hint" aria-hidden="true">?</span>
+        <span id="finish-round-tip" class="setup-tooltip" role="tooltip">
+          When someone reaches Target Assets, let the rest of the round finish so everyone gets equal turns.
+          Highest Net Assets wins.
+        </span>
+      </label>
       <label class="setup-checkbox-field"><input type="checkbox" data-role="month-popup" /> Show Month Popups</label>
     </div>
   </section>
@@ -161,8 +184,12 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     );
     draft.players.forEach((p, idx) => {
       const guest = getGuestPeerForSeat(online, idx);
-      const label = guest ? `P${idx + 1} · ${guest.name} (Guest)` : `P${idx + 1} · ${p.name || `Player ${idx + 1}`}`;
-      firstPlayerSelect.appendChild(Object.assign(document.createElement('option'), { value: String(idx), textContent: label }));
+      const label = guest
+        ? `P${idx + 1} · ${guest.name} (Guest)`
+        : `P${idx + 1} · ${p.name || `Player ${idx + 1}`}`;
+      firstPlayerSelect.appendChild(
+        Object.assign(document.createElement('option'), { value: String(idx), textContent: label })
+      );
     });
     firstPlayerSelect.value = curVal;
   }
@@ -199,7 +226,10 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     const stg = getStageDef(stageId);
     const start = stg.recommendedStartingCash.toLocaleString();
     const goal = stg.recommendedTargetAssets.toLocaleString();
-    return `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ${stg.shopCount} shop slots · Rec: $${start} start / $${goal} goal`;
+    return (
+      `Stage ${stg.stageIndex + 1} · ${stg.cols} cols × ${stg.floors} floors · ` +
+      `${stg.shopCount} shop slots · Rec: $${start} start / $${goal} goal`
+    );
   }
 
   function syncForm(): void {
@@ -240,7 +270,10 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     visible = true;
     backdrop.hidden = false;
   };
-  const close = (): void => { visible = false; backdrop.hidden = true; };
+  const close = (): void => {
+    visible = false;
+    backdrop.hidden = true;
+  };
 
   stageSelect.addEventListener('change', () => {
     captureFormInputs();
@@ -252,13 +285,43 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     targetInput.value = String(stg.recommendedTargetAssets);
     stageDesc.textContent = formatStageDesc(draft.stageId);
   });
-  for (const btn of countBtns) btn.addEventListener('click', () => resizePlayers(Number(btn.dataset.count)));
-  q('open-lobby').addEventListener('click', () => { close(); options.onOpenLobby?.(); });
-  q('reset').addEventListener('click', () => { draft = createDefaultMatchSetup(); syncForm(); setStatus('Reset setup to default rules.'); });
-  q('save').addEventListener('click', () => { options.onSaveMatch(); refreshSaveStatus(); setStatus('Match saved to browser storage.'); });
-  loadBtn.addEventListener('click', () => { const s = loadManualMatchSlot(); if (!s) return refreshSaveStatus(); options.onLoadMatch(s.state); close(); });
-  clearBtn.addEventListener('click', () => { clearManualMatchSlot(); refreshSaveStatus(); setStatus('Cleared saved match slot.'); });
-  q('export').addEventListener('click', () => { const c = readSanitizedDraft(); saveStoredSetup(c); downloadSetupConfigJson(c); setStatus('Exported top-shop-config.json.'); });
+  for (const btn of countBtns) {
+    btn.addEventListener('click', () => resizePlayers(Number(btn.dataset.count)));
+  }
+  q('open-lobby').addEventListener('click', () => {
+    close();
+    options.onOpenLobby?.();
+  });
+  q('reset').addEventListener('click', () => {
+    draft = createDefaultMatchSetup();
+    syncForm();
+    setStatus('Reset setup to default rules.');
+  });
+  q('save').addEventListener('click', () => {
+    options.onSaveMatch();
+    refreshSaveStatus();
+    setStatus('Match saved to browser storage.');
+  });
+  loadBtn.addEventListener('click', () => {
+    const slot = loadManualMatchSlot();
+    if (!slot) {
+      refreshSaveStatus();
+      return;
+    }
+    options.onLoadMatch(slot.state);
+    close();
+  });
+  clearBtn.addEventListener('click', () => {
+    clearManualMatchSlot();
+    refreshSaveStatus();
+    setStatus('Cleared saved match slot.');
+  });
+  q('export').addEventListener('click', () => {
+    const cfg = readSanitizedDraft();
+    saveStoredSetup(cfg);
+    downloadSetupConfigJson(cfg);
+    setStatus('Exported top-shop-config.json.');
+  });
   q('import').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', async () => {
     const file = fileInput.files?.[0];
@@ -275,9 +338,25 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   });
   q('close-header').addEventListener('click', close);
   q('close-footer').addEventListener('click', close);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
-  q('start').addEventListener('click', () => { const c = readSanitizedDraft(); saveStoredSetup(c); options.onStartMatch(c); close(); });
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
+  q('start').addEventListener('click', () => {
+    const cfg = readSanitizedDraft();
+    saveStoredSetup(cfg);
+    options.onStartMatch(cfg);
+    close();
+  });
 
   syncForm();
-  return { el: backdrop, open, close, isOpen: () => visible, refresh: () => { if (visible) syncForm(); }, refreshSaveStatus };
+  return {
+    el: backdrop,
+    open,
+    close,
+    isOpen: () => visible,
+    refresh: () => {
+      if (visible) syncForm();
+    },
+    refreshSaveStatus,
+  };
 }
