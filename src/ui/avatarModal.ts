@@ -18,7 +18,17 @@ import type { AvatarAccessory, AvatarEyeStyle, AvatarHair, AvatarMarking, Avatar
 import { WALK_SOUND_CHOICE_LABELS, WALK_SOUND_CHOICES } from '../config/walkSounds';
 import type { WalkSoundChoice } from '../config/walkSounds';
 import { createAvatarElement } from './avatarSvg';
+import { createColorPicker } from './colorPicker';
 import { createImageCropper } from './imageCropper';
+
+type AvatarColorKey = 'primaryColor' | 'secondaryColor' | 'hairColor' | 'eyeColor';
+
+const COLOR_SLOTS: ReadonlyArray<{ key: AvatarColorKey; label: string }> = [
+  { key: 'primaryColor', label: 'Fur / Scales' },
+  { key: 'secondaryColor', label: 'Markings' },
+  { key: 'hairColor', label: 'Hair' },
+  { key: 'eyeColor', label: 'Eyes' },
+];
 
 export interface AvatarModalOptions {
   onPreviewWalkSound?: (choice: WalkSoundChoice) => void;
@@ -77,19 +87,11 @@ function mkSelectField<T extends string>(
   return wrap;
 }
 
-function mkColorField(label: string, value: string, onChange: (hex: string) => void): HTMLElement {
-  const wrap = mk('label', 'setup-field');
-  wrap.appendChild(mk('span', 'setup-field-label', label));
-  const inp = Object.assign(mk('input', 'setup-color-picker avatar-color-wide'), { type: 'color', value });
-  inp.addEventListener('input', () => onChange(inp.value));
-  wrap.appendChild(inp);
-  return wrap;
-}
-
 export function createAvatarModal(options?: AvatarModalOptions): AvatarModalController {
   let visible = false;
   let draft: AvatarSpec = createSpeciesPreset('mouse');
   let frameColor = '#e74c3c';
+  let activeColorKey: AvatarColorKey = 'primaryColor';
   let saveCb: ((next: AvatarSpec) => void) | null = null;
 
   const backdrop = Object.assign(mk('div', 'setup-backdrop avatar-backdrop'), { hidden: true });
@@ -205,13 +207,50 @@ export function createAvatarModal(options?: AvatarModalOptions): AvatarModalCont
       mkSelectField<AvatarAccessory>('Accessory', AVATAR_ACCESSORIES, ACCESSORY_LABELS, draft.accessory, (v) => updateBuilder({ accessory: v }))
     );
 
+    const slotRefs = new Map<AvatarColorKey, { btn: HTMLButtonElement; chip: HTMLSpanElement; hexEl: HTMLSpanElement; label: string }>();
+    const activeSlot = COLOR_SLOTS.find((s) => s.key === activeColorKey) ?? COLOR_SLOTS[0]!;
+
+    const picker = createColorPicker({
+      initialColor: draft[activeColorKey],
+      label: `Editing: ${activeSlot.label}`,
+      onChange: (hex) => {
+        updateBuilder({ [activeColorKey]: hex } as Partial<AvatarSpec>);
+        const ref = slotRefs.get(activeColorKey);
+        if (ref) {
+          ref.chip.style.background = hex;
+          ref.hexEl.textContent = hex.toUpperCase();
+        }
+      },
+    });
+
+    const syncSlotSelection = () => {
+      for (const slot of COLOR_SLOTS) {
+        const ref = slotRefs.get(slot.key);
+        if (ref) ref.btn.classList.toggle('is-active', slot.key === activeColorKey);
+      }
+      const curSlot = COLOR_SLOTS.find((s) => s.key === activeColorKey) ?? COLOR_SLOTS[0]!;
+      picker.setLabel(`Editing: ${curSlot.label}`);
+      picker.setColor(draft[activeColorKey]);
+    };
+
     const colorsGrid = mk('div', 'avatar-color-grid');
-    colorsGrid.append(
-      mkColorField('Fur / Scales', draft.primaryColor, (v) => updateBuilder({ primaryColor: v })),
-      mkColorField('Markings', draft.secondaryColor, (v) => updateBuilder({ secondaryColor: v })),
-      mkColorField('Hair', draft.hairColor, (v) => updateBuilder({ hairColor: v })),
-      mkColorField('Eyes', draft.eyeColor, (v) => updateBuilder({ eyeColor: v }))
-    );
+    for (const slot of COLOR_SLOTS) {
+      const btn = Object.assign(mk('button', 'avatar-color-slot'), { type: 'button' as const });
+      const chip = mk('span', 'avatar-color-chip');
+      chip.style.background = draft[slot.key];
+      const meta = mk('span', 'avatar-color-slot-meta');
+      const nameEl = mk('span', 'avatar-color-slot-label', slot.label);
+      const hexEl = mk('span', 'avatar-color-hex', draft[slot.key].toUpperCase());
+      meta.append(nameEl, hexEl);
+      btn.append(chip, meta);
+      btn.classList.toggle('is-active', slot.key === activeColorKey);
+      btn.addEventListener('click', () => {
+        activeColorKey = slot.key;
+        syncSlotSelection();
+      });
+      slotRefs.set(slot.key, { btn, chip, hexEl, label: slot.label });
+      colorsGrid.appendChild(btn);
+    }
 
     const walkRow = mk('div', 'avatar-walk-row');
     const testSoundBtn = Object.assign(mk('button', '', '🔊 Test'), { type: 'button' as const });
@@ -230,7 +269,7 @@ export function createAvatarModal(options?: AvatarModalOptions): AvatarModalCont
       testSoundBtn
     );
 
-    controlsCol.append(photoBanner, gridA, colorsGrid, walkRow);
+    controlsCol.append(photoBanner, gridA, colorsGrid, picker.el, walkRow);
     refreshPreview();
   }
 

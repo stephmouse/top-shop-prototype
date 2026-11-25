@@ -112,10 +112,10 @@ export const SPECIES_BACK_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> = 
     sh('M 43 15 C 45 6 42 4 40 6 C 39 8 39 13 40 15 Z', 'innerEar'),
   ],
   robin: [
-    sh('M 14 54 C 7 50 7 41 14 43 C 17 44 17 50 15 55 Z', 'primary', 'dark', 1.4),
-    sh('M 50 54 C 57 50 57 41 50 43 C 47 44 47 50 49 55 Z', 'primary', 'dark', 1.4),
-    sh('M 16 25 C 11 23 11 29 15 31 Z', 'secondary', 'dark', 1.2),
-    sh('M 48 25 C 53 23 53 29 49 31 Z', 'secondary', 'dark', 1.2),
+    sh('M 22 45 C 14 39 7 37 3 39 C 3 42 6 43 9 43 C 6 44 4 46 5 48 C 7 49 9 49 11 49 C 8 51 8 53 10 54 C 12 56 15 57 18 57 Z', 'primary', 'dark', 1.5),
+    sh('M 42 45 C 50 39 57 37 61 39 C 61 42 58 43 55 43 C 58 44 60 46 59 48 C 57 49 55 49 53 49 C 56 51 56 53 54 54 C 52 56 49 57 46 57 Z', 'primary', 'dark', 1.5),
+    sh('M 15 45 L 7 41 M 15 48 L 8 47 M 15 51 L 11 52', 'none', 'dark', 1.1),
+    sh('M 49 45 L 57 41 M 49 48 L 56 47 M 49 51 L 53 52', 'none', 'dark', 1.1),
   ],
   koi: [
     sh('M 15 27 C 6 21 5 30 9 36 C 12 39 15 35 16 32 Z', 'secondary', 'dark', 1.5),
@@ -123,9 +123,9 @@ export const SPECIES_BACK_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> = 
     sh('M 13 28 L 8 27 M 13 31 L 8 32 M 51 28 L 56 27 M 51 31 L 56 32', 'none', 'dark', 1),
   ],
   dolphin: [
-    sh('M 29 15 C 27 5 35 2 39 6 C 35 9 35 13 36 15 Z', 'primary', 'dark', 1.5),
-    sh('M 12 49 C 5 46 6 38 14 42 Z', 'primary', 'dark', 1.4),
-    sh('M 52 49 C 59 46 58 38 50 42 Z', 'primary', 'dark', 1.4),
+    sh('M 28 17 C 27 6 35 3 40 7 C 36 10 35 14 36 17 Z', 'primary', 'dark', 1.5),
+    sh('M 21 47 C 13 46 8 47 7 50 C 9 54 14 55 18 55 Z', 'primary', 'dark', 1.5),
+    sh('M 43 47 C 51 46 56 47 57 50 C 55 54 50 55 46 55 Z', 'primary', 'dark', 1.5),
   ],
 };
 
@@ -166,9 +166,9 @@ export const SPECIES_MUZZLE_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> 
     sh('M 28.5 37 H 35.5', 'none', 'dark', 1),
   ],
   koi: [
-    sh('M 28 36 C 28 33 36 33 36 36 C 36 39 28 39 28 36 Z', 'innerEar', 'dark', 1.2),
-    sh('M 28 35 Q 21 37 17 42 M 28 37 Q 22 41 20 45', 'none', 'dark', 1.3),
-    sh('M 36 35 Q 43 37 47 42 M 36 37 Q 42 41 44 45', 'none', 'dark', 1.3),
+    sh('M 26.5 37.5 Q 29.2 41.5 32 38 Q 34.8 41.5 37.5 37.5', 'none', 'dark', 1.6),
+    sh('M 26.5 37.5 Q 20 38 16.5 42.5 M 27.5 39.2 Q 22 42 20 45.5', 'none', 'dark', 1.3),
+    sh('M 37.5 37.5 Q 44 38 47.5 42.5 M 36.5 39.2 Q 42 42 44 45.5', 'none', 'dark', 1.3),
   ],
   dolphin: [
     sh('M 27 36 C 27 33 37 33 37 36 C 37 39 27 39 27 36 Z', 'secondary', 'dark', 1.2),
