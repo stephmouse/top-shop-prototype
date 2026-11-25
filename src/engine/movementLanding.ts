@@ -50,7 +50,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
   let nextSeed = state.seed;
   let face: PencilFace;
 
-  if (player.pencilTurnsLeft > 0 && player.pencilMode === 'ones_twos') {
+  if (player.pencilWindow && player.pencilMode === 'ones_twos') {
     if (chosenFace === 1 || chosenFace === 2) {
       face = chosenFace;
     } else {
@@ -58,7 +58,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
       face = r.value;
       nextSeed = r.nextSeed;
     }
-  } else if (player.pencilTurnsLeft > 0 && player.pencilMode === 'event_only') {
+  } else if (player.pencilWindow && player.pencilMode === 'event_only') {
     face = 'E';
   } else if (chosenFace !== undefined && PENCIL_FACES.includes(chosenFace)) {
     face = chosenFace;
@@ -68,16 +68,10 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
     nextSeed = r.nextSeed;
   }
 
-  const nextPencilTurns = Math.max(0, player.pencilTurnsLeft - 1);
-  const rolledState = updateActivePlayer(state, {
-    pencilTurnsLeft: nextPencilTurns,
-    pencilMode: nextPencilTurns === 0 ? 'normal' : player.pencilMode,
-  });
-
   if (face === 'E') {
-    const drawn = drawThreeEventIds(rolledState, nextSeed);
+    const drawn = drawThreeEventIds(state, nextSeed);
     return {
-      ...rolledState,
+      ...state,
       seed: drawn.nextSeed,
       lastRoll: 'E',
       remainingSteps: 0,
@@ -87,12 +81,12 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
       phase: 'EVENT_PICK',
       eventChoices: drawn.ids,
       revealedEventSlot: null,
-      log: appendLog(rolledState, `${player.name} rolled E (Event)!`),
+      log: appendLog(state, `${player.name} rolled E (Event)!`),
     };
   }
 
   return {
-    ...rolledState,
+    ...state,
     seed: nextSeed,
     lastRoll: face,
     remainingSteps: face,
@@ -100,7 +94,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
     moveHistory: [],
     pendingUndoSnapshot: null,
     phase: player.horizontalDir === null ? 'CHOOSE_DIRECTION' : 'STEPPING',
-    log: appendLog(rolledState, `${player.name} rolled ${face}.`),
+    log: appendLog(state, `${player.name} rolled ${face}.`),
   };
 }
 
@@ -138,7 +132,7 @@ export function resolveTileLanding(state: GameState): GameState {
     const shop = postState.shops[tile.shopSlotId];
     if (!shop || !shop.ownerId) return { ...postState, phase: 'SHOP_BUY_SLOT' };
     if (shop.ownerId === player.id) return { ...postState, phase: 'SHOP_DELIVER' };
-    if (shop.isClosedTurns > 0) {
+    if (shop.closedWindow) {
       return advanceToNextTurn({
         ...postState,
         log: appendLog(postState, `${player.name} visited closed rival store — no purchase.`),

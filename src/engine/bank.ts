@@ -12,6 +12,7 @@ import {
 } from './helpers';
 import { randomInt } from './rng';
 import { resumeAfterPostAction } from './shops';
+import { createTimedWindow, extendTimedWindow } from './timedEffects';
 import type { GameState, Player } from './types';
 
 export { canRedeemBankReward, getBankRewardTargets } from './bankEligibility';
@@ -82,14 +83,18 @@ export function handleRedeemBankReward(
 
     case 'block_rival_delivery': {
       const rival = resolveTargetRival(state, targetPlayerId)!;
-      patchPlayer(rival.id, { blockDeliveryTurns: Math.max(rival.blockDeliveryTurns, eff.turns) });
-      return resumeAfterPostAction(makeState(`${rival.name} deliveries stopped (${eff.turns}T).`));
+      patchPlayer(rival.id, {
+        blockDeliveryWindow: extendTimedWindow(rival.blockDeliveryWindow, state, eff.rounds, active.id),
+      });
+      return resumeAfterPostAction(makeState(`${rival.name} deliveries stopped (${eff.rounds} rd).`));
     }
 
     case 'block_rival_new_stores': {
       const rival = resolveTargetRival(state, targetPlayerId)!;
-      patchPlayer(rival.id, { blockNewStoreTurns: Math.max(rival.blockNewStoreTurns, eff.turns) });
-      return resumeAfterPostAction(makeState(`${rival.name} new stores stopped (${eff.turns}T).`));
+      patchPlayer(rival.id, {
+        blockNewStoreWindow: extendTimedWindow(rival.blockNewStoreWindow, state, eff.rounds, active.id),
+      });
+      return resumeAfterPostAction(makeState(`${rival.name} new stores stopped (${eff.rounds} rd).`));
     }
 
     case 'reverse_direction':
@@ -109,8 +114,11 @@ export function handleRedeemBankReward(
 
     case 'pencil_override': {
       const target = eff.target === 'self' ? active : resolveTargetRival(state, targetPlayerId)!;
-      patchPlayer(target.id, { pencilMode: eff.mode, pencilTurnsLeft: eff.turns });
-      return resumeAfterPostAction(makeState(`${target.name} pencil -> ${eff.mode} (${eff.turns}T).`));
+      patchPlayer(target.id, {
+        pencilMode: eff.mode,
+        pencilWindow: createTimedWindow(state, eff.rounds, active.id),
+      });
+      return resumeAfterPostAction(makeState(`${target.name} pencil -> ${eff.mode} (${eff.rounds} rd).`));
     }
 
     case 'set_rival_cash_fraction': {
@@ -208,8 +216,10 @@ export function handleRedeemBankReward(
     }
 
     case 'double_own_store_prices':
-      patchPlayer(active.id, { doublePriceTurns: eff.turns + 1 });
-      return resumeAfterPostAction(makeState(`Store prices 2x for ${eff.turns} turns!`));
+      patchPlayer(active.id, {
+        doublePriceWindow: extendTimedWindow(active.doublePriceWindow, state, eff.rounds, active.id),
+      });
+      return resumeAfterPostAction(makeState(`Store prices 2x for ${eff.rounds} rounds!`));
 
     case 'claim_victory':
       return {

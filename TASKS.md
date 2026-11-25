@@ -33,3 +33,10 @@ Replace the placeholder CSS Grid board with a hybrid 2D WebGL canvas (`PixiJS`) 
 - [ ] **Animated Mall Props:** Add scrolling escalator treads, moving elevator cars between floors, and walking customers/cashiers inside open stores.
 - [ ] **Character & Item Art:** Add character reaction portraits on Events and Bank visits, plus illustrated icons across all 264 store items.
 - [ ] **Camera Zoom & Pan:** Add smooth camera zoom and pan controls for larger mall layouts (`16×4` and `11×5` stages).
+
+---
+
+## 4. Documentation & Release Polish
+
+- [ ] **Offline Play & Local Modding Guide** (`README.md`)
+  - Deferred until the codebase stabilizes: expand the README with step-by-step instructions for running offline (`npm install` once + `npm run dev` / `npm run preview` or static HTTP server, noting why `dist/index.html` cannot open via `file://`), what works offline vs. online (PeerJS/STUN), and a clean file map of `src/config/` and `src/engine/` for customizing stores, stages, events, rewards, and rules.

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultAvatarForSeat } from '../src/config/avatarTypes';
-import { EVENT_CARDS } from '../src/config/balance';
+import { EVENT_CARDS, STORE_TYPES } from '../src/config/balance';
 import { redactStateForClient } from '../src/engine/actions';
 import { drawThreeEventIds, getEventRubberBandColumn } from '../src/engine/eventDraw';
-import { computePaydayAmount } from '../src/engine/helpers';
+import { computePaydayAmount, getEffectiveItemRetailPrice } from '../src/engine/helpers';
 import { applyAction, createInitialGameState } from '../src/engine/state';
+import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft, getTurnClock } from '../src/engine/timedEffects';
+import type { GameState } from '../src/engine/types';
 
 const PLAYERS = [
   { name: 'Alice', avatar: { ...getDefaultAvatarForSeat(0), walkSound: 'poot' as const, customImage: 'data:image/webp;base64,AAA' } },
@@ -194,5 +196,138 @@ describe('bank rewards, paydays, events, rubber-banding, and calendar', () => {
     expect(backToP1.players[0]!.horizontalDir).toBe('left');
     expect(backToP1.players[0]!.verticalDir).toBe('down');
     expect(backToP1.players[0]!.reverseDirNextTurn).toBe(false);
+  });
+
+  it('keeps closed stores shut through the caster next turn (Item 18)', () => {
+    const base = createInitialGameState(PLAYERS, { startingCash: 3000 }, 21, 'stage_0');
+    const setupState = {
+      ...base,
+      activePlayerIndex: 1,
+      turnNumber: 2,
+      phase: 'EVENT_PICK' as const,
+      eventChoices: ['eve_031', 'eve_032', 'eve_033'],
+      revealedEventSlot: 0,
+      shops: {
+        ...base.shops,
+        shop_1_1: { ...base.shops.shop_1_1!, ownerId: 'p_1', storeTypeId: 'pancake_house', stock: { pancake_1: 2 } },
+        shop_1_2: { ...base.shops.shop_1_2!, ownerId: 'p_2', storeTypeId: 'toy_shop', stock: { toy_1: 2 } },
+      },
+    };
+
+    // Bob (p_2) draws Mall Holiday (1 round) -> advances to Alice (clock = 2)
+    const afterHoliday = applyAction(setupState, { type: 'PICK_EVENT_CARD', cardId: 'eve_031' });
+    expect(afterHoliday.activePlayerIndex).toBe(0);
+    expect(getTurnClock(afterHoliday)).toBe(2);
+    expect(getTimedWindowRoundsLeft(afterHoliday, afterHoliday.shops.shop_1_1!.closedWindow)).toBe(1);
+    expect(getTimedWindowRoundsLeft(afterHoliday, afterHoliday.shops.shop_1_2!.closedWindow)).toBe(1);
+    expect(formatTimedWindowEndpoint(afterHoliday, afterHoliday.shops.shop_1_1!.closedWindow!, 'Reopens')).toBe(
+      "Reopens after Bob's next turn"
+    );
+
+    // Alice finishes her turn; Bob gets his turn (clock = 3) and Alice's shop_1_1 MUST STILL BE CLOSED
+    const bobTurn = applyAction({ ...afterHoliday, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+    expect(bobTurn.activePlayerIndex).toBe(1);
+    expect(getTurnClock(bobTurn)).toBe(3);
+    expect(bobTurn.shops.shop_1_1!.closedWindow).not.toBeNull();
+    expect(bobTurn.shops.shop_1_2!.closedWindow).not.toBeNull();
+    expect(getTimedWindowRoundsLeft(bobTurn, bobTurn.shops.shop_1_1!.closedWindow)).toBe(1);
+    expect(formatTimedWindowEndpoint(bobTurn, bobTurn.shops.shop_1_1!.closedWindow!, 'Reopens')).toBe(
+      'Reopens after this turn (Bob)'
+    );
+
+    // Bob finishes that turn -> clock = 4 > expiresAt (3), so both stores reopen together
+    const reopened = applyAction({ ...bobTurn, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+    expect(reopened.activePlayerIndex).toBe(0);
+    expect(getTurnClock(reopened)).toBe(4);
+    expect(reopened.shops.shop_1_1!.closedWindow).toBeNull();
+    expect(reopened.shops.shop_1_2!.closedWindow).toBeNull();
+
+    // Exclusive Open (eve_032) closes Alice's store while leaving Bob's open, lasting through Bob's turn
+    const exclusive = applyAction(
+      { ...setupState, revealedEventSlot: 1 },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_032' }
+    );
+    expect(exclusive.shops.shop_1_1!.closedWindow).not.toBeNull();
+    expect(exclusive.shops.shop_1_2!.closedWindow).toBeNull();
+    const exclBobTurn = applyAction({ ...exclusive, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+    expect(exclBobTurn.shops.shop_1_1!.closedWindow).not.toBeNull();
+    const exclReopen = applyAction({ ...exclBobTurn, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+    expect(exclReopen.shops.shop_1_1!.closedWindow).toBeNull();
+
+    // Mall Renovation (eve_033, 2 rounds) counts 2 -> 1 cleanly across rounds
+    let reno = applyAction({ ...setupState, revealedEventSlot: 2 }, { type: 'PICK_EVENT_CARD', cardId: 'eve_033' });
+    expect(getTimedWindowRoundsLeft(reno, reno.shops.shop_1_1!.closedWindow)).toBe(2);
+    reno = applyAction({ ...reno, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' }); // Bob T1 (clock 3)
+    expect(getTimedWindowRoundsLeft(reno, reno.shops.shop_1_1!.closedWindow)).toBe(2);
+    reno = applyAction({ ...reno, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' }); // Alice T2 (clock 4)
+    expect(getTimedWindowRoundsLeft(reno, reno.shops.shop_1_1!.closedWindow)).toBe(1);
+    reno = applyAction({ ...reno, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' }); // Bob T2 (clock 5)
+    expect(getTimedWindowRoundsLeft(reno, reno.shops.shop_1_1!.closedWindow)).toBe(1);
+    reno = applyAction({ ...reno, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' }); // Reopens (clock 6)
+    expect(reno.shops.shop_1_1!.closedWindow).toBeNull();
+  });
+
+  it('tracks 2x Prices for 4 rounds without cast-turn +1 leak and preserves Slow Pencil on Spin Again (Item 16)', () => {
+    const base = createInitialGameState(PLAYERS, { startingCash: 3000 }, 33, 'stage_0');
+    const item = STORE_TYPES.pancake_house!.items[0]!;
+    let state: GameState = {
+      ...base,
+      phase: 'BANK_MENU',
+      pendingPostBankPhase: 'STEPPING',
+      remainingSteps: 2,
+      players: base.players.map((p, i) => (i === 0 ? { ...p, points: 30 } : p)),
+      shops: {
+        ...base.shops,
+        shop_1_1: { ...base.shops.shop_1_1!, ownerId: 'p_1', storeTypeId: 'pancake_house', stock: { [item.id]: 2 } },
+      },
+    };
+
+    // Pass Bank mid-move: immediately shows 4 rd (not 5) and endpoint names Alice
+    state = applyAction(state, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_32_double_prices' });
+    expect(state.phase).toBe('STEPPING');
+    expect(getTimedWindowRoundsLeft(state, state.players[0]!.doublePriceWindow)).toBe(4);
+    expect(formatTimedWindowEndpoint(state, state.players[0]!.doublePriceWindow!, '2× prices end')).toBe(
+      "2× prices end after Alice's turn (4 rounds)"
+    );
+
+    // Finish Alice's turn -> Bob's turn 1 (clock 1): 4 rd and 2x price
+    state = applyAction({ ...state, phase: 'SHOP_BUY_SLOT' as const, pendingPostBankPhase: null }, { type: 'SKIP_SHOP_SLOT' });
+    expect(getEffectiveItemRetailPrice(state, item, 'p_1')).toBe(item.retailPrice * 2);
+    expect(getTimedWindowRoundsLeft(state, state.players[0]!.doublePriceWindow)).toBe(4);
+
+    // Advance through Bob's 4 turns against 2x prices (expires when Alice finishes turn at clock 8 -> clock 9)
+    for (let i = 0; i < 7; i++) {
+      state = applyAction({ ...state, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+      expect(state.players[0]!.doublePriceWindow).not.toBeNull();
+    }
+    expect(getTurnClock(state)).toBe(8);
+    expect(getTimedWindowRoundsLeft(state, state.players[0]!.doublePriceWindow)).toBe(1);
+
+    state = applyAction({ ...state, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' });
+    expect(getTurnClock(state)).toBe(9);
+    expect(state.players[0]!.doublePriceWindow).toBeNull();
+    expect(getEffectiveItemRetailPrice(state, item, 'p_1')).toBe(item.retailPrice);
+
+    // Slow Pencil + Spin Again keeps Slow Pencil active cleanly for 2 full rounds
+    let slowState = applyAction(
+      {
+        ...base,
+        phase: 'BANK_MENU' as const,
+        players: base.players.map((p, i) => (i === 0 ? { ...p, points: 20 } : p)),
+      },
+      { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_16_slow_pencil' }
+    );
+    expect(slowState.players[0]!.pencilMode).toBe('slow');
+    expect(getTimedWindowRoundsLeft(slowState, slowState.players[0]!.pencilWindow)).toBe(2);
+
+    slowState = applyAction({ ...slowState, phase: 'SHOP_BUY_SLOT' as const }, { type: 'SKIP_SHOP_SLOT' }); // Alice next turn (clock 2)
+    expect(getTimedWindowRoundsLeft(slowState, slowState.players[0]!.pencilWindow)).toBe(2);
+    slowState = applyAction(
+      { ...slowState, phase: 'EVENT_PICK' as const, eventChoices: ['eve_045', 'eve_001', 'eve_002'], revealedEventSlot: 0 },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_045' }
+    );
+    expect(slowState.phase).toBe('ROLL_PENCIL');
+    expect(slowState.players[0]!.pencilWindow).not.toBeNull();
+    expect(getTimedWindowRoundsLeft(slowState, slowState.players[0]!.pencilWindow)).toBe(2);
   });
 });

@@ -1,6 +1,7 @@
 import type { GameAction } from '../engine/actions';
 import { formatCalendarDate } from '../engine/eventDraw';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
+import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState, PencilFace } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
 import { renderEventPickPanel, renderEventStorePanel } from './eventPanel';
@@ -152,9 +153,13 @@ export function renderActionPanel(
   const heading = document.createElement('h3');
   heading.className = 'panel-title';
   const dateTag = formatCalendarDate(state.month, state.year);
+  const saleRd = state.globalSale ? getTimedWindowRoundsLeft(state, state.globalSale.timer) : 0;
   const saleTag = state.globalSale
-    ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF)`
+    ? ` | ${state.globalSale.label} (${Math.round((1 - state.globalSale.priceMultiplier) * 100)}% OFF · ${saleRd} rd)`
     : '';
+  if (state.globalSale) {
+    heading.title = formatTimedWindowEndpoint(state, state.globalSale.timer, `${state.globalSale.label} ends`);
+  }
   const waitTag = viewOptions.reconnecting
     ? ' · Reconnecting to host…'
     : viewOptions.readOnly && state.phase !== 'GAME_OVER'

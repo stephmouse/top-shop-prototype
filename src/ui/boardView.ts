@@ -244,12 +244,15 @@ export function renderBoard(
               ? ['tile-badge badge-closed', 'CLOSED']
               : null;
     badgeEl.hidden = !badge;
+    badgeEl.title = content.isClosed && content.closedTooltip ? content.closedTooltip : '';
     if (badge) { badgeEl.className = badge[0]!; badgeEl.textContent = badge[1]!; }
 
     nameEl.textContent = content.name;
     statsEl.textContent = content.stats ?? '';
+    statsEl.title = content.statsTooltip ?? '';
     statsEl.hidden = !content.stats;
     updateShopShelf(shelfEl, content.shop);
-    shutterEl.textContent = content.isClosed ? `CLOSED (${content.closedTurns}T)` : 'CLOSED';
+    shutterEl.textContent = content.isClosed ? `CLOSED (${content.closedRounds} rd)` : 'CLOSED';
+    shutterEl.title = content.closedTooltip ?? '';
   }
 }

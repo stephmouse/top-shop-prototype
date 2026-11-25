@@ -124,7 +124,11 @@ describe('movement, escalators, undo, elevators, and preview', () => {
       ...base,
       phase: 'STEPPING' as const,
       remainingSteps: 1,
-      elevatorLock: { blockedPlayerId: 'p_1', onlyPlayerId: null, turnsLeft: 1 },
+      elevatorLock: {
+        blockedPlayerId: 'p_1',
+        onlyPlayerId: null,
+        timer: { castAt: 0, expiresAt: 2, casterId: 'p_2' },
+      },
       players: base.players.map((p, idx) =>
         idx === 0 ? { ...p, tileId: 'f2_c4', horizontalDir: 'right' as const } : p
       ),

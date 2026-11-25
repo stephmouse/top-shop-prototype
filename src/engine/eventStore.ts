@@ -15,7 +15,7 @@ import {
 import type { GameState, Player, Shop } from './types';
 
 export function resetShopSlot(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
+  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, closedWindow: null };
 }
 
 export function applyStockTransform(

@@ -8,6 +8,7 @@ import {
   getTile,
 } from '../engine/helpers';
 import { computeResultingChainLevel, getAllowedStoreTypeIds } from '../engine/shops';
+import { formatTimedWindowEndpoint } from '../engine/timedEffects';
 import type { GameState, ItemDef } from '../engine/types';
 import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPickState';
 import {
@@ -40,9 +41,9 @@ export function renderBuySlotPanel(
   const renderList = () => {
     list.innerHTML = '';
 
-    if (active.blockNewStoreTurns > 0) {
+    if (active.blockNewStoreWindow) {
       const blocked = document.createElement('div');
-      blocked.textContent = "This store can't be opened due to vandalism.";
+      blocked.textContent = `This store can't be opened due to vandalism (${formatTimedWindowEndpoint(state, active.blockNewStoreWindow, 'Ends')}).`;
       list.appendChild(blocked);
     } else {
       const allowedIds = getAllowedStoreTypeIds(

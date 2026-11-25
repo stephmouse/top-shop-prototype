@@ -17,6 +17,7 @@ import {
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
 } from './shops';
+import { createTimedWindow, extendTimedWindow } from './timedEffects';
 import type { EventCardDef, GameState } from './types';
 
 export { handleResolveEventStore, handleRevealEventCard, handleSkipEventStore } from './eventStore';
@@ -24,10 +25,6 @@ export type { EventCardDef };
 
 export function computeEventBaseCash(totalMonths: number): number {
   return (Math.floor(Math.max(0, totalMonths) / 24) + 1) * 100;
-}
-
-function activeCount(state: GameState): number {
-  return Math.max(1, state.players.filter((p) => !p.isBankrupt).length);
 }
 
 export function handlePickEventCard(state: GameState, cardId: string): GameState {
@@ -126,7 +123,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
     }
 
     case 'buy_empty_store': {
-      if (active.blockNewStoreTurns > 0) return resumeAfterPostAction(nextBase('New stores blocked.'));
+      if (active.blockNewStoreWindow) return resumeAfterPostAction(nextBase('New stores blocked.'));
       const hasAny = Object.values(shops).some(
         (s) =>
           s.ownerId === null &&
@@ -173,8 +170,10 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
           (eff.scope === 'self' && s.ownerId === active.id) ||
           (eff.scope === 'others' && s.ownerId !== active.id);
         if (match) {
-          const extra = s.ownerId === active.id ? 1 : 0;
-          shops[s.id] = { ...s, isClosedTurns: Math.max(s.isClosedTurns, eff.rounds + extra) };
+          shops[s.id] = {
+            ...s,
+            closedWindow: extendTimedWindow(s.closedWindow, state, eff.rounds, active.id),
+          };
         }
       }
       return resumeAfterPostAction(nextBase(card.description));
@@ -231,7 +230,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
 
     case 'elevator_lock':
       elevatorLock = {
-        turnsLeft: eff.rounds * activeCount(state) + 1,
+        timer: createTimedWindow(state, eff.rounds, active.id),
         onlyPlayerId: eff.mode === 'only_self' ? active.id : null,
         blockedPlayerId: eff.mode === 'ban_self' ? active.id : null,
       };
@@ -241,7 +240,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
       globalSale = {
         label: card.name,
         priceMultiplier: eff.priceMultiplier,
-        turnsLeft: eff.rounds * activeCount(state) + 1,
+        timer: createTimedWindow(state, eff.rounds, active.id),
       };
       return resumeAfterPostAction(nextBase(card.description));
   }

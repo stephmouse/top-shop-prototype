@@ -55,7 +55,7 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
       return {
         kind: 'player',
         players:
-          active.blockNewStoreTurns === 0
+          !active.blockNewStoreWindow
             ? rivals.filter((p) => canPlayerOpenWithCash(state, active.id, p.cash))
             : [],
         prompt: "Pick Rival Whose Cash You'll Use:",
@@ -176,7 +176,7 @@ export function canRedeemBankReward(
     case 'equip_chirp_shoes':
       return !active.chirpSandals;
     case 'open_delivery':
-      if (active.blockDeliveryTurns > 0) return false;
+      if (active.blockDeliveryWindow) return false;
       if (eff.mode === 'rival_paid') {
         return Boolean(
           resolveTargetRivalShop(state, targetShopId, (s) => getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level])
@@ -190,7 +190,7 @@ export function canRedeemBankReward(
     case 'close_all_empty_rival_stores':
       return Boolean(resolveTargetRivalShop(state, undefined, (s) => getShopTotalStock(s) === 0));
     case 'open_free_random_shop':
-      return active.blockNewStoreTurns === 0 && canPlayerOpenWithCash(state, active.id, Infinity);
+      return !active.blockNewStoreWindow && canPlayerOpenWithCash(state, active.id, Infinity);
     case 'capture_rival_store':
       return Boolean(
         resolveTargetRivalShop(

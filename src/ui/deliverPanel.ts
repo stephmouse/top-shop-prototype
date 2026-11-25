@@ -2,6 +2,7 @@ import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { getActivePlayer, getTile } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
+import { formatTimedWindowEndpoint } from '../engine/timedEffects';
 import type { DeliverMode, GameState, Shop } from '../engine/types';
 import {
   getDeliverSelectedShopId,
@@ -177,10 +178,12 @@ export function renderDeliverPanel(
   const render = () => {
     const notify = () => (onUiChange ? onUiChange() : render());
     root.innerHTML = '';
-    if (active.blockDeliveryTurns > 0 || candidateShops.length === 0) {
+    if (active.blockDeliveryWindow || candidateShops.length === 0) {
       setDeliverSelectedShopId(state, null);
       const msg = document.createElement('div');
-      msg.textContent = active.blockDeliveryTurns > 0 ? 'Deliveries are blocked for this turn.' : 'No eligible stores to deliver to.';
+      msg.textContent = active.blockDeliveryWindow
+        ? `Deliveries are blocked (${formatTimedWindowEndpoint(state, active.blockDeliveryWindow, 'Ends')}).`
+        : 'No eligible stores to deliver to.';
       root.append(msg, makePanelButton('Skip Delivery', () => { setDeliverSelectedShopId(state, null); dispatch({ type: 'SKIP_DELIVER' }); }, { primary: true }));
       return;
     }

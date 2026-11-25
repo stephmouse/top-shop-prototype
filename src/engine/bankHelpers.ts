@@ -56,7 +56,7 @@ export function canPlayerOpenWithCash(state: GameState, ownerId: string, cashBud
 }
 
 function makeVacantShop(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, isClosedTurns: 0 };
+  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, closedWindow: null };
 }
 
 function recomputeSegmentOwners(
@@ -103,7 +103,7 @@ export function captureRivalShopForPlayer(
   const prevOwnerId = shop.ownerId;
   const nextTypeId = shop.storeTypeId && allowed.includes(shop.storeTypeId) ? shop.storeTypeId : allowed[0]!;
   const keepStock = nextTypeId === shop.storeTypeId && getShopTotalStock(shop) > 0;
-  const claimed: Shop = { ...shop, ownerId: newOwnerId, storeTypeId: nextTypeId, isClosedTurns: 0 };
+  const claimed: Shop = { ...shop, ownerId: newOwnerId, storeTypeId: nextTypeId, closedWindow: null };
 
   const nextShops = recomputeSegmentOwners(
     state,
@@ -128,7 +128,7 @@ export function captureRivalChainForPlayer(
 
   const nextShops = { ...state.shops };
   for (const member of getConnectedChainShops(state, shopId)) {
-    nextShops[member.id] = { ...member, ownerId: newOwnerId, isClosedTurns: 0 };
+    nextShops[member.id] = { ...member, ownerId: newOwnerId, closedWindow: null };
   }
   return recomputeSegmentOwners(state, nextShops, shop.segmentId, shop.ownerId, newOwnerId);
 }
@@ -153,7 +153,7 @@ export function upgradeOwnSegmentToChain(
     if (s.segmentId !== target.segmentId) continue;
     const isOwn = s.ownerId === ownerId;
     if (!isOwn) newlyClaimedIds.add(s.id);
-    claimedShops[s.id] = { ...s, ownerId, storeTypeId, stock: isOwn ? s.stock : {}, isClosedTurns: 0 };
+    claimedShops[s.id] = { ...s, ownerId, storeTypeId, stock: isOwn ? s.stock : {}, closedWindow: null };
   }
 
   const nextShops = recomputeSegmentOwners(state, claimedShops, target.segmentId, ownerId);

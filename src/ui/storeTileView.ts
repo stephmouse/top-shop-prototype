@@ -3,6 +3,7 @@ import { getStoreVisual, STORE_ICON_PATHS } from '../config/storeVisuals';
 import type { StoreIconId, StoreVisualCategory } from '../config/storeVisuals';
 import { canPlayerUseElevator, getActivePlayer } from '../engine/helpers';
 import { getCheapestItemPrice, getShopTotalStock } from '../engine/shops';
+import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState, Shop, Tile } from '../engine/types';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -10,13 +11,15 @@ const SVG_NS = 'http://www.w3.org/2000/svg';
 export interface TileContent {
   name: string;
   stats?: string;
+  statsTooltip?: string;
   iconId: StoreIconId;
   category?: StoreVisualCategory;
   accent?: string;
   isOwned: boolean;
   isVacantShop: boolean;
   isClosed: boolean;
-  closedTurns: number;
+  closedRounds: number;
+  closedTooltip?: string;
   level: 1 | 2 | 3 | 4 | null;
   shop?: Shop;
 }
@@ -156,18 +159,21 @@ export function updateShopShelf(shelfEl: HTMLElement, shop: Shop | undefined): v
 
 export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: boolean): TileContent {
   const active = getActivePlayer(state);
-  const base = { isOwned: false, isVacantShop: false, isClosed: false, closedTurns: 0, level: null };
+  const base = { isOwned: false, isVacantShop: false, isClosed: false, closedRounds: 0, level: null };
 
   switch (tile.type) {
     case 'bank':
       return { ...base, name: 'BANK', stats: '$ / Pts', iconId: 'bank' };
-    case 'elevator':
+    case 'elevator': {
+      const locked = !canPlayerUseElevator(state, active.id) && state.elevatorLock;
       return {
         ...base,
         name: hasMultiShaft ? `ELEVATOR ${tile.elevatorShaft === 1 ? 'B' : 'A'}` : 'ELEVATOR',
-        stats: canPlayerUseElevator(state, active.id) ? undefined : 'LOCKED',
+        stats: locked ? `LOCKED (${getTimedWindowRoundsLeft(state, locked.timer)} rd)` : undefined,
+        statsTooltip: locked ? formatTimedWindowEndpoint(state, locked.timer, 'Unlocks') : undefined,
         iconId: 'elevator',
       };
+    }
     case 'escalator': {
       const { up, down } = tile.neighbors;
       const escAdj = computeEscalatorAdjacency(state, tile);
@@ -207,11 +213,15 @@ export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: b
       const total = getShopTotalStock(shop);
       const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
       const owner = state.players.find((p) => p.id === shop.ownerId);
-      const doubleMult = owner && owner.doublePriceTurns > 0 ? 2 : 1;
+      const doubleMult = owner && owner.doublePriceWindow ? 2 : 1;
       const mult = (state.globalSale?.priceMultiplier ?? 1) * doubleMult;
       const minPrice = getCheapestItemPrice(shop, mult);
       const priceStr = minPrice !== null ? `$${minPrice}${doubleMult > 1 ? '×2' : ''}` : 'EMPTY';
       const vis = getStoreVisual(shop.storeTypeId);
+      const closedRounds = getTimedWindowRoundsLeft(state, shop.closedWindow);
+      const closedTooltip = shop.closedWindow
+        ? formatTimedWindowEndpoint(state, shop.closedWindow, 'Reopens')
+        : undefined;
       return {
         name: def?.name ?? 'Shop',
         stats: `L${shop.level} · ${total}/${cap} · ${priceStr}`,
@@ -220,8 +230,9 @@ export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: b
         accent: vis.accent,
         isOwned: true,
         isVacantShop: false,
-        isClosed: shop.isClosedTurns > 0,
-        closedTurns: shop.isClosedTurns,
+        isClosed: Boolean(shop.closedWindow),
+        closedRounds,
+        closedTooltip,
         level: shop.level,
         shop,
       };

@@ -11,6 +11,7 @@ import type {
   EventScope,
   EventStorePrompt,
   GlobalSaleState,
+  TimedEffectWindow,
 } from './effectTypes';
 
 export type {
@@ -24,6 +25,7 @@ export type {
   EventScope,
   EventStorePrompt,
   GlobalSaleState,
+  TimedEffectWindow,
 };
 
 export type TileType = 'shop' | 'bank' | 'elevator' | 'escalator';
@@ -88,7 +90,7 @@ export interface Shop {
   storeTypeId: string | null;
   level: 1 | 2 | 3 | 4;
   stock: Record<string, number>; // itemId -> quantity
-  isClosedTurns: number;
+  closedWindow: TimedEffectWindow | null;
 }
 
 export type PencilOverrideMode = 'normal' | 'ones_twos' | 'event_only' | 'slow';
@@ -105,13 +107,13 @@ export interface Player {
   verticalDir: VerticalDir | null;
   stepsSincePayday: number;
   bankVisits: number;
-  blockDeliveryTurns: number;
-  blockNewStoreTurns: number;
+  blockDeliveryWindow: TimedEffectWindow | null;
+  blockNewStoreWindow: TimedEffectWindow | null;
   pencilMode: PencilOverrideMode;
-  pencilTurnsLeft: number;
+  pencilWindow: TimedEffectWindow | null;
   doubleNextPayday: boolean;
   skipNextPayday: boolean;
-  doublePriceTurns: number;
+  doublePriceWindow: TimedEffectWindow | null;
   unlockDirNextTurn: boolean;
   reverseDirNextTurn: boolean;
   chirpSandals: boolean;

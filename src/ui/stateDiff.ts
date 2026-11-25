@@ -144,7 +144,7 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'buyout' });
     } else if (ns.ownerId && ns.level > ps.level) {
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'upgraded' });
-    } else if (ns.isClosedTurns > ps.isClosedTurns) {
+    } else if ((ns.closedWindow?.expiresAt ?? -1) > (ps.closedWindow?.expiresAt ?? -1)) {
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'closed' });
     } else if (ns.ownerId && sumStock(ns) > sumStock(ps)) {
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'restocked' });

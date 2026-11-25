@@ -19,7 +19,7 @@ import type { GameState, Player, PurchaseReceipt, Shop } from './types';
 export function handleDeliverItems(state: GameState, shopId: string, order: Record<string, number>): GameState {
   if (state.phase !== 'SHOP_DELIVER') return state;
   const active = getActivePlayer(state);
-  if (active.blockDeliveryTurns > 0) return state;
+  if (active.blockDeliveryWindow) return state;
 
   const mode = state.deliverMode ?? 'own_paid';
   const shop = state.shops[shopId];
@@ -236,7 +236,7 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     storeTypeId: null,
     level: 1,
     stock: {},
-    isClosedTurns: 0,
+    closedWindow: null,
   };
   const nextShops = recomputeSegmentChainLevels(
     { ...state, shops: { ...state.shops, [shop.id]: resetShop } },

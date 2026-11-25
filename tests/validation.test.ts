@@ -169,12 +169,34 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     const manual = { schemaVersion: SAVE_SCHEMA_VERSION, savedAt: '2026-11-24T12:00:00.000Z', state };
     expect(parseManualMatchEnvelope(manual)).toEqual(manual);
     expect(parseManualMatchEnvelope({ savedAt: '2026-11-24T12:00:00.000Z', state })).toBeNull();
-    expect(parseManualMatchEnvelope({ ...manual, schemaVersion: 2 })).toBeNull();
+    expect(parseManualMatchEnvelope({ ...manual, schemaVersion: SAVE_SCHEMA_VERSION + 1 })).toBeNull();
+    expect(
+      isValidGameState({
+        ...state,
+        shops: {
+          ...state.shops,
+          [firstShopKey]: {
+            ...state.shops[firstShopKey]!,
+            closedWindow: { castAt: 3, expiresAt: 1, casterId: 'p_1' },
+          },
+        },
+      })
+    ).toBe(false);
+    expect(
+      isValidGameState({
+        ...state,
+        globalSale: {
+          label: 'Bad Sale',
+          priceMultiplier: 0.5,
+          timer: { castAt: -1, expiresAt: 2, casterId: 'p_1' },
+        },
+      })
+    ).toBe(false);
   });
 
   it('guards GameState, Player, and Shop schema keys against SAVE_SCHEMA_VERSION', () => {
     const schemaHint = 'GameState/Player/Shop keys changed — update src/ui/stateValidation.ts and bump SAVE_SCHEMA_VERSION.';
-    expect(SAVE_SCHEMA_VERSION).toBe(1);
+    expect(SAVE_SCHEMA_VERSION).toBe(2);
 
     const state = createInitialGameState([{ name: 'A' }, { name: 'B' }], {}, 1, 'stage_0');
     expect(Object.keys(state).sort(), schemaHint).toEqual([
@@ -214,20 +236,20 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     ]);
     expect(Object.keys(state.players[0]!).sort(), schemaHint).toEqual([
       'bankVisits',
-      'blockDeliveryTurns',
-      'blockNewStoreTurns',
+      'blockDeliveryWindow',
+      'blockNewStoreWindow',
       'cash',
       'chirpSandals',
       'color',
       'doubleNextPayday',
-      'doublePriceTurns',
+      'doublePriceWindow',
       'horizontalDir',
       'id',
       'isBankrupt',
       'isBot',
       'name',
       'pencilMode',
-      'pencilTurnsLeft',
+      'pencilWindow',
       'points',
       'reverseDirNextTurn',
       'skipNextPayday',
@@ -237,8 +259,8 @@ describe('action validation, persistence sanitization, and engine purity', () =>
       'verticalDir',
     ]);
     expect(Object.keys(Object.values(state.shops)[0]!).sort(), schemaHint).toEqual([
+      'closedWindow',
       'id',
-      'isClosedTurns',
       'level',
       'ownerId',
       'segmentId',

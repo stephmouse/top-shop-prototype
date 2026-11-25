@@ -2,7 +2,7 @@ import { MAX_PLAYERS, MIN_PLAYERS } from '../config/balance';
 import { OFFICIAL_STAGES } from '../config/maps';
 import type { GameState } from '../engine/types';
 
-export const SAVE_SCHEMA_VERSION = 1;
+export const SAVE_SCHEMA_VERSION = 2;
 
 export interface SavedMatchEnvelope {
   schemaVersion: number;
@@ -40,6 +40,21 @@ function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
 }
 
+function isValidTimedWindow(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (
+    isFiniteNumber(value.castAt) &&
+    value.castAt >= 0 &&
+    isFiniteNumber(value.expiresAt) &&
+    value.expiresAt >= value.castAt &&
+    typeof value.casterId === 'string'
+  );
+}
+
+function isValidNullableTimedWindow(value: unknown): boolean {
+  return value === null || isValidTimedWindow(value);
+}
+
 function isValidPlayer(p: unknown, tilesObj: Record<string, unknown>): boolean {
   if (!isRecord(p)) return false;
   if (typeof p.id !== 'string' || typeof p.name !== 'string' || typeof p.color !== 'string') return false;
@@ -49,6 +64,14 @@ function isValidPlayer(p: unknown, tilesObj: Record<string, unknown>): boolean {
   if (!isFiniteNumber(p.stepsSincePayday) || !isFiniteNumber(p.bankVisits)) return false;
   if (typeof p.pencilMode !== 'string') return false;
   if (typeof p.reverseDirNextTurn !== 'boolean' || typeof p.unlockDirNextTurn !== 'boolean') return false;
+  if (
+    !isValidNullableTimedWindow(p.blockDeliveryWindow) ||
+    !isValidNullableTimedWindow(p.blockNewStoreWindow) ||
+    !isValidNullableTimedWindow(p.pencilWindow) ||
+    !isValidNullableTimedWindow(p.doublePriceWindow)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -59,7 +82,7 @@ function isValidShop(s: unknown, tilesObj: Record<string, unknown>): boolean {
   if (typeof s.level !== 'number' || !Number.isInteger(s.level) || s.level < 1 || s.level > 4) return false;
   if (!isRecord(s.stock)) return false;
   if (!Object.values(s.stock).every((qty) => isFiniteNumber(qty) && qty >= 0)) return false;
-  if (!isFiniteNumber(s.isClosedTurns) || s.isClosedTurns < 0) return false;
+  if (!isValidNullableTimedWindow(s.closedWindow)) return false;
   return true;
 }
 
@@ -108,6 +131,25 @@ export function isValidGameState(raw: unknown): raw is GameState {
   if (!isRecord(raw.tiles) || !isRecord(raw.shops) || !isRecord(raw.segmentPools)) return false;
   if (!Array.isArray(raw.log) || !Array.isArray(raw.moveHistory) || !Array.isArray(raw.eventChoices)) return false;
   if (!Array.isArray(raw.deliveredShopIdsThisTurn)) return false;
+  if (
+    raw.globalSale !== null &&
+    (!isRecord(raw.globalSale) ||
+      typeof raw.globalSale.label !== 'string' ||
+      !isFiniteNumber(raw.globalSale.priceMultiplier) ||
+      raw.globalSale.priceMultiplier <= 0 ||
+      !isValidTimedWindow(raw.globalSale.timer))
+  ) {
+    return false;
+  }
+  if (
+    raw.elevatorLock !== null &&
+    (!isRecord(raw.elevatorLock) ||
+      !isValidTimedWindow(raw.elevatorLock.timer) ||
+      (raw.elevatorLock.onlyPlayerId !== null && typeof raw.elevatorLock.onlyPlayerId !== 'string') ||
+      (raw.elevatorLock.blockedPlayerId !== null && typeof raw.elevatorLock.blockedPlayerId !== 'string'))
+  ) {
+    return false;
+  }
 
   const tilesObj = raw.tiles;
   if (!raw.players.every((p) => isValidPlayer(p, tilesObj))) return false;

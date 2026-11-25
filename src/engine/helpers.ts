@@ -53,7 +53,7 @@ export function getEffectiveItemRetailPrice(
 ): number {
   const saleMult = state.globalSale?.priceMultiplier ?? 1;
   const owner = shopOwnerId ? state.players.find((p) => p.id === shopOwnerId) : undefined;
-  const ownerMult = owner && owner.doublePriceTurns > 0 ? 2 : 1;
+  const ownerMult = owner && owner.doublePriceWindow ? 2 : 1;
   return Math.max(1, Math.round(item.retailPrice * saleMult * ownerMult));
 }
 

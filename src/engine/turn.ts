@@ -1,5 +1,6 @@
 import { MONTH_NAMES } from '../config/balance';
 import { appendLog, computePlayerNetWorth, getActivePlayer, reversePlayerDirections } from './helpers';
+import { getTurnClock, isTimedWindowActive } from './timedEffects';
 import type { GameState, Shop } from './types';
 
 export function checkVictory(state: GameState): string | null {
@@ -52,36 +53,8 @@ export function advanceToNextTurn(state: GameState): GameState {
     });
   }
 
-  const finishedId = active.id;
-  const nextPlayers = state.players.map((p, idx) => {
-    if (idx !== state.activePlayerIndex) return p;
-    return {
-      ...p,
-      blockDeliveryTurns: Math.max(0, p.blockDeliveryTurns - 1),
-      blockNewStoreTurns: Math.max(0, p.blockNewStoreTurns - 1),
-      doublePriceTurns: Math.max(0, p.doublePriceTurns - 1),
-    };
-  });
-
-  const nextShops: Record<string, Shop> = {};
-  for (const [id, shop] of Object.entries(state.shops)) {
-    nextShops[id] =
-      shop.ownerId === finishedId && shop.isClosedTurns > 0
-        ? { ...shop, isClosedTurns: shop.isClosedTurns - 1 }
-        : shop;
-  }
-
-  const nextSale =
-    state.globalSale && state.globalSale.turnsLeft > 1
-      ? { ...state.globalSale, turnsLeft: state.globalSale.turnsLeft - 1 }
-      : null;
-  const nextElevLock =
-    state.elevatorLock && state.elevatorLock.turnsLeft > 1
-      ? { ...state.elevatorLock, turnsLeft: state.elevatorLock.turnsLeft - 1 }
-      : null;
-
   let log = state.log;
-  const total = nextPlayers.length;
+  const total = state.players.length;
   let nextIndex = (state.activePlayerIndex + 1) % total;
   let crossedRoundBoundary = false;
   let guard = 0;
@@ -90,34 +63,13 @@ export function advanceToNextTurn(state: GameState): GameState {
     if (nextIndex === state.roundStartPlayerIndex) {
       crossedRoundBoundary = true;
     }
-    const cand = nextPlayers[nextIndex];
+    const cand = state.players[nextIndex];
     if (!cand || cand.isBankrupt) {
       nextIndex = (nextIndex + 1) % total;
       guard++;
       continue;
     }
     break;
-  }
-
-  const incoming = nextPlayers[nextIndex];
-  if (incoming && !incoming.isBankrupt) {
-    let hDir = incoming.horizontalDir;
-    let vDir = incoming.verticalDir;
-    if (incoming.unlockDirNextTurn) {
-      hDir = null;
-      vDir = null;
-    } else if (incoming.reverseDirNextTurn) {
-      const reversed = reversePlayerDirections({ horizontalDir: hDir, verticalDir: vDir });
-      hDir = reversed.horizontalDir;
-      vDir = reversed.verticalDir;
-    }
-    nextPlayers[nextIndex] = {
-      ...incoming,
-      horizontalDir: hDir,
-      verticalDir: vDir,
-      unlockDirNextTurn: false,
-      reverseDirNextTurn: false,
-    };
   }
 
   const isRoundBoundary = crossedRoundBoundary;
@@ -128,6 +80,57 @@ export function advanceToNextTurn(state: GameState): GameState {
     const monthLabel = MONTH_NAMES[nextMonth] ?? 'April';
     log = [`[T${state.turnNumber + 1}] Calendar: Year ${nextYear} · ${monthLabel}.`, ...log].slice(0, 40);
   }
+
+  const nextNow = getTurnClock({
+    totalMonths: nextTotalMonths,
+    players: state.players,
+    activePlayerIndex: nextIndex,
+    roundStartPlayerIndex: state.roundStartPlayerIndex,
+  });
+
+  const nextPlayers = state.players.map((p, idx) => {
+    const pencilWindow = isTimedWindowActive(p.pencilWindow, nextNow) ? p.pencilWindow : null;
+    const basePlayer = {
+      ...p,
+      blockDeliveryWindow: isTimedWindowActive(p.blockDeliveryWindow, nextNow) ? p.blockDeliveryWindow : null,
+      blockNewStoreWindow: isTimedWindowActive(p.blockNewStoreWindow, nextNow) ? p.blockNewStoreWindow : null,
+      pencilWindow,
+      pencilMode: pencilWindow ? p.pencilMode : ('normal' as const),
+      doublePriceWindow: isTimedWindowActive(p.doublePriceWindow, nextNow) ? p.doublePriceWindow : null,
+    };
+    if (idx !== nextIndex || p.isBankrupt) return basePlayer;
+
+    let hDir = p.horizontalDir;
+    let vDir = p.verticalDir;
+    if (p.unlockDirNextTurn) {
+      hDir = null;
+      vDir = null;
+    } else if (p.reverseDirNextTurn) {
+      const reversed = reversePlayerDirections({ horizontalDir: hDir, verticalDir: vDir });
+      hDir = reversed.horizontalDir;
+      vDir = reversed.verticalDir;
+    }
+    return {
+      ...basePlayer,
+      horizontalDir: hDir,
+      verticalDir: vDir,
+      unlockDirNextTurn: false,
+      reverseDirNextTurn: false,
+    };
+  });
+
+  const nextShops: Record<string, Shop> = {};
+  for (const [id, shop] of Object.entries(state.shops)) {
+    nextShops[id] =
+      shop.closedWindow && !isTimedWindowActive(shop.closedWindow, nextNow)
+        ? { ...shop, closedWindow: null }
+        : shop;
+  }
+
+  const nextSale =
+    state.globalSale && isTimedWindowActive(state.globalSale.timer, nextNow) ? state.globalSale : null;
+  const nextElevLock =
+    state.elevatorLock && isTimedWindowActive(state.elevatorLock.timer, nextNow) ? state.elevatorLock : null;
 
   const candidateState: GameState = {
     ...state,

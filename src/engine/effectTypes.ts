@@ -1,6 +1,12 @@
 export type DeliverMode = 'own_paid' | 'rival_paid' | 'all_own_paid' | 'own_free';
 export type EventScope = 'self' | 'all' | 'others';
 
+export interface TimedEffectWindow {
+  castAt: number;
+  expiresAt: number;
+  casterId: string;
+}
+
 export type EventEffect =
   | { kind: 'nothing' }
   | { kind: 'cash_gift_scaled'; baseMultiplier: number }
@@ -35,11 +41,11 @@ export interface EventCardDef {
 export interface GlobalSaleState {
   label: string;
   priceMultiplier: number;
-  turnsLeft: number;
+  timer: TimedEffectWindow;
 }
 
 export interface ElevatorLockState {
-  turnsLeft: number;
+  timer: TimedEffectWindow;
   onlyPlayerId: string | null;
   blockedPlayerId: string | null;
 }
@@ -70,8 +76,8 @@ export type BankRewardEffect =
   | { kind: 'gain_points'; amount: number }
   | { kind: 'gain_cash'; amount: number }
   | { kind: 'gain_cash_per_store'; amountPerStore: number }
-  | { kind: 'block_rival_delivery'; turns: number }
-  | { kind: 'block_rival_new_stores'; turns: number }
+  | { kind: 'block_rival_delivery'; rounds: number }
+  | { kind: 'block_rival_new_stores'; rounds: number }
   | { kind: 'open_delivery'; mode: DeliverMode }
   | { kind: 'auto_stock_own'; mode: 'cheap_fill' | 'costly_one' | 'costly_fill' }
   | { kind: 'reverse_direction'; scope: 'rival' | 'all' }
@@ -79,7 +85,7 @@ export type BankRewardEffect =
   | { kind: 'close_all_empty_rival_stores' }
   | { kind: 'open_free_random_shop' }
   | { kind: 'open_shop_rival_cash' }
-  | { kind: 'pencil_override'; target: 'rival' | 'self'; mode: 'ones_twos' | 'event_only' | 'slow'; turns: number }
+  | { kind: 'pencil_override'; target: 'rival' | 'self'; mode: 'ones_twos' | 'event_only' | 'slow'; rounds: number }
   | { kind: 'capture_rival_store'; mode: 'one_empty' | 'all_empty' | 'one_l4' }
   | { kind: 'empty_rival_stores'; count: 1 | 4 }
   | { kind: 'set_rival_cash_fraction'; scope: 'one' | 'all'; numerator: number; denominator: number; giveToSelf: boolean }
@@ -91,7 +97,7 @@ export type BankRewardEffect =
   | { kind: 'swap_position_with_rival' }
   | { kind: 'payday_modifier'; target: 'self_double' | 'rival_stop' }
   | { kind: 'equip_chirp_shoes' }
-  | { kind: 'double_own_store_prices'; turns: number }
+  | { kind: 'double_own_store_prices'; rounds: number }
   | { kind: 'upgrade_own_store_l4' }
   | { kind: 'claim_victory' };
 

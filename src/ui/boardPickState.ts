@@ -162,7 +162,7 @@ function buildRawBoardShopPick(
 ): BoardShopPickSpec | null {
   const active = getActivePlayer(state);
 
-  if (state.phase === 'SHOP_DELIVER' && active.blockDeliveryTurns === 0) {
+  if (state.phase === 'SHOP_DELIVER' && !active.blockDeliveryWindow) {
     const { candidateShops, isSelectable } = getDeliverShopSelectionInfo(state);
     const selectableIds = new Set(candidateShops.filter(isSelectable).map((s) => s.id));
     if (selectableIds.size === 0) return null;

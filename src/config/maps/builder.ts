@@ -184,7 +184,7 @@ export function buildStageMap(def: StageDefinition): BuiltMap {
           storeTypeId: null,
           level: 1,
           stock: {},
-          isClosedTurns: 0,
+          closedWindow: null,
         };
         continue;
       }

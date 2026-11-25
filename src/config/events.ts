@@ -12,10 +12,10 @@ export const EVENT_CARDS: readonly EventCardDef[] = [
   { id: 'eve_029', name: 'Forced Sale (3x)', description: 'Please sell your store for 3 times price.', awardsPoints: true, effect: { kind: 'sell_store_prompt', multiplier: 3, forced: true } },
 
   // EVE_030 - EVE_033: Store closures
-  { id: 'eve_030', name: 'Store Inspection', description: 'Your store is closed one turn.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'self', rounds: 1 } },
-  { id: 'eve_031', name: 'Mall Holiday', description: 'All stores are closed one turn.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 1 } },
-  { id: 'eve_032', name: 'Exclusive Open', description: 'All stores except yours are closed.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'others', rounds: 1 } },
-  { id: 'eve_033', name: 'Mall Renovation', description: 'All stores are closed two turns.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 2 } },
+  { id: 'eve_030', name: 'Store Inspection', description: 'Your store is closed for 1 round.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'self', rounds: 1 } },
+  { id: 'eve_031', name: 'Mall Holiday', description: 'All stores are closed for 1 round.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 1 } },
+  { id: 'eve_032', name: 'Exclusive Open', description: 'All stores except yours are closed for 1 round.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'others', rounds: 1 } },
+  { id: 'eve_033', name: 'Mall Renovation', description: 'All stores are closed for 2 rounds.', awardsPoints: true, effect: { kind: 'close_stores', scope: 'all', rounds: 2 } },
 
   // EVE_034 - EVE_037, EVE_040 - EVE_042: Scaling player-to-player & Santa cash
   { id: 'eve_034', name: 'Cash Handout I', description: 'Each player took 0.5x base cash from you.', awardsPoints: true, effect: { kind: 'pay_each_rival_scaled', baseMultiplier: 0.5 } },
@@ -58,21 +58,21 @@ export const EVENT_CARDS: readonly EventCardDef[] = [
   { id: 'eve_068', name: 'Go Forward 8', description: 'Go forward 8 steps.', awardsPoints: true, effect: { kind: 'go_steps', steps: 8 } },
 
   // EVE_069 - EVE_072, EVE_075 - EVE_076: Elevator, Cash Match, Misc
-  { id: 'eve_069', name: 'Elevator Ban', description: "You can't use the elevator for one turn.", awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'ban_self', rounds: 1 } },
-  { id: 'eve_070', name: 'Elevator Outage', description: 'No one can use the elevator one turn.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'none', rounds: 1 } },
-  { id: 'eve_071', name: 'VIP Elevator', description: 'No one except you can use the elevator one turn.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 1 } },
+  { id: 'eve_069', name: 'Elevator Ban', description: "You can't use the elevator for 1 round.", awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'ban_self', rounds: 1 } },
+  { id: 'eve_070', name: 'Elevator Outage', description: 'No one can use the elevator for 1 round.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'none', rounds: 1 } },
+  { id: 'eve_071', name: 'VIP Elevator', description: 'No one except you can use the elevator for 1 round.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 1 } },
   { id: 'eve_072', name: 'Cash Match', description: 'Everyone now has the same amount of money as you.', awardsPoints: true, effect: { kind: 'equalize_cash' } },
   { id: 'eve_075', name: 'Chirp-Chirp Sandals', description: 'You have worn the "Chirp-Chirp" Sandals.', awardsPoints: true, effect: { kind: 'chirp_sandals' } },
   { id: 'eve_076', name: 'Miss', description: '-------Miss-------', awardsPoints: false, effect: { kind: 'nothing' } },
 
-  // EVE_080 - EVE_088: Seasonal / Sale events (all 1 turn)
-  { id: 'eve_080', name: 'Snowstorm', description: 'There is a snowstorm. All items are 50% off until next turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_081', name: 'Hurricane', description: 'There is a hurricane outside. All items are 50% off until next turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_082', name: 'Halloween Sale', description: 'Halloween sale. All items are 30% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } },
-  { id: 'eve_083', name: 'Christmas Sale', description: 'Santa: Merry Christmas! All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_084', name: 'Final Sale', description: 'Final Sale. All items are 70% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.3, rounds: 1 } },
-  { id: 'eve_085', name: 'Spring Sale', description: 'Spring Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_086', name: 'Summer Sale', description: 'Summer Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_087', name: 'Fall Sale', description: 'Fall Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
-  { id: 'eve_088', name: 'Winter Sale', description: 'Winter Sale. All items are 50% off for one turn.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  // EVE_080 - EVE_088: Seasonal / Sale events (all 1 round)
+  { id: 'eve_080', name: 'Snowstorm', description: 'There is a snowstorm. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_081', name: 'Hurricane', description: 'There is a hurricane outside. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_082', name: 'Halloween Sale', description: 'Halloween sale. All items are 30% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.7, rounds: 1 } },
+  { id: 'eve_083', name: 'Christmas Sale', description: 'Santa: Merry Christmas! All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_084', name: 'Final Sale', description: 'Final Sale. All items are 70% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.3, rounds: 1 } },
+  { id: 'eve_085', name: 'Spring Sale', description: 'Spring Sale. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_086', name: 'Summer Sale', description: 'Summer Sale. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_087', name: 'Fall Sale', description: 'Fall Sale. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
+  { id: 'eve_088', name: 'Winter Sale', description: 'Winter Sale. All items are 50% off for 1 round.', awardsPoints: true, effect: { kind: 'global_sale', priceMultiplier: 0.5, rounds: 1 } },
 ];

@@ -1,6 +1,7 @@
 import { PENCIL_FACES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { getActivePlayer } from '../engine/helpers';
+import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState, PencilFace } from '../engine/types';
 
 type DispatchFn = (action: GameAction) => void;
@@ -48,8 +49,8 @@ export function updateRemotePencil(spinning: boolean, stopFace: PencilFace | nul
 
 function getFacesForPlayer(state: GameState): readonly PencilFace[] {
   const active = getActivePlayer(state);
-  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'ones_twos') return [1, 2, 1, 2, 1, 2, 1, 2, 1];
-  if (active.pencilTurnsLeft > 0 && active.pencilMode === 'event_only') return ['E', 'E', 'E', 'E', 'E', 'E', 'E', 'E', 'E'];
+  if (active.pencilWindow && active.pencilMode === 'ones_twos') return [1, 2, 1, 2, 1, 2, 1, 2, 1];
+  if (active.pencilWindow && active.pencilMode === 'event_only') return ['E', 'E', 'E', 'E', 'E', 'E', 'E', 'E', 'E'];
   return PENCIL_FACES;
 }
 
@@ -86,7 +87,7 @@ export function renderPencilPanel(
 
   const active = getActivePlayer(state);
   const faces = getFacesForPlayer(state);
-  const isSlow = active.pencilTurnsLeft > 0 && active.pencilMode === 'slow';
+  const isSlow = Boolean(active.pencilWindow && active.pencilMode === 'slow');
   const speedDegPerSec = isSlow ? 180 : 900;
   const coastDeg = isSlow ? 0 : 120;
   let stopDurationMs = isSlow ? 80 : 320;
@@ -134,14 +135,16 @@ export function renderPencilPanel(
   });
   controls.append(primaryBtn, quickBtn);
 
-  if (active.pencilTurnsLeft > 0 && active.pencilMode !== 'normal') {
+  if (active.pencilWindow && active.pencilMode !== 'normal') {
+    const rd = getTimedWindowRoundsLeft(state, active.pencilWindow);
     const modeNote = document.createElement('span');
     modeNote.textContent =
       active.pencilMode === 'slow'
-        ? `Slow Pencil (${active.pencilTurnsLeft}T) — Instant Stop`
+        ? `Slow Pencil (${rd} rd) — Instant Stop`
         : active.pencilMode === 'ones_twos'
-          ? `Curse: 1 & 2 only (${active.pencilTurnsLeft}T)`
-          : `Curse: E only (${active.pencilTurnsLeft}T)`;
+          ? `Curse: 1 & 2 only (${rd} rd)`
+          : `Curse: E only (${rd} rd)`;
+    modeNote.title = formatTimedWindowEndpoint(state, active.pencilWindow, 'Ends');
     controls.appendChild(modeNote);
   }
   wrap.appendChild(controls);

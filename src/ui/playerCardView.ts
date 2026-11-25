@@ -227,11 +227,11 @@ function patchCard(
   ref.progressFill.style.width = `${Math.min(100, pct)}%`;
   ref.progressFill.style.backgroundColor = player.color;
 
-  const chips = collectStatusChips(player, ownedCount);
-  const metaKey = chips.map((c) => `${c.variant}:${c.text}`).join('|');
+  const chips = collectStatusChips(state, player, ownedCount);
+  const metaKey = chips.map((c) => `${c.variant}:${c.text}:${c.title ?? ''}`).join('|');
   if (metaKey !== ref.lastMetaKey) {
     ref.metaRow.innerHTML = '';
-    for (const c of chips) ref.metaRow.appendChild(makeMetaChip(c.text, c.variant));
+    for (const c of chips) ref.metaRow.appendChild(makeMetaChip(c.text, c.variant, c.title));
     ref.lastMetaKey = metaKey;
   }
 }
