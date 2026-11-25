@@ -12,7 +12,7 @@ import {
   vacateShopChain,
   vacateShopSlot,
 } from './bankHelpers';
-import { appendLog } from './helpers';
+import { appendLog, formatShopRef } from './helpers';
 import { pickRandom } from './rng';
 import {
   buildStarterStock,
@@ -80,7 +80,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === eff.level)!;
       const nextShops = vacateShopChain({ ...state, shops: ctx.shops }, target.id);
       return resumeAfterPostAction(
-        buildResultState(ctx, `Closed ${target.id} chain (L${eff.level}).`, nextShops)
+        buildResultState(ctx, `Closed ${formatShopRef(state, target)} chain (L${eff.level}).`, nextShops)
       );
     }
 
@@ -114,7 +114,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const leveled = nextShops[claimed.id]!;
       nextShops[claimed.id] = { ...leveled, stock: buildStarterStock(typeId, leveled.level) };
       return resumeAfterPostAction(
-        buildResultState(ctx, `Opened free ${STORE_TYPES[typeId]?.name ?? typeId}.`, nextShops, seed)
+        buildResultState(ctx, `Opened free ${formatShopRef(state, nextShops[claimed.id]!)}.`, nextShops, seed)
       );
     }
 
@@ -150,7 +150,9 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       if (eff.mode === 'one_l4') {
         const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === 4)!;
         const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
-        return resumeAfterPostAction(buildResultState(ctx, `Captured L4 chain (${target.id}).`, nextShops));
+        return resumeAfterPostAction(
+          buildResultState(ctx, `Captured L4 ${formatShopRef(state, target)} chain.`, nextShops)
+        );
       }
       const target = resolveTargetRivalShop(
         state,
@@ -158,7 +160,9 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
         (s) => getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
       )!;
       const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
-      return resumeAfterPostAction(buildResultState(ctx, `Captured ${target.id}.`, nextShops));
+      return resumeAfterPostAction(
+        buildResultState(ctx, `Captured ${formatShopRef(state, target)}.`, nextShops)
+      );
     }
 
     case 'empty_rival_stores': {
@@ -191,7 +195,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const nextShops = upgradeOwnSegmentToChain({ ...state, shops: ctx.shops }, target.id, active.id);
       const nextLevel = nextShops[target.id]?.level ?? 4;
       return resumeAfterPostAction(
-        buildResultState(ctx, `Upgraded ${target.id} segment to L${nextLevel} chain!`, nextShops)
+        buildResultState(ctx, `Upgraded ${formatShopRef(state, target)} segment to L${nextLevel} chain!`, nextShops)
       );
     }
 

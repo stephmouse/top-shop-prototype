@@ -118,6 +118,7 @@ export interface Player {
   reverseDirNextTurn: boolean;
   chirpSandals: boolean;
   equippedWalkSound?: WalkSoundStyle;
+  equippedWalkSounds?: WalkSoundStyle[];
   isBankrupt: boolean;
   isBot: boolean;
 }
@@ -130,6 +131,7 @@ export type TurnPhase =
   | 'ESCALATOR_UNDO'
   | 'EVENT_PICK'
   | 'EVENT_PICK_STORE'
+  | 'EVENT_SHOES_CHOICE'
   | 'BANK_MENU'
   | 'SHOP_BUY_RIVAL'
   | 'SHOP_BUY_SLOT'

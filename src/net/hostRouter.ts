@@ -27,6 +27,8 @@ export interface HostRouterCallbacks {
   onApplyHostAction: (action: GameAction) => GameState;
   onSyncHostState?: (state: GameState) => void;
   onSessionChange: () => void;
+  onTurnPing?: (ping: { fromName: string; targetPlayerId: string; targetPlayerName: string }) => void;
+  nowMs?: () => number;
   sendToPeer: (publicId: string, msg: HostToClientMessage) => void;
   broadcast: (msg: HostToClientMessage, excludePublicId?: string) => void;
   closePeer: (publicId: string) => void;
@@ -42,6 +44,7 @@ export interface HostRouter {
   handlePeerDisconnect: (publicId: string) => void;
   syncHostState: (nextState: GameState) => void;
   notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
+  sendHostTurnPing: () => { ok: boolean; waitSec?: number };
   assignSeat: (seatIndex: number, ownerId: string) => void;
   kickPeer: (publicId: string) => void;
 }
@@ -58,8 +61,35 @@ export function createHostRouter(
   let remotePencilSpinning = false;
   let remotePencilStopFace: PencilFace | null = null;
   const tokenToPublicId = new Map<string, string>();
+  const pingStates = new Map<string, { lastAt: number; recent: number[]; blockedUntil: number }>();
   const avatarSync = createAvatarSyncStore();
   avatarSync.refreshHostMap(initialState, roster);
+
+  function attemptTurnPing(senderId: string, fromName: string): { ok: boolean; waitSec?: number } {
+    const curState = callbacks.getState();
+    if (curState.phase === 'GAME_OVER') return { ok: false };
+    const now = (callbacks.nowMs ?? Date.now)();
+    const entry = pingStates.get(senderId) ?? { lastAt: -Infinity, recent: [], blockedUntil: 0 };
+    if (now < entry.blockedUntil) {
+      return { ok: false, waitSec: Math.max(1, Math.ceil((entry.blockedUntil - now) / 1000)) };
+    }
+    if (now - entry.lastAt < 1000) {
+      return { ok: false, waitSec: 1 };
+    }
+    const recent = entry.recent.filter((ts) => now - ts <= 10_000);
+    if (recent.length >= 3) {
+      const blockedUntil = now + 12_000;
+      pingStates.set(senderId, { lastAt: entry.lastAt, recent: [], blockedUntil });
+      return { ok: false, waitSec: 12 };
+    }
+    pingStates.set(senderId, { lastAt: now, recent: [...recent, now], blockedUntil: 0 });
+    const active = curState.players[curState.activePlayerIndex];
+    if (!active) return { ok: false };
+    const ping = { fromName, targetPlayerId: active.id, targetPlayerName: active.name };
+    callbacks.broadcast({ type: 'UI_TURN_PING', ...ping });
+    callbacks.onTurnPing?.(ping);
+    return { ok: true };
+  }
 
   function deleteTokenMappingsForPeer(publicId: string): void {
     for (const [token, mappedId] of tokenToPublicId.entries()) {
@@ -257,6 +287,14 @@ export function createHostRouter(
         handleUpdateProfile(raw, publicId);
         return;
       }
+      if (raw.type === 'UI_TURN_PING') {
+        const peer = roster.peers.find((p) => p.id === publicId);
+        const res = attemptTurnPing(publicId, peer?.name ?? 'Guest');
+        if (!res.ok && res.waitSec) {
+          sender.send({ type: 'ERROR', message: `Ping cooldown (${res.waitSec}s).` });
+        }
+        return;
+      }
 
       const curState = callbacks.getState();
       if (roster.seatOwners[curState.activePlayerIndex] !== publicId) {
@@ -316,6 +354,12 @@ export function createHostRouter(
         activePlayerIndex: callbacks.getState().activePlayerIndex,
         ...(stopFace !== undefined ? { stopFace } : {}),
       });
+    },
+
+    sendHostTurnPing: () => {
+      const peerLabel =
+        callbacks.getState().players.find((_, i) => roster.seatOwners[i] === HOST_TOKEN)?.name ?? 'Host';
+      return attemptTurnPing(HOST_TOKEN, peerLabel);
     },
 
     assignSeat: (seatIndex, ownerId) => {

@@ -12,6 +12,7 @@ import type { VisualEvent } from './stateDiff';
 export interface FxOverlayController {
   el: HTMLElement;
   playStateDiff: (prev: GameState | null, next: GameState, precomputedEvents?: VisualEvent[]) => void;
+  showTurnPing: (fromName: string, targetPlayerName: string, targetPlayerId: string) => void;
   clear: () => void;
 }
 
@@ -171,7 +172,12 @@ export function createFxOverlay(
           bumpStack(ev.tileId)
         );
       } else if (ev.type === 'shop_changed') {
-        triggerFxClass(getBoardTileElement(boardEl, ev.tileId), SHOP_FX_CLASS[ev.kind], 650);
+        const durMs = ev.kind === 'restocked' ? 1100 : 650;
+        const tileEl = getBoardTileElement(boardEl, ev.tileId);
+        triggerFxClass(tileEl, SHOP_FX_CLASS[ev.kind], durMs);
+        if (ev.kind === 'restocked' && ev.addedCount && ev.addedCount > 0) {
+          spawnFloatBadge(tileEl, `+${ev.addedCount} Stock`, 'is-restock', bumpStack(ev.tileId));
+        }
       } else if (ev.type === 'liquidate_forced') {
         triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-shake', 420);
       } else if (ev.type === 'cashback_triggered') {
@@ -207,5 +213,18 @@ export function createFxOverlay(
     }
   }
 
-  return { el: layer, playStateDiff, clear };
+  return {
+    el: layer,
+    playStateDiff,
+    showTurnPing: (fromName, targetPlayerName, targetPlayerId) => {
+      removeByClass('fx-ping-banner');
+      const banner = document.createElement('div');
+      banner.className = 'fx-ping-banner';
+      banner.textContent = `🔔 ${fromName} nudged ${targetPlayerName} — it's your turn!`;
+      layer.appendChild(banner);
+      triggerFxClass(getTokenBodyElement(tokensLayerEl, targetPlayerId), 'fx-celebrate', 650);
+      scheduleTimer(() => removeNode(banner), 2400);
+    },
+    clear,
+  };
 }

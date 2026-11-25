@@ -6,6 +6,10 @@
 - Type-check & build: `npm.cmd run build` (`tsc --noEmit && vite build`).
 - Always run `npm.cmd test` and `npm.cmd run build` after edits and fix any test or TypeScript errors before finishing.
 
+## Release Habit (Playtest Milestones)
+- Only cut releases for playtest milestones (not every commit): bump `"version"` in `package.json`, push commit + annotated tag (`v0.x.y`), and provide ready-to-paste **Plain-English Summary + Technical Notes** for a GitHub **Pre-release**.
+- Once Item 30's `.github/workflows/deploy.yml` `release: [published]` trigger is wired, publishing that GitHub Pre-release automatically builds and deploys GitHub Pages.
+
 ## Architecture & Code Discipline
 - **Strict Separation of Concerns:**
   - `src/config/`: All tunable numbers, store/item catalogs, event cards, bank rewards, and map layouts.

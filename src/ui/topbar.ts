@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../config/appVersion';
 import { OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { NetRole } from '../net/protocol';
@@ -25,7 +26,6 @@ export interface TopbarOptions {
   onOpenLobby: () => void;
   onSaveMatch: () => void;
   onLoadMatch: () => void;
-  onNewMatch: (playerCount: number) => void;
 }
 
 export interface TopbarController {
@@ -47,7 +47,14 @@ export function createTopbar(options: TopbarOptions): TopbarController {
 
   const title = document.createElement('div');
   title.className = 'topbar-title';
-  title.textContent = 'TOP SHOP PROTOTYPE — Move: Arrows/WASD, Click Tiles, Esc: Reset';
+  const verTag = document.createElement('span');
+  verTag.className = 'app-version-tag';
+  verTag.textContent = `v${APP_VERSION}`;
+  title.append(
+    document.createTextNode('TOP SHOP PROTOTYPE '),
+    verTag,
+    document.createTextNode(' — Move: Arrows/WASD, Click Tiles, Esc: Reset')
+  );
 
   const controls = document.createElement('div');
   controls.className = 'topbar-controls';
@@ -100,13 +107,6 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   if (howToBtn) controls.appendChild(howToBtn);
   controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
 
-  const newMatchBtns: HTMLButtonElement[] = [];
-  for (const count of [2, 3, 4, 5, 6]) {
-    const btn = makeButton(`New ${count}P`, () => options.onNewMatch(count));
-    newMatchBtns.push(btn);
-    controls.appendChild(btn);
-  }
-
   topbar.append(title, controls);
   return {
     el: topbar,
@@ -118,7 +118,6 @@ export function createTopbar(options: TopbarOptions): TopbarController {
       setupBtn.disabled = isGuest;
       saveBtn.disabled = isGuest;
       loadBtn.disabled = isGuest || !hasSavedMatch;
-      for (const btn of newMatchBtns) btn.disabled = isGuest;
 
       if (netInfo?.role === 'host') {
         const waiting = netInfo.waitingCount ?? 0;

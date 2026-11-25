@@ -1,3 +1,4 @@
+import { APP_VERSION } from '../config/appVersion';
 import type { AvatarSpec } from '../config/avatarTypes';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
@@ -56,8 +57,13 @@ export function createHomeModal(options: HomeModalOptions): HomeModalController 
 
   const header = mk('div', 'setup-header home-hero');
   const titleWrap = mk('div', 'home-title-wrap');
-  titleWrap.append(
+  const titleRow = mk('div', 'home-title-row');
+  titleRow.append(
     mk('h2', 'setup-title home-title', 'TOP SHOP'),
+    mk('span', 'app-version-tag', `v${APP_VERSION}`)
+  );
+  titleWrap.append(
+    titleRow,
     mk('span', 'setup-muted', 'Mall Tycoon · Local Couch & Online P2P')
   );
   const headerBtns = mk('div', 'setup-btn-row');

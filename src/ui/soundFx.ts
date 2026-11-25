@@ -13,6 +13,7 @@ export interface SoundFxController {
   playYourTurn: () => void;
   playCashbackFanfare: () => void;
   playMonthFlip: () => void;
+  playTurnPing: () => void;
   playWalkSoundPreview: (choice: WalkSoundChoice) => void;
 }
 
@@ -107,7 +108,13 @@ export function createSoundFx(): SoundFxController {
       if (moved.kind === 'step') {
         if (moved.chirp) {
           chirpAlt = !chirpAlt;
-          playWalkStepSound(moved.walkSound ?? 'chirp', tone, chirpAlt, ensureContext());
+          const layers =
+            moved.walkSounds && moved.walkSounds.length > 0
+              ? moved.walkSounds
+              : [moved.walkSound ?? 'chirp'];
+          layers.forEach((style, idx) =>
+            playWalkStepSound(style, tone, chirpAlt, ensureContext(), idx * 0.085)
+          );
         } else tone(440, 0.045, 'triangle', 0, 520, 0.045);
       } else if (moved.kind === 'escalator') {
         const up = (moved.verticalSign ?? 1) >= 0;
@@ -176,6 +183,10 @@ export function createSoundFx(): SoundFxController {
     playMonthFlip: () => {
       tone(523, 0.07, 'sine', 0, 659, 0.036);
       tone(784, 0.11, 'triangle', 0.06, 784, 0.032);
+    },
+    playTurnPing: () => {
+      tone(880, 0.12, 'sine', 0, 880, 0.06);
+      tone(1175, 0.2, 'triangle', 0.09, 1175, 0.06);
     },
     playWalkSoundPreview: (choice) => {
       if (muted) return;

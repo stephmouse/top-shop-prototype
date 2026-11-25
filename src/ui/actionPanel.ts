@@ -1,11 +1,14 @@
+import type { WalkSoundChoice } from '../config/walkSounds';
 import type { GameAction } from '../engine/actions';
 import { formatCalendarDate } from '../engine/eventDraw';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState, PencilFace } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
+import { createChoiceButton } from './choiceUi';
 import { renderEventPickPanel, renderEventStorePanel } from './eventPanel';
 import { cancelPencilAnimation, renderPencilPanel } from './pencilView';
+import { renderShoesChoicePanel } from './shoesPanel';
 import {
   renderBuyRivalPanel,
   renderBuySlotPanel,
@@ -137,6 +140,8 @@ export interface ActionPanelViewOptions {
   onPencilLanded?: (face: PencilFace) => void;
   onUiChange?: () => void;
   onHoverShop?: (shopId: string | null) => void;
+  onPreviewWalkSound?: (choice: WalkSoundChoice) => void;
+  onPingTurn?: () => { ok: boolean; waitSec?: number };
 }
 
 export function renderActionPanel(
@@ -183,6 +188,33 @@ export function renderActionPanel(
     notice.className = 'net-reconnect-banner';
     notice.textContent = 'Connection lost — reconnecting to host…';
     container.appendChild(notice);
+  }
+
+  if (viewOptions.readOnly && state.phase !== 'GAME_OVER' && !viewOptions.reconnecting && viewOptions.onPingTurn) {
+    const pingRow = document.createElement('div');
+    pingRow.className = 'turn-ping-row';
+    const pingBtn = document.createElement('button');
+    pingBtn.type = 'button';
+    pingBtn.className = 'turn-ping-btn';
+    pingBtn.textContent = `🔔 Ping ${active.name}`;
+    const noteEl = document.createElement('span');
+    noteEl.className = 'setup-muted';
+    let clearTimer: number | null = null;
+    pingBtn.addEventListener('click', () => {
+      const res = viewOptions.onPingTurn!();
+      if (clearTimer !== null) window.clearTimeout(clearTimer);
+      noteEl.textContent = res.ok
+        ? `Sent reminder to ${active.name}!`
+        : res.waitSec
+          ? `Cooldown (${res.waitSec}s)`
+          : 'Ping unavailable';
+      clearTimer = window.setTimeout(() => {
+        noteEl.textContent = '';
+        clearTimer = null;
+      }, 1800);
+    });
+    pingRow.append(pingBtn, noteEl);
+    container.appendChild(pingRow);
   }
 
   const stack = document.createElement('div');
@@ -232,12 +264,16 @@ function renderActionPanelBody(
     info.textContent = 'Ride the Elevator to a random floor?';
     stack.appendChild(info);
     stack.appendChild(
-      makeBtn('Ride Elevator', () => dispatch({ type: 'RESOLVE_ELEVATOR', ride: true }), {
+      createChoiceButton('Ride Elevator', () => dispatch({ type: 'RESOLVE_ELEVATOR', ride: true }), {
+        hotkey: 1,
         primary: true,
+        confirm: true,
       })
     );
     stack.appendChild(
-      makeBtn('Stay Here', () => dispatch({ type: 'RESOLVE_ELEVATOR', ride: false }))
+      createChoiceButton('Stay Here', () => dispatch({ type: 'RESOLVE_ELEVATOR', ride: false }), {
+        hotkey: 2,
+      })
     );
     appendUndoControls(stack, state, dispatch, true);
     return;
@@ -253,8 +289,13 @@ function renderActionPanelBody(
     return;
   }
 
+  if (state.phase === 'EVENT_SHOES_CHOICE') {
+    renderShoesChoicePanel(stack, state, dispatch, viewOptions.onPreviewWalkSound);
+    return;
+  }
+
   if (state.phase === 'BANK_MENU') {
-    renderBankPanel(stack, state, dispatch, viewOptions.onUiChange);
+    renderBankPanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
     return;
   }
 
@@ -265,7 +306,7 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'SHOP_DELIVER') {
-    renderDeliverPanel(stack, state, dispatch, viewOptions.onUiChange);
+    renderDeliverPanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
     appendUndoControls(stack, state, dispatch, true);
     return;
   }

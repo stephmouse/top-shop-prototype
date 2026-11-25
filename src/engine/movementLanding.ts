@@ -4,6 +4,7 @@ import {
   appendLog,
   canPlayerUseElevator,
   computePaydayAmount,
+  formatShopRef,
   getActivePlayer,
   getTile,
 } from './helpers';
@@ -135,7 +136,7 @@ export function resolveTileLanding(state: GameState): GameState {
     if (shop.closedWindow) {
       return advanceToNextTurn({
         ...postState,
-        log: appendLog(postState, `${player.name} visited closed rival store — no purchase.`),
+        log: appendLog(postState, `${player.name} visited closed ${formatShopRef(postState, shop)} — no purchase.`),
       });
     }
     const totalStock = Object.values(shop.stock).reduce((sum, q) => sum + q, 0);

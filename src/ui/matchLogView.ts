@@ -4,7 +4,6 @@ import { getMonthTheme } from './fxBanners';
 
 const CALENDAR_RE = /^(?:\[T(\d+)\]\s*)?Calendar:\s*(.+?)\.?$/;
 const TURN_RE = /^\[T(\d+)\]\s*(.+)$/;
-const RING_COUNT = 6;
 
 function classifyLogEntry(text: string): string {
   const lower = text.toLowerCase();
@@ -41,17 +40,10 @@ export function renderMatchLog(container: HTMLElement, state: GameState): void {
 
   const theme = getMonthTheme(state.month);
   const monthName = MONTH_NAMES[((state.month % 12) + 12) % 12] ?? 'April';
-
-  const rings = document.createElement('div');
-  rings.className = 'calendar-log-rings';
-  rings.setAttribute('aria-hidden', 'true');
-  for (let i = 0; i < RING_COUNT; i++) {
-    rings.appendChild(makeSpan('calendar-log-ring', ''));
-  }
+  container.style.setProperty('--cal-accent', theme.accent);
 
   const header = document.createElement('div');
   header.className = 'calendar-log-header';
-  header.style.setProperty('--cal-accent', theme.accent);
 
   const dateWrap = document.createElement('div');
   dateWrap.className = 'calendar-log-date';
@@ -98,5 +90,5 @@ export function renderMatchLog(container: HTMLElement, state: GameState): void {
     list.appendChild(li);
   }
 
-  container.append(rings, header, list);
+  container.append(header, list);
 }

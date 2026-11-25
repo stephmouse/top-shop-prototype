@@ -1,15 +1,18 @@
 import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { computeEventBaseCash } from '../engine/events';
-import { computeShopAssetValue, getActivePlayer } from '../engine/helpers';
+import { computeShopAssetValue, formatTileCoord, getActivePlayer } from '../engine/helpers';
 import { computeOpenShopCost, getAllowedStoreTypeIds } from '../engine/shops';
 import type { EventCardDef, GameState, Shop } from '../engine/types';
 import {
   getEligibleEventEmptySlots,
+  getEventConfirmStoreTypeId,
   getEventSelectedShopId,
   handleEventSellPickClick,
+  setEventConfirmStoreTypeId,
   setEventSelectedShopId,
 } from './boardPickState';
+import { createChoiceButton, decorateChoiceButton, makeChoiceHeaderRow } from './choiceUi';
 import { formatLotLabel, groupEmptyLotsBySection } from './lotLabels';
 
 type DispatchFn = (action: GameAction) => void;
@@ -44,7 +47,7 @@ export function renderEventPickPanel(
   const pickedDef = chosenCardId ? EVENT_CARDS.find((c) => c.id === chosenCardId) : undefined;
 
   if (revealedSlot === null || !chosenCardId || !pickedDef) {
-    header.appendChild(mkSpan('', 'Choose 1 of 3 face-down Event Cards'));
+    header.appendChild(mkSpan('', 'Choose 1 of 3 face-down Event Cards (click or press 1–3)'));
     state.eventChoices.forEach((_cardId, idx) => {
       const btn = document.createElement('button');
       btn.type = 'button';
@@ -54,6 +57,7 @@ export function renderEventPickPanel(
         mkSpan('event-card-emblem', '?'),
         mkSpan('event-card-desc', 'Click to Flip')
       );
+      decorateChoiceButton(btn, { hotkey: idx + 1 });
       btn.addEventListener('click', () => dispatch({ type: 'REVEAL_EVENT_CARD', slotIndex: idx }));
       grid.appendChild(btn);
     });
@@ -76,35 +80,39 @@ export function renderEventPickPanel(
       if (!def) return;
       const isPicked = idx === revealedSlot;
       const tags = formatCardTags(def, baseCash);
-      const cardBtn = document.createElement('button');
-      cardBtn.type = 'button';
-      cardBtn.className = `event-card-btn is-revealed is-flipping ${isPicked ? 'is-picked' : 'is-unpicked'}`;
-      cardBtn.style.animationDelay = isPicked ? '0ms' : '130ms';
-      cardBtn.disabled = !isPicked;
-      cardBtn.append(
-        mkSpan('event-card-badge', isPicked ? 'YOUR PICK' : 'UNPICKED'),
-        mkSpan('event-card-title', `${def.name} (${tags.ptsTag})`),
-        mkSpan('event-card-desc', `${def.description}${tags.scaledTag}`)
-      );
-      if (isPicked) cardBtn.addEventListener('click', commitPick);
-      grid.appendChild(cardBtn);
+      if (isPicked) {
+        const cardBtn = document.createElement('button');
+        cardBtn.type = 'button';
+        cardBtn.className = 'event-card-btn is-revealed is-flipping is-picked';
+        cardBtn.style.animationDelay = '0ms';
+        cardBtn.append(
+          mkSpan('event-card-badge', 'DRAWN CARD'),
+          mkSpan('event-card-title', `${def.name} (${tags.ptsTag})`),
+          mkSpan('event-card-desc', `${def.description}${tags.scaledTag}`)
+        );
+        cardBtn.addEventListener('click', commitPick);
+        grid.appendChild(cardBtn);
+      } else {
+        const cardEl = document.createElement('div');
+        cardEl.className = 'event-card-btn is-revealed is-flipping is-unpicked';
+        cardEl.setAttribute('aria-disabled', 'true');
+        cardEl.style.animationDelay = '130ms';
+        cardEl.append(
+          mkSpan('event-card-badge', 'NOT DRAWN'),
+          mkSpan('event-card-title', `${def.name} (${tags.ptsTag})`),
+          mkSpan('event-card-desc', `${def.description}${tags.scaledTag}`)
+        );
+        grid.appendChild(cardEl);
+      }
     });
   }
 
   container.append(header, grid);
 }
 
-function bindHoverShop(btn: HTMLElement, shopId: string, onHoverShop?: (shopId: string | null) => void): void {
-  if (!onHoverShop) return;
-  btn.addEventListener('mouseenter', () => onHoverShop(shopId));
-  btn.addEventListener('mouseleave', () => onHoverShop(null));
-  btn.addEventListener('focus', () => onHoverShop(shopId));
-  btn.addEventListener('blur', () => onHoverShop(null));
-}
-
 function formatLoc(state: GameState, shop: Shop): string {
   const t = state.tiles[shop.tileId];
-  return t ? `${t.floor}F:${t.col + 1}` : shop.id;
+  return t ? formatTileCoord(t) : shop.id;
 }
 
 export function renderEventStorePanel(
@@ -125,26 +133,49 @@ export function renderEventStorePanel(
     const notify = () => (onUiChange ? onUiChange() : render());
     list.innerHTML = '';
 
+    const skipBtn = !prompt.forced
+      ? createChoiceButton(
+          prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip',
+          () => {
+            onHoverShop?.(null);
+            setEventSelectedShopId(state, null);
+            dispatch({ type: 'SKIP_EVENT_STORE' });
+          }
+        )
+      : null;
+
     if (prompt.mode === 'sell') {
       const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
       const confirmId = getEventSelectedShopId(state);
-      const note = document.createElement('div');
-      note.textContent = `Pick a store to sell at ${prompt.multiplier}x (click below or on map, twice to confirm):`;
-      list.appendChild(note);
+      const { headerRow, promptEl } = makeChoiceHeaderRow(
+        skipBtn ? [skipBtn] : [],
+        `Pick a store to sell at ${prompt.multiplier}x (click twice or press 1–9 then Enter):`
+      );
+      if (skipBtn) list.appendChild(headerRow);
+      if (promptEl) list.appendChild(promptEl);
 
-      for (const shop of owned) {
+      owned.forEach((shop, idx) => {
         const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
         const payout = Math.floor(computeShopAssetValue(shop) * prompt.multiplier);
         const isConfirming = confirmId === shop.id;
-        const btn = document.createElement('button');
-        if (isConfirming) btn.className = 'primary';
-        btn.style.borderLeft = `4px solid ${active.color}`;
         const baseLabel = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
-        btn.textContent = isConfirming ? `Confirm? ${baseLabel}` : baseLabel;
-        bindHoverShop(btn, shop.id, onHoverShop);
-        btn.addEventListener('click', () => handleEventSellPickClick(state, shop.id, dispatch, notify));
+        const btn = createChoiceButton(
+          isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
+          () => {
+            onHoverShop?.(null);
+            handleEventSellPickClick(state, shop.id, dispatch, notify);
+          },
+          {
+            hotkey: idx < 9 ? idx + 1 : undefined,
+            shopId: shop.id,
+            onHoverShop,
+            primary: isConfirming,
+            confirm: isConfirming,
+            accentColor: active.color,
+          }
+        );
         list.appendChild(btn);
-      }
+      });
     } else {
       const payer = prompt.payerId
         ? state.players.find((p) => p.id === prompt.payerId) ?? active
@@ -154,18 +185,22 @@ export function renderEventStorePanel(
       const pickedSlot = selectedId ? emptySlots.find((s) => s.id === selectedId) : undefined;
 
       if (pickedSlot) {
-        const backBtn = document.createElement('button');
-        backBtn.textContent = '← Back to Empty Lots';
-        backBtn.addEventListener('click', () => {
-          onHoverShop?.(null);
-          setEventSelectedShopId(state, null);
-          notify();
-        });
-        list.appendChild(backBtn);
-
-        const slotNote = document.createElement('div');
-        slotNote.textContent = `Pick store type to open at ${formatLotLabel(state, pickedSlot)}:`;
-        list.appendChild(slotNote);
+        const backBtn = createChoiceButton(
+          '← Back to Empty Lots',
+          () => {
+            onHoverShop?.(null);
+            setEventSelectedShopId(state, null);
+            notify();
+          },
+          { back: true }
+        );
+        const topControls = skipBtn ? [backBtn, skipBtn] : [backBtn];
+        const { headerRow, promptEl } = makeChoiceHeaderRow(
+          topControls,
+          `Pick store type to open at ${formatLotLabel(state, pickedSlot)} (click twice or press 1–3 then Enter):`
+        );
+        list.appendChild(headerRow);
+        if (promptEl) list.appendChild(promptEl);
 
         const optionsWithCost = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
           .map((id) => {
@@ -177,28 +212,44 @@ export function renderEventStorePanel(
           .filter((x): x is NonNullable<typeof x> => Boolean(x))
           .sort((a, b) => b.openCost - a.openCost);
 
+        const confirmTypeId = getEventConfirmStoreTypeId(state);
         const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
-        for (const { def, openCost, level } of optionsWithCost) {
-          const btn = document.createElement('button');
-          btn.className = 'primary';
-          btn.disabled = payer.cash < openCost;
-          btn.textContent = `Open ${def.name}${level > 1 ? ` L${level}` : ''} ($${openCost}${payerTag})`;
-          btn.addEventListener('click', () => {
-            onHoverShop?.(null);
-            setEventSelectedShopId(state, null);
-            dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: pickedSlot.id, storeTypeId: def.id });
-          });
+        optionsWithCost.forEach(({ def, openCost, level }, idx) => {
+          const isConfirming = confirmTypeId === def.id;
+          const baseLabel = `Open ${def.name}${level > 1 ? ` L${level}` : ''} ($${openCost}${payerTag})`;
+          const btn = createChoiceButton(
+            isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
+            () => {
+              if (confirmTypeId !== def.id) {
+                setEventConfirmStoreTypeId(state, def.id);
+                notify();
+                return;
+              }
+              onHoverShop?.(null);
+              setEventSelectedShopId(state, null);
+              dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: pickedSlot.id, storeTypeId: def.id });
+            },
+            {
+              hotkey: idx < 9 ? idx + 1 : undefined,
+              primary: isConfirming,
+              confirm: isConfirming,
+              disabled: payer.cash < openCost,
+            }
+          );
           list.appendChild(btn);
-        }
+        });
       } else {
         setEventSelectedShopId(state, null);
-        const pickNote = document.createElement('div');
-        pickNote.textContent =
+        const { headerRow, promptEl } = makeChoiceHeaderRow(
+          skipBtn ? [skipBtn] : [],
           emptySlots.length > 0
             ? 'Pick an empty lot (below or on the map):'
-            : 'No eligible empty lots available.';
-        list.appendChild(pickNote);
+            : 'No eligible empty lots available.'
+        );
+        if (skipBtn) list.appendChild(headerRow);
+        if (promptEl) list.appendChild(promptEl);
 
+        let lotHotkey = 1;
         for (const group of groupEmptyLotsBySection(state, emptySlots, active.id)) {
           const groupEl = document.createElement('div');
           groupEl.className = 'lot-group';
@@ -208,32 +259,25 @@ export function renderEventStorePanel(
           const slotsRow = document.createElement('div');
           slotsRow.className = 'lot-group-slots';
           for (const item of group.items) {
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.textContent = `Spot ${item.spotNum} (${item.coord})${item.isChainAdjacent ? ` ★ Chain L${item.resultingLevel}` : ''}`;
-            bindHoverShop(btn, item.shop.id, onHoverShop);
-            btn.addEventListener('click', () => {
-              onHoverShop?.(null);
-              setEventSelectedShopId(state, item.shop.id);
-              notify();
-            });
+            const btn = createChoiceButton(
+              `Spot ${item.spotNum} (${item.coord})${item.isChainAdjacent ? ` ★ Chain L${item.resultingLevel}` : ''}`,
+              () => {
+                onHoverShop?.(null);
+                setEventSelectedShopId(state, item.shop.id);
+                notify();
+              },
+              {
+                hotkey: lotHotkey <= 9 ? lotHotkey++ : undefined,
+                shopId: item.shop.id,
+                onHoverShop,
+              }
+            );
             slotsRow.appendChild(btn);
           }
           groupEl.append(hdr, slotsRow);
           list.appendChild(groupEl);
         }
       }
-    }
-
-    if (!prompt.forced) {
-      const skip = document.createElement('button');
-      skip.textContent = prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip';
-      skip.addEventListener('click', () => {
-        onHoverShop?.(null);
-        setEventSelectedShopId(state, null);
-        dispatch({ type: 'SKIP_EVENT_STORE' });
-      });
-      list.appendChild(skip);
     }
   };
 

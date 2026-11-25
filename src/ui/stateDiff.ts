@@ -1,3 +1,4 @@
+import { getPlayerWalkSounds } from '../config/walkSounds';
 import type { WalkSoundStyle } from '../config/walkSounds';
 import type { GameState, Shop } from '../engine/types';
 
@@ -22,12 +23,13 @@ export type VisualEvent =
       durationMs?: number;
       chirp?: boolean;
       walkSound?: WalkSoundStyle;
+      walkSounds?: WalkSoundStyle[];
     }
   | { type: 'bank_payday'; playerId: string; tileId: string; isExact: boolean }
   | { type: 'cash_delta'; playerId: string; tileId: string; amount: number; reason: 'payday' | 'gain' | 'loss'; isHurt: boolean; isActive: boolean }
   | { type: 'points_delta'; playerId: string; tileId: string; amount: number }
   | { type: 'chirp_equipped'; playerId: string; tileId: string; walkSound?: WalkSoundStyle }
-  | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked' }
+  | { type: 'shop_changed'; shopId: string; tileId: string; kind: 'opened' | 'buyout' | 'vacated' | 'upgraded' | 'closed' | 'restocked'; addedCount?: number }
   | { type: 'liquidate_forced'; playerId: string; tileId: string }
   | {
       type: 'cashback_triggered';
@@ -84,6 +86,7 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
       const toFloor = next.tiles[np.tileId]?.floor ?? 1;
       const floorDelta = Math.abs(toFloor - fromFloor);
       const verticalSign: -1 | 0 | 1 = toFloor > fromFloor ? 1 : toFloor < fromFloor ? -1 : 0;
+      const npSounds = getPlayerWalkSounds(np);
       events.push({
         type: 'player_moved',
         playerId: np.id,
@@ -93,7 +96,9 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
         floorDelta,
         verticalSign,
         durationMs: getMoveDurationMs(kind, floorDelta),
-        ...(np.chirpSandals ? { chirp: true, walkSound: np.equippedWalkSound ?? 'chirp' } : {}),
+        ...(npSounds.length > 0
+          ? { chirp: true, walkSound: npSounds[0], walkSounds: npSounds }
+          : {}),
       });
     }
 
@@ -127,8 +132,11 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
     if (ptsDiff !== 0) {
       events.push({ type: 'points_delta', playerId: np.id, tileId: np.tileId, amount: ptsDiff });
     }
-    if (!pp.chirpSandals && np.chirpSandals) {
-      events.push({ type: 'chirp_equipped', playerId: np.id, tileId: np.tileId, walkSound: np.equippedWalkSound ?? 'chirp' });
+    const prevSounds = getPlayerWalkSounds(pp);
+    const nextSounds = getPlayerWalkSounds(np);
+    if (nextSounds.length > 0 && nextSounds.join(',') !== prevSounds.join(',')) {
+      const newest = nextSounds.find((s, idx) => prevSounds[idx] !== s) ?? nextSounds[nextSounds.length - 1]!;
+      events.push({ type: 'chirp_equipped', playerId: np.id, tileId: np.tileId, walkSound: newest });
     }
   }
 
@@ -146,8 +154,11 @@ export function diffGameStates(prev: GameState | null, next: GameState): VisualE
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'upgraded' });
     } else if ((ns.closedWindow?.expiresAt ?? -1) > (ps.closedWindow?.expiresAt ?? -1)) {
       events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'closed' });
-    } else if (ns.ownerId && sumStock(ns) > sumStock(ps)) {
-      events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'restocked' });
+    } else if (ns.ownerId) {
+      const addedCount = sumStock(ns) - sumStock(ps);
+      if (addedCount > 0) {
+        events.push({ type: 'shop_changed', shopId, tileId: ns.tileId, kind: 'restocked', addedCount });
+      }
     }
   }
 

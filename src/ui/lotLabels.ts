@@ -1,4 +1,5 @@
 import { STORE_TYPES } from '../config/balance';
+import { formatTileCoord } from '../engine/helpers';
 import { computeOpenShopCost, computeResultingChainLevel, getAllowedStoreTypeIds } from '../engine/shops';
 import type { GameState, Shop } from '../engine/types';
 
@@ -50,7 +51,7 @@ export function formatLotLabel(state: GameState, shop: Shop): string {
     .filter((s) => s.segmentId === shop.segmentId)
     .sort((a, b) => (state.tiles[a.tileId]?.col ?? 0) - (state.tiles[b.tileId]?.col ?? 0));
   const spotNum = Math.max(1, segShops.findIndex((s) => s.id === shop.id) + 1);
-  const coord = tile ? `${tile.floor}F:${tile.col + 1}` : shop.id;
+  const coord = tile ? formatTileCoord(tile) : shop.id;
   return `${formatSectionName(state, shop.segmentId)}, Spot ${spotNum} (${coord})`;
 }
 
@@ -117,7 +118,7 @@ export function groupEmptyLotsBySection(
         return {
           shop,
           spotNum: Math.max(1, allInSeg.findIndex((s) => s.id === shop.id) + 1),
-          coord: tile ? `${tile.floor}F:${tile.col + 1}` : shop.id,
+          coord: tile ? formatTileCoord(tile) : shop.id,
           isChainAdjacent: isAdjacentToOwnStore(state, shop, activePlayerId),
           resultingLevel: computeResultingChainLevel(state, shop.id, activePlayerId),
         };

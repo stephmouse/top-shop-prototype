@@ -174,7 +174,7 @@ export function canRedeemBankReward(
     case 'payday_modifier':
       return !active.doubleNextPayday;
     case 'equip_chirp_shoes':
-      return !active.chirpSandals;
+      return true;
     case 'open_delivery':
       if (active.blockDeliveryWindow) return false;
       if (eff.mode === 'rival_paid') {

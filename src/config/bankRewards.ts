@@ -26,7 +26,7 @@ export const BANK_REWARDS: readonly BankRewardDef[] = [
   { id: 'bank_21_reverse_all', pointCost: 8, label: 'All players reverse (next turn)', target: 'none', effect: { kind: 'reverse_direction', scope: 'all' } },
   { id: 'bank_22_double_payday', pointCost: 9, label: 'Money double (next turn)', note: 'Double your next payday', target: 'none', effect: { kind: 'payday_modifier', target: 'self_double' } },
   { id: 'bank_23_stop_rival_payday', pointCost: 9, label: 'Stop rival money (next turn)', note: 'A rival misses their next payday', target: 'rival_player', effect: { kind: 'payday_modifier', target: 'rival_stop' } },
-  { id: 'bank_24_chirp_shoes', pointCost: 9, label: 'Equip "Chirp-Chirp" shoes', target: 'none', effect: { kind: 'equip_chirp_shoes' } },
+  { id: 'bank_24_chirp_shoes', pointCost: 9, label: 'Equip "Chrip-Chrip" shoes', note: 'Unlock or customize your novelty shoes', target: 'none', effect: { kind: 'equip_chirp_shoes' } },
   { id: 'bank_25_cash_1300', pointCost: 10, label: 'Receive 1300 (money)', target: 'none', effect: { kind: 'gain_cash', amount: 1300 } },
   { id: 'bank_26_open_with_rival_cash', pointCost: 10, label: 'Open new store with rival money', target: 'rival_player', effect: { kind: 'open_shop_rival_cash' } },
   { id: 'bank_27_deliver_all_own', pointCost: 10, label: 'Deliver to all your stores', target: 'none', effect: { kind: 'open_delivery', mode: 'all_own_paid' } },

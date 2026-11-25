@@ -1,5 +1,5 @@
 import { BANK_REWARDS } from '../config/balance';
-import { WALK_SOUND_META } from '../config/walkSounds';
+import { getPlayerWalkSounds, WALK_SOUND_META } from '../config/walkSounds';
 import { canRedeemBankReward } from './bankEligibility';
 import { resolveTargetRival } from './bankHelpers';
 import { applyBankShopEffect } from './bankShopEffects';
@@ -209,9 +209,19 @@ export function handleRedeemBankReward(
       }
 
     case 'equip_chirp_shoes': {
+      if (getPlayerWalkSounds(active).length > 0) {
+        return {
+          ...makeState('Customizing novelty shoes...'),
+          phase: 'EVENT_SHOES_CHOICE',
+        };
+      }
       const resolved = resolveEquippedWalkSound(active.avatar?.walkSound, seed);
       seed = resolved.nextSeed;
-      patchPlayer(active.id, { chirpSandals: true, equippedWalkSound: resolved.style });
+      patchPlayer(active.id, {
+        chirpSandals: true,
+        equippedWalkSound: resolved.style,
+        equippedWalkSounds: [resolved.style],
+      });
       return resumeAfterPostAction(makeState(`Equipped ${WALK_SOUND_META[resolved.style].label}!`));
     }
 

@@ -1,7 +1,7 @@
-import { BANK_REWARDS, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { BANK_REWARDS, SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import type { GameAction } from '../engine/actions';
 import { canRedeemBankReward, getBankRewardTargets } from '../engine/bank';
-import { getActivePlayer } from '../engine/helpers';
+import { computeShopAssetValue, getActivePlayer } from '../engine/helpers';
 import { computeOpenShopCost, getAllowedStoreTypeIds, getShopTotalStock } from '../engine/shops';
 import type { BankRewardDef, DeliverMode, GameState, Shop } from '../engine/types';
 
@@ -14,6 +14,7 @@ export interface BoardShopPickSpec {
   hoveredShopId?: string | null;
   badgeText: string;
   selectedBadgeText: string;
+  getBadgeText?: (shopId: string, isSelected: boolean) => string;
   onSelectShop: (shopId: string) => void;
 }
 
@@ -66,7 +67,15 @@ export const setBankConfirmShopId = (state: GameState, shopId: string | null): v
 export const getDeliverSelectedShopId = (state: GameState): string | null => syncSlot(state, 'deliver').primaryId;
 export const setDeliverSelectedShopId = (state: GameState, shopId: string | null): void => { syncSlot(state, 'deliver').primaryId = shopId; };
 export const getEventSelectedShopId = (state: GameState): string | null => syncSlot(state, 'event').primaryId;
-export const setEventSelectedShopId = (state: GameState, shopId: string | null): void => { syncSlot(state, 'event').primaryId = shopId; };
+export function setEventSelectedShopId(state: GameState, shopId: string | null): void {
+  const slot = syncSlot(state, 'event');
+  slot.primaryId = shopId;
+  slot.confirmId = null;
+}
+export const getEventConfirmStoreTypeId = (state: GameState): string | null => syncSlot(state, 'event').confirmId;
+export const setEventConfirmStoreTypeId = (state: GameState, storeTypeId: string | null): void => {
+  syncSlot(state, 'event').confirmId = storeTypeId;
+};
 export const getLiquidateConfirmShopId = (state: GameState): string | null => syncSlot(state, 'liquidate').confirmId;
 export const setLiquidateConfirmShopId = (state: GameState, shopId: string | null): void => { syncSlot(state, 'liquidate').confirmId = shopId; };
 
@@ -198,11 +207,17 @@ function buildRawBoardShopPick(
       const selectableIds = new Set(Object.values(state.shops).filter((s) => s.ownerId === active.id).map((s) => s.id));
       if (selectableIds.size === 0) return null;
       const curConfirm = getEventSelectedShopId(state);
+      const mult = state.eventStorePrompt.multiplier;
       return {
         selectableShopIds: selectableIds,
         selectedShopId: curConfirm && selectableIds.has(curConfirm) ? curConfirm : null,
         badgeText: 'SELL',
         selectedBadgeText: 'CONFIRM?',
+        getBadgeText: (shopId, isSelected) => {
+          const shop = state.shops[shopId];
+          const payout = shop ? Math.floor(computeShopAssetValue(shop) * mult) : 0;
+          return isSelected ? `CONFIRM +$${payout}` : `SELL +$${payout}`;
+        },
         onSelectShop: (shopId) => handleEventSellPickClick(state, shopId, dispatch, onUiChange),
       };
     }
@@ -228,6 +243,11 @@ function buildRawBoardShopPick(
       selectedShopId: curConfirm && selectableIds.has(curConfirm) ? curConfirm : null,
       badgeText: 'SELL',
       selectedBadgeText: 'CONFIRM?',
+      getBadgeText: (shopId, isSelected) => {
+        const shop = state.shops[shopId];
+        const payout = shop ? Math.floor(computeShopAssetValue(shop) * SHOP_RULES.sellLiquidationRate) : 0;
+        return isSelected ? `CONFIRM +$${payout}` : `SELL +$${payout}`;
+      },
       onSelectShop: (shopId) => handleLiquidatePickClick(state, shopId, dispatch, onUiChange),
     };
   }

@@ -4,17 +4,20 @@ import type { WalkSoundChoice } from './walkSounds';
 export const AVATAR_SPECIES = [
   'mouse', 'dragon', 'kangaroo', 'dog', 'wolf', 'fox', 'beaver', 'skunk',
   'cat', 'raccoon', 'horse', 'otter', 'deer', 'frog', 'panda', 'bunny',
+  'robin', 'koi', 'dolphin',
 ] as const;
 export type AvatarSpecies = (typeof AVATAR_SPECIES)[number];
 
 export const AVATAR_MARKINGS = [
   'solid', 'underfur', 'nose_stripe', 'mouth_outline',
   'eye_mask', 'mouth_and_eyes', 'chest_neck', 'shoulder_spots',
+  'robin_breast', 'koi_patches', 'dolphin_belly',
 ] as const;
 export type AvatarMarking = (typeof AVATAR_MARKINGS)[number];
 
 export const AVATAR_HAIRS = [
   'none', 'tuft', 'spiky', 'medium', 'medium_bangs', 'long', 'long_bangs',
+  'feather_crest', 'dorsal_fin',
 ] as const;
 export type AvatarHair = (typeof AVATAR_HAIRS)[number];
 
@@ -22,7 +25,7 @@ export const AVATAR_EYES = ['round', 'happy', 'relaxed', 'wink', 'starry'] as co
 export type AvatarEyeStyle = (typeof AVATAR_EYES)[number];
 
 export const AVATAR_ACCESSORIES = [
-  'none', 'thick_glasses', 'round_glasses', 'shades', 'beanie', 'cap', 'crown', 'bow', 'bandana',
+  'none', 'thick_glasses', 'round_glasses', 'shades', 'beanie', 'cap', 'crown', 'bow', 'bandana', 'scuba_mask',
 ] as const;
 export type AvatarAccessory = (typeof AVATAR_ACCESSORIES)[number];
 
@@ -45,6 +48,7 @@ export const SPECIES_LABELS: Record<AvatarSpecies, string> = {
   wolf: 'Wolf', fox: 'Fox', beaver: 'Beaver', skunk: 'Skunk',
   cat: 'Cat', raccoon: 'Raccoon', horse: 'Horse', otter: 'Otter',
   deer: 'Deer', frog: 'Frog', panda: 'Panda', bunny: 'Bunny',
+  robin: 'Robin', koi: 'Koi Fish', dolphin: 'Dolphin',
 };
 
 export const MARKING_LABELS: Record<AvatarMarking, string> = {
@@ -56,12 +60,16 @@ export const MARKING_LABELS: Record<AvatarMarking, string> = {
   mouth_and_eyes: 'Eye Mask + Muzzle',
   chest_neck: 'Chest & Neck Only',
   shoulder_spots: 'Shoulder Spots + Underfur',
+  robin_breast: 'Bird Breast & Wingtips',
+  koi_patches: 'Koi Calico Patches',
+  dolphin_belly: 'Aquatic Belly & Cheek',
 };
 
 export const HAIR_LABELS: Record<AvatarHair, string> = {
   none: 'None', tuft: 'Fluff Tuft', spiky: 'Spiky Hair',
   medium: 'Medium Hair', medium_bangs: 'Medium + Bangs',
   long: 'Long Hair', long_bangs: 'Long + Bangs',
+  feather_crest: 'Feather Crest', dorsal_fin: 'Fin Crest',
 };
 
 export const EYE_LABELS: Record<AvatarEyeStyle, string> = {
@@ -71,7 +79,7 @@ export const EYE_LABELS: Record<AvatarEyeStyle, string> = {
 export const ACCESSORY_LABELS: Record<AvatarAccessory, string> = {
   none: 'None', thick_glasses: 'Thick Black Glasses', round_glasses: 'Round Specs',
   shades: 'Cool Shades', beanie: 'Beanie', cap: 'Baseball Cap',
-  crown: 'Gold Crown', bow: 'Ribbon Bow', bandana: 'Neck Bandana',
+  crown: 'Gold Crown', bow: 'Ribbon Bow', bandana: 'Neck Bandana', scuba_mask: 'Scuba Mask & Snorkel',
 };
 
 export const MAX_CUSTOM_AVATAR_CHARS = 16500;
@@ -109,6 +117,9 @@ const SPECIES_DEFAULTS: Record<AvatarSpecies, Partial<AvatarSpec>> = {
   frog: { primaryColor: '#22c55e', secondaryColor: '#bbf7d0', marking: 'chest_neck' },
   panda: { primaryColor: '#f8fafc', secondaryColor: '#18181b', marking: 'eye_mask' },
   bunny: { primaryColor: '#f9a8d4', secondaryColor: '#fff1f2', marking: 'underfur', accessory: 'bow' },
+  robin: { primaryColor: '#6b4c3b', secondaryColor: '#e25822', marking: 'robin_breast', hair: 'feather_crest', hairColor: '#4b362a' },
+  koi: { primaryColor: '#f8fafc', secondaryColor: '#f97316', marking: 'koi_patches', hair: 'dorsal_fin', hairColor: '#fb923c', eyeStyle: 'happy' },
+  dolphin: { primaryColor: '#38bdf8', secondaryColor: '#e0f2fe', marking: 'dolphin_belly', hair: 'none', accessory: 'scuba_mask', eyeStyle: 'happy' },
 };
 
 const BASE_AVATAR: AvatarSpec = {

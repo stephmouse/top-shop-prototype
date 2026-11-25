@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDefaultAvatarForSeat } from '../src/config/avatarTypes';
+import { createSpeciesPreset, getDefaultAvatarForSeat, isValidAvatarSpec } from '../src/config/avatarTypes';
 import { isValidGameAction } from '../src/engine/actions';
 import { createInitialGameState } from '../src/engine/state';
 import { createAvatarSyncStore } from '../src/net/avatarSync';
@@ -33,8 +33,21 @@ describe('action validation, persistence sanitization, and engine purity', () =>
     expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a'] })).toBe(true);
     expect(isValidGameAction({ type: 'FINISH_RIVAL_SHOP' })).toBe(true);
     expect(isValidGameAction({ type: 'DELIVER_ITEMS', shopId: 'shop_1_1', order: { item_1: 2 } })).toBe(true);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'keep' })).toBe(true);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'stack', style: 'honk' })).toBe(true);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'replace', style: 'boing', slotIndex: 1 })).toBe(true);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'clear' })).toBe(true);
 
     expect(isValidGameAction({ type: 'REVEAL_EVENT_CARD', slotIndex: 3 })).toBe(false);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'stack', style: 'bad_style' })).toBe(false);
+    expect(isValidGameAction({ type: 'RESOLVE_SHOES', mode: 'replace', style: 'honk', slotIndex: 3 })).toBe(false);
+    expect(isValidClientMessage({ type: 'UI_TURN_PING', clientToken: 'tok_12345' })).toBe(true);
+    expect(
+      isValidHostMessage({ type: 'UI_TURN_PING', fromName: 'Alice', targetPlayerId: 'p_2', targetPlayerName: 'Bob' })
+    ).toBe(true);
+    expect(isValidAvatarSpec(createSpeciesPreset('robin'))).toBe(true);
+    expect(isValidAvatarSpec(createSpeciesPreset('koi'))).toBe(true);
+    expect(isValidAvatarSpec(createSpeciesPreset('dolphin'))).toBe(true);
     expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: ['a', 'b'] })).toBe(false);
     expect(isValidGameAction({ type: 'BUY_RIVAL_ITEMS', itemIds: [] })).toBe(false);
     expect(isValidGameAction({ type: 'DELIVER_ITEMS', shopId: 'shop_1_1', order: { item_1: -1 } })).toBe(false);
@@ -180,6 +193,21 @@ describe('action validation, persistence sanitization, and engine purity', () =>
             closedWindow: { castAt: 3, expiresAt: 1, casterId: 'p_1' },
           },
         },
+      })
+    ).toBe(false);
+    expect(
+      isValidGameState({
+        ...state,
+        phase: 'EVENT_SHOES_CHOICE',
+        players: state.players.map((p, i) => (i === 0 ? { ...p, equippedWalkSounds: ['chirp', 'honk'] } : p)),
+      })
+    ).toBe(true);
+    expect(
+      isValidGameState({
+        ...state,
+        players: state.players.map((p, i) =>
+          i === 0 ? { ...p, equippedWalkSounds: ['chirp', 'honk', 'boing', 'tap'] as never } : p
+        ),
       })
     ).toBe(false);
     expect(

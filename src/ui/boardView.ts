@@ -1,7 +1,7 @@
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { StoreIconId } from '../config/storeVisuals';
-import { getActivePlayer } from '../engine/helpers';
+import { formatTileCoord, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import type { GameState, Tile } from '../engine/types';
 import type { BoardShopPickSpec } from './boardPickState';
@@ -23,6 +23,8 @@ export interface BoardInteractionOptions {
   onSelectNextStep: (option: MoveOption) => void;
   onSelectEndTarget: (target: EndTarget) => void;
   onHoverEndTarget?: (tileId: string | null) => void;
+  onHoverShop?: (shopId: string | null) => void;
+  onInspectShop?: (shopId: string) => void;
 }
 
 interface TileDomRef {
@@ -31,6 +33,7 @@ interface TileDomRef {
   badgeEl: HTMLSpanElement;
   iconEl: HTMLElement;
   nameEl: HTMLElement;
+  nameTextEl: HTMLSpanElement;
   statsEl: HTMLElement;
   shelfEl: HTMLElement;
   shutterEl: HTMLElement;
@@ -43,6 +46,7 @@ interface BoardDomCache {
   currentInteraction?: BoardInteractionOptions;
   nextByTile: Map<string, MoveOption>;
   endByTile: Map<string, EndTarget>;
+  ownedShopIds: Set<string>;
 }
 
 const boardCacheMap = new WeakMap<HTMLElement, BoardDomCache>();
@@ -69,7 +73,13 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
   container.style.gridTemplateColumns = `repeat(${cols}, minmax(104px, 1fr))`;
   container.style.setProperty('--board-cols', String(cols));
 
-  const cache: BoardDomCache = { stageSignature: sig, tileRefs: new Map(), nextByTile: new Map(), endByTile: new Map() };
+  const cache: BoardDomCache = {
+    stageSignature: sig,
+    tileRefs: new Map(),
+    nextByTile: new Map(),
+    endByTile: new Map(),
+    ownedShopIds: new Set(),
+  };
   const stageGrid = getStageDef(state.mapId as StageId).rows.map((r) => r.trim().split(/\s+/));
 
   for (let floor = floors; floor >= 1; floor--) {
@@ -92,7 +102,7 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
       const header = document.createElement('div');
       header.className = 'tile-header';
       const coord = document.createElement('span');
-      coord.textContent = `${tile.floor}F:${tile.col + 1}`;
+      coord.textContent = formatTileCoord(tile);
       const badgeEl = document.createElement('span');
       badgeEl.className = 'tile-badge';
       badgeEl.hidden = true;
@@ -106,6 +116,9 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
       iconEl.className = 'tile-icon';
       const nameEl = document.createElement('div');
       nameEl.className = 'tile-name';
+      const nameTextEl = document.createElement('span');
+      nameTextEl.className = 'tile-name-text';
+      nameEl.appendChild(nameTextEl);
       titleRow.append(iconEl, nameEl);
 
       const statsEl = document.createElement('div');
@@ -130,21 +143,49 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
         if (!inter) return;
         const pick = inter.shopPick;
         if (pick) {
-          if (tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId)) pick.onSelectShop(tile.shopSlotId);
-          return;
+          if (tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId)) {
+            pick.onSelectShop(tile.shopSlotId);
+            return;
+          }
+        } else {
+          const end = cache.endByTile.get(tile.id);
+          if (end) {
+            inter.onSelectEndTarget(end);
+            return;
+          }
+          const next = cache.nextByTile.get(tile.id);
+          if (next) {
+            inter.onSelectNextStep(next);
+            return;
+          }
         }
-        const end = cache.endByTile.get(tile.id);
-        if (end) inter.onSelectEndTarget(end);
-        else { const next = cache.nextByTile.get(tile.id); if (next) inter.onSelectNextStep(next); }
+        if (tile.shopSlotId && cache.ownedShopIds.has(tile.shopSlotId)) {
+          inter.onInspectShop?.(tile.shopSlotId);
+        }
       });
       cell.addEventListener('mouseenter', () => {
-        if (cache.endByTile.has(tile.id)) cache.currentInteraction?.onHoverEndTarget?.(tile.id);
+        const inter = cache.currentInteraction;
+        if (tile.shopSlotId && inter?.shopPick?.selectableShopIds.has(tile.shopSlotId)) {
+          inter.onHoverShop?.(tile.shopSlotId);
+        }
+        if (cache.endByTile.has(tile.id)) inter?.onHoverEndTarget?.(tile.id);
+        const overflow = Math.ceil((nameTextEl.scrollWidth ?? 0) - (nameEl.clientWidth ?? 0));
+        if (overflow > 2) {
+          nameEl.style.setProperty('--marquee-dx', `-${overflow + 6}px`);
+          nameEl.classList.add('is-marquee');
+        }
       });
       cell.addEventListener('mouseleave', () => {
-        if (cache.endByTile.has(tile.id)) cache.currentInteraction?.onHoverEndTarget?.(null);
+        const inter = cache.currentInteraction;
+        if (tile.shopSlotId && inter?.shopPick?.selectableShopIds.has(tile.shopSlotId)) {
+          inter.onHoverShop?.(null);
+        }
+        if (cache.endByTile.has(tile.id)) inter?.onHoverEndTarget?.(null);
+        nameEl.classList.remove('is-marquee');
+        nameEl.style.removeProperty('--marquee-dx');
       });
 
-      cache.tileRefs.set(tile.id, { cell, awningEl, badgeEl, iconEl, nameEl, statsEl, shelfEl, shutterEl });
+      cache.tileRefs.set(tile.id, { cell, awningEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl });
       container.appendChild(cell);
     }
   }
@@ -173,6 +214,11 @@ export function renderBoard(
   cache.currentInteraction = interaction;
   cache.nextByTile = new Map((interaction?.preview.nextTiles ?? []).map((opt) => [opt.tileId, opt]));
   cache.endByTile = new Map((interaction?.preview.endTargets ?? []).map((target) => [target.tileId, target]));
+  cache.ownedShopIds = new Set(
+    Object.values(state.shops)
+      .filter((s) => Boolean(s.ownerId && s.storeTypeId))
+      .map((s) => s.id)
+  );
 
   const activePlayer = getActivePlayer(state);
   const pick = interaction?.shopPick;
@@ -181,7 +227,7 @@ export function renderBoard(
     const ref = cache.tileRefs.get(tile.id);
     if (!ref) continue;
 
-    const { cell, awningEl, badgeEl, iconEl, nameEl, statsEl, shelfEl, shutterEl } = ref;
+    const { cell, awningEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl } = ref;
     const isActiveTile = activePlayer.tileId === tile.id;
     const nextOpt = cache.nextByTile.get(tile.id);
     const endTarget = cache.endByTile.get(tile.id);
@@ -232,10 +278,15 @@ export function renderBoard(
       ref.lastIconId = content.iconId;
     }
 
+    const pickBadgeText =
+      pickTarget && tile.shopSlotId
+        ? (pick!.getBadgeText?.(tile.shopSlotId, pickSelected) ??
+          (pickSelected ? pick!.selectedBadgeText : pick!.badgeText))
+        : null;
     const badge = pickSelected
-      ? ['tile-badge badge-confirm', pick!.selectedBadgeText]
+      ? ['tile-badge badge-confirm', pickBadgeText!]
       : pickTarget
-        ? ['tile-badge badge-pick', pick!.badgeText]
+        ? ['tile-badge badge-pick', pickBadgeText!]
         : endTarget
           ? ['tile-badge badge-land', 'LAND']
           : nextOpt
@@ -247,7 +298,8 @@ export function renderBoard(
     badgeEl.title = content.isClosed && content.closedTooltip ? content.closedTooltip : '';
     if (badge) { badgeEl.className = badge[0]!; badgeEl.textContent = badge[1]!; }
 
-    nameEl.textContent = content.name;
+    nameTextEl.textContent = content.name;
+    nameEl.title = content.name;
     statsEl.textContent = content.stats ?? '';
     statsEl.title = content.statsTooltip ?? '';
     statsEl.hidden = !content.stats;

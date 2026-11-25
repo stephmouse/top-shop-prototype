@@ -23,13 +23,15 @@ export interface LobbyModalOptions {
   onUpdateHostSeat?: (seatIndex: number, next: UserProfile) => void;
   onOpenMatchSetup?: () => void;
   onProfileChange?: (next: UserProfile) => void;
+  onCancelInvite?: () => void;
 }
 
 export interface LobbyModalController {
   el: HTMLElement;
-  open: (prefillRoomCode?: string) => void;
+  open: (prefillRoomCode?: string, inviteMode?: boolean) => void;
   close: () => void;
   isOpen: () => boolean;
+  isDismissBlocked: () => boolean;
   refresh: () => void;
   showStatus: (message: string, isError?: boolean) => void;
 }
@@ -50,6 +52,10 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
   let draftJoinCode = '';
   let visible = false;
   let busy = false;
+  let inviteMode = false;
+
+  const isInviteLocked = (): boolean =>
+    visible && inviteMode && options.netSession.getRole() === 'offline';
 
   const backdrop = Object.assign(mk('div', 'setup-backdrop'), { hidden: true });
   const modal = mk('div', 'setup-modal');
@@ -59,13 +65,48 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
 
   const statusEl = Object.assign(mk('div', 'setup-status'), { hidden: true });
   const bodyEl = mk('div', 'lobby-body');
-  const close = () => { visible = false; backdrop.hidden = true; };
+  const close = () => {
+    visible = false;
+    backdrop.hidden = true;
+    inviteMode = false;
+  };
 
+  const titleEl = mk('h2', 'setup-title', 'Online P2P Multiplayer Lobby');
+  const headerCloseBtn = mkBtn('Close (Esc)', close);
   const header = mk('div', 'setup-header');
-  header.append(mk('h2', 'setup-title', 'Online P2P Multiplayer Lobby'), mkBtn('Close (Esc)', close));
+  header.append(titleEl, headerCloseBtn);
+
+  const footerNote = mk('span', 'setup-muted', 'Host owns the match clock & rules.');
+  const footerBackBtn = mkBtn('Back to Game', close);
+  const cancelInviteBtn = mkBtn('Cancel / Play Local Instead', () => {
+    inviteMode = false;
+    try {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('room')) {
+        url.searchParams.delete('room');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch {
+      // Ignore history restrictions
+    }
+    close();
+    options.onCancelInvite?.();
+  });
+  cancelInviteBtn.hidden = true;
   const footer = mk('div', 'setup-footer');
-  footer.append(mk('span', 'setup-muted', 'Host owns the match clock & rules.'), mkBtn('Back to Game', close));
+  footer.append(footerNote, cancelInviteBtn, footerBackBtn);
   modal.append(header, statusEl, bodyEl, footer);
+
+  function syncChrome(): void {
+    const locked = isInviteLocked();
+    titleEl.textContent = locked ? 'Join Online Room' : 'Online P2P Multiplayer Lobby';
+    footerNote.textContent = locked
+      ? 'Enter your name and click Join Room to enter the match.'
+      : 'Host owns the match clock & rules.';
+    headerCloseBtn.hidden = locked;
+    footerBackBtn.hidden = locked;
+    cancelInviteBtn.hidden = !locked;
+  }
 
   function showStatus(message: string, isError = false): void {
     statusEl.textContent = message;
@@ -125,13 +166,19 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     joinRow.append(joinInput, mkBtn(busy ? 'Connecting...' : 'Join Room', triggerJoin, 'primary', busy));
     joinSec.appendChild(joinRow);
 
-    bodyEl.append(profileSec, hostSec, joinSec);
+    if (isInviteLocked()) {
+      bodyEl.append(profileSec, joinSec);
+    } else {
+      bodyEl.append(profileSec, hostSec, joinSec);
+    }
   }
 
   function renderBody(): void {
     bodyEl.innerHTML = '';
     const role = options.netSession.getRole();
     const roster = options.netSession.getRoster();
+    if (role !== 'offline') inviteMode = false;
+    syncChrome();
     if (role === 'offline' || !roster) {
       renderOfflineView();
     } else {
@@ -158,19 +205,23 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
     }
   }
 
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop && !isInviteLocked()) close();
+  });
 
   return {
     el: backdrop,
-    open: (prefillRoomCode) => {
+    open: (prefillRoomCode, nextInviteMode = false) => {
       profile = loadUserProfile(options.getDefaultProfile());
       if (prefillRoomCode) draftJoinCode = normalizeRoomCode(prefillRoomCode);
+      inviteMode = Boolean(nextInviteMode);
       visible = true;
       backdrop.hidden = false;
       renderBody();
     },
     close,
     isOpen: () => visible,
+    isDismissBlocked: isInviteLocked,
     refresh: () => { if (visible) renderBody(); },
     showStatus,
   };

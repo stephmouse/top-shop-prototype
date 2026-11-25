@@ -5,7 +5,7 @@ import {
   getBankRewardTargets,
   type BankRewardTargetList,
 } from '../engine/bank';
-import { getActivePlayer } from '../engine/helpers';
+import { formatTileCoord, getActivePlayer } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
 import type { BankRewardDef, GameState, Shop } from '../engine/types';
 import {
@@ -14,6 +14,7 @@ import {
   handleBankShopPickClick,
   setBankPendingRewardId,
 } from './boardPickState';
+import { createChoiceButton, makeChoiceHeaderRow } from './choiceUi';
 
 type DispatchFn = (action: GameAction) => void;
 
@@ -21,7 +22,7 @@ let filterUsableOnly = true;
 
 function formatShopOption(state: GameState, shop: Shop, includeOwner: boolean): string {
   const tile = state.tiles[shop.tileId];
-  const loc = tile ? `${tile.floor}F:${tile.col + 1}` : shop.id;
+  const loc = tile ? formatTileCoord(tile) : shop.id;
   const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
   const stock = getShopTotalStock(shop);
   const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
@@ -37,12 +38,19 @@ function appendTargetStep(
   targets: Exclude<BankRewardTargetList, { kind: 'none' }>,
   dispatch: DispatchFn,
   notify: () => void,
-  onBack: () => void
+  onBack: () => void,
+  onHoverShop?: (shopId: string | null) => void
 ): void {
-  const backBtn = document.createElement('button');
-  backBtn.textContent = '← Back to Rewards';
-  backBtn.addEventListener('click', onBack);
-  list.appendChild(backBtn);
+  const backBtn = createChoiceButton(
+    '← Back to Rewards',
+    () => {
+      onHoverShop?.(null);
+      onBack();
+    },
+    { back: true }
+  );
+  const { headerRow } = makeChoiceHeaderRow([backBtn]);
+  list.appendChild(headerRow);
 
   const summary = document.createElement('div');
   const noteText = reward.note ? ` — ${reward.note}` : '';
@@ -60,32 +68,41 @@ function appendTargetStep(
   targetsWrap.style.overflowY = 'auto';
 
   if (targets.kind === 'player') {
-    for (const p of targets.players) {
+    targets.players.forEach((p, idx) => {
       const pShops = Object.values(state.shops).filter((s) => s.ownerId === p.id).length;
-      const btn = document.createElement('button');
-      btn.style.borderLeft = `4px solid ${p.color}`;
-      btn.textContent = `${p.name} ($${p.cash} | ${p.points}p | ${pShops} stores)`;
-      btn.addEventListener('click', () => {
-        setBankPendingRewardId(state, null);
-        dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetPlayerId: p.id });
-      });
-      targetsWrap.appendChild(btn);
-    }
-  } else {
-    const confirmId = getBankConfirmShopId(state);
-    for (const s of targets.shops) {
-      const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
-      const isConfirming = confirmId === s.id;
-      const btn = document.createElement('button');
-      if (isConfirming) btn.className = 'primary';
-      if (owner) btn.style.borderLeft = `4px solid ${owner.color}`;
-      const shopLabel = formatShopOption(state, s, targets.includeOwner);
-      btn.textContent = isConfirming ? `Confirm? ${shopLabel}` : shopLabel;
-      btn.addEventListener('click', () =>
-        handleBankShopPickClick(state, reward.id, s.id, dispatch, notify)
+      const btn = createChoiceButton(
+        `${p.name} ($${p.cash} | ${p.points}p | ${pShops} stores)`,
+        () => {
+          setBankPendingRewardId(state, null);
+          dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetPlayerId: p.id });
+        },
+        { hotkey: idx < 9 ? idx + 1 : undefined, accentColor: p.color }
       );
       targetsWrap.appendChild(btn);
-    }
+    });
+  } else {
+    const confirmId = getBankConfirmShopId(state);
+    targets.shops.forEach((s, idx) => {
+      const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
+      const isConfirming = confirmId === s.id;
+      const shopLabel = formatShopOption(state, s, targets.includeOwner);
+      const btn = createChoiceButton(
+        isConfirming ? `Confirm? ${shopLabel}` : shopLabel,
+        () => {
+          onHoverShop?.(null);
+          handleBankShopPickClick(state, reward.id, s.id, dispatch, notify);
+        },
+        {
+          hotkey: idx < 9 ? idx + 1 : undefined,
+          shopId: s.id,
+          onHoverShop,
+          primary: isConfirming,
+          confirm: isConfirming,
+          accentColor: owner?.color,
+        }
+      );
+      targetsWrap.appendChild(btn);
+    });
   }
 
   list.appendChild(targetsWrap);
@@ -95,7 +112,8 @@ export function renderBankPanel(
   container: HTMLElement,
   state: GameState,
   dispatch: DispatchFn,
-  onUiChange?: () => void
+  onUiChange?: () => void,
+  onHoverShop?: (shopId: string | null) => void
 ): void {
   const active = getActivePlayer(state);
 
@@ -124,29 +142,36 @@ export function renderBankPanel(
       hasValidTargets &&
       canRedeemBankReward(state, pendingReward)
     ) {
-      appendTargetStep(list, state, pendingReward, pendingTargets, dispatch, notify, () => {
-        setBankPendingRewardId(state, null);
-        notify();
-      });
+      appendTargetStep(
+        list,
+        state,
+        pendingReward,
+        pendingTargets,
+        dispatch,
+        notify,
+        () => {
+          setBankPendingRewardId(state, null);
+          notify();
+        },
+        onHoverShop
+      );
       container.appendChild(list);
       return;
     }
 
     setBankPendingRewardId(state, null);
 
-    const headerRow = document.createElement('div');
-    headerRow.className = 'action-stack';
-
     const leaveLabel =
       state.pendingPostBankPhase === 'STEPPING' ? 'Skip & Continue Moving' : 'Leave Bank';
-    const leaveTopBtn = document.createElement('button');
-    leaveTopBtn.className = 'primary';
-    leaveTopBtn.textContent = leaveLabel;
-    leaveTopBtn.addEventListener('click', () => {
-      setBankPendingRewardId(state, null);
-      dispatch({ type: 'CLOSE_BANK_MENU' });
-    });
-    headerRow.appendChild(leaveTopBtn);
+    const leaveTopBtn = createChoiceButton(
+      leaveLabel,
+      () => {
+        onHoverShop?.(null);
+        setBankPendingRewardId(state, null);
+        dispatch({ type: 'CLOSE_BANK_MENU' });
+      },
+      { primary: true }
+    );
 
     const filterLabel = document.createElement('label');
     const filterCheck = document.createElement('input');
@@ -154,7 +179,7 @@ export function renderBankPanel(
     filterCheck.checked = filterUsableOnly;
     filterLabel.appendChild(filterCheck);
     filterLabel.append(` Usable Only (${active.points} pts available)`);
-    headerRow.appendChild(filterLabel);
+    const { headerRow } = makeChoiceHeaderRow([leaveTopBtn, filterLabel]);
     list.appendChild(headerRow);
 
     const rewardsWrap = document.createElement('div');
@@ -164,6 +189,7 @@ export function renderBankPanel(
 
     const rebuildRewards = () => {
       rewardsWrap.innerHTML = '';
+      let visibleIdx = 0;
 
       for (const reward of BANK_REWARDS) {
         const usable = canRedeemBankReward(state, reward);
@@ -177,19 +203,21 @@ export function renderBankPanel(
               ? ' → Pick Store'
               : '';
 
-        const btn = document.createElement('button');
-        btn.disabled = !usable;
         const noteText = reward.note ? ` — ${reward.note}` : '';
-        btn.textContent = `[${reward.pointCost} pts] ${reward.label}${noteText}${stepHint}`;
-        btn.addEventListener('click', () => {
-          if (targets.kind === 'none') {
-            setBankPendingRewardId(state, null);
-            dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id });
-          } else {
-            setBankPendingRewardId(state, reward.id);
-            notify();
-          }
-        });
+        const btn = createChoiceButton(
+          `[${reward.pointCost} pts] ${reward.label}${noteText}${stepHint}`,
+          () => {
+            if (targets.kind === 'none') {
+              setBankPendingRewardId(state, null);
+              dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id });
+            } else {
+              setBankPendingRewardId(state, reward.id);
+              notify();
+            }
+          },
+          { hotkey: visibleIdx < 9 ? visibleIdx + 1 : undefined, disabled: !usable }
+        );
+        visibleIdx++;
         rewardsWrap.appendChild(btn);
       }
 

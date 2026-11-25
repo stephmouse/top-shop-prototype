@@ -10,8 +10,10 @@ export interface WalkSoundMeta {
   badgeText: string;
 }
 
+export const MAX_WALK_SOUND_LAYERS = 3;
+
 export const WALK_SOUND_META: Record<WalkSoundStyle, WalkSoundMeta> = {
-  chirp: { label: '"Chirp-Chirp" Sandals', shortChip: 'Chirp', badgeText: 'Chirp-Chirp!' },
+  chirp: { label: '"Chrip-Chrip" Sandals', shortChip: 'Chrip', badgeText: 'Chrip-Chrip!' },
   squeak: { label: 'Squeak-Squeak Sneaks', shortChip: 'Squeak', badgeText: 'Squeak-Squeak!' },
   boing: { label: 'Boing-Boing Boots', shortChip: 'Boing', badgeText: 'Boing-Boing!' },
   tap: { label: 'Tap-Dance Loafers', shortChip: 'Tap', badgeText: 'Click-Clack!' },
@@ -37,4 +39,17 @@ export function isValidWalkSoundStyle(raw: unknown): raw is WalkSoundStyle {
 
 export function isValidWalkSoundChoice(raw: unknown): raw is WalkSoundChoice {
   return typeof raw === 'string' && (WALK_SOUND_CHOICES as readonly string[]).includes(raw);
+}
+
+/** Returns up to `MAX_WALK_SOUND_LAYERS` equipped walk sound styles (preserving legacy single-sound saves). */
+export function getPlayerWalkSounds(player: {
+  chirpSandals: boolean;
+  equippedWalkSound?: WalkSoundStyle;
+  equippedWalkSounds?: WalkSoundStyle[];
+}): WalkSoundStyle[] {
+  if (!player.chirpSandals) return [];
+  if (Array.isArray(player.equippedWalkSounds) && player.equippedWalkSounds.length > 0) {
+    return player.equippedWalkSounds.filter(isValidWalkSoundStyle).slice(0, MAX_WALK_SOUND_LAYERS);
+  }
+  return [isValidWalkSoundStyle(player.equippedWalkSound) ? player.equippedWalkSound : 'chirp'];
 }

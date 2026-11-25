@@ -111,6 +111,22 @@ export const SPECIES_BACK_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> = 
     sh('M 21 15 C 19 6 22 4 24 6 C 25 8 25 13 24 15 Z', 'innerEar'),
     sh('M 43 15 C 45 6 42 4 40 6 C 39 8 39 13 40 15 Z', 'innerEar'),
   ],
+  robin: [
+    sh('M 14 54 C 7 50 7 41 14 43 C 17 44 17 50 15 55 Z', 'primary', 'dark', 1.4),
+    sh('M 50 54 C 57 50 57 41 50 43 C 47 44 47 50 49 55 Z', 'primary', 'dark', 1.4),
+    sh('M 16 25 C 11 23 11 29 15 31 Z', 'secondary', 'dark', 1.2),
+    sh('M 48 25 C 53 23 53 29 49 31 Z', 'secondary', 'dark', 1.2),
+  ],
+  koi: [
+    sh('M 15 27 C 6 21 5 30 9 36 C 12 39 15 35 16 32 Z', 'secondary', 'dark', 1.5),
+    sh('M 49 27 C 58 21 59 30 55 36 C 52 39 49 35 48 32 Z', 'secondary', 'dark', 1.5),
+    sh('M 13 28 L 8 27 M 13 31 L 8 32 M 51 28 L 56 27 M 51 31 L 56 32', 'none', 'dark', 1),
+  ],
+  dolphin: [
+    sh('M 29 15 C 27 5 35 2 39 6 C 35 9 35 13 36 15 Z', 'primary', 'dark', 1.5),
+    sh('M 12 49 C 5 46 6 38 14 42 Z', 'primary', 'dark', 1.4),
+    sh('M 52 49 C 59 46 58 38 50 42 Z', 'primary', 'dark', 1.4),
+  ],
 };
 
 export const SPECIES_FRONT_SHAPES: Partial<Record<AvatarSpecies, readonly ShapeSpec[]>> = {
@@ -145,6 +161,19 @@ export const SPECIES_MUZZLE_SHAPES: Record<AvatarSpecies, readonly ShapeSpec[]> 
   frog: [sh(circ(29.5, 34.5, 0.9), 'dark'), sh(circ(34.5, 34.5, 0.9), 'dark'), sh('M 23 37 Q 32 43 41 37', 'none', 'dark', 1.6)],
   panda: [sh(circ(32, 36, 3.3, 2.2), 'dark'), SMILE_W],
   bunny: [sh('M 29.5 35 L 34.5 35 L 32 37.5 Z', 'innerEar', 'dark', 0.8), SMILE_W],
+  robin: [
+    sh('M 27 35 L 37 35 L 32 42 Z', 'gold', 'dark', 1.3),
+    sh('M 28.5 37 H 35.5', 'none', 'dark', 1),
+  ],
+  koi: [
+    sh('M 28 36 C 28 33 36 33 36 36 C 36 39 28 39 28 36 Z', 'innerEar', 'dark', 1.2),
+    sh('M 28 35 Q 21 37 17 42 M 28 37 Q 22 41 20 45', 'none', 'dark', 1.3),
+    sh('M 36 35 Q 43 37 47 42 M 36 37 Q 42 41 44 45', 'none', 'dark', 1.3),
+  ],
+  dolphin: [
+    sh('M 27 36 C 27 33 37 33 37 36 C 37 39 27 39 27 36 Z', 'secondary', 'dark', 1.2),
+    sh('M 28 37.5 Q 32 40 36 37.5', 'none', 'dark', 1.3),
+  ],
 };
 
 const BODY_CHEST = sh('M 21 64 C 22 50 25 43 32 43 C 39 43 42 50 43 64 Z', 'secondary');
@@ -164,6 +193,17 @@ export const MARKING_BODY_SHAPES: Record<AvatarMarking, readonly ShapeSpec[]> = 
     sh(circ(16, 53, 2.5), 'secondary'), sh(circ(19, 60, 2), 'secondary'),
     sh(circ(48, 53, 2.5), 'secondary'), sh(circ(45, 60, 2), 'secondary'),
   ],
+  robin_breast: [
+    sh('M 19 64 C 19 49 24 44 32 44 C 40 44 45 49 45 64 Z', 'secondary'),
+  ],
+  koi_patches: [
+    sh('M 13 54 C 17 49 24 51 23 58 C 22 63 14 63 13 54 Z', 'secondary'),
+    sh('M 37 51 C 43 48 49 54 47 61 C 42 63 35 58 37 51 Z', 'secondary'),
+    sh(circ(27, 57, 3.2, 2.4), 'dark'),
+  ],
+  dolphin_belly: [
+    sh('M 20 64 C 21 51 25 45 32 45 C 39 45 43 51 44 64 Z', 'secondary'),
+  ],
 };
 
 export const MARKING_HEAD_SHAPES: Record<AvatarMarking, readonly ShapeSpec[]> = {
@@ -175,6 +215,15 @@ export const MARKING_HEAD_SHAPES: Record<AvatarMarking, readonly ShapeSpec[]> = 
   mouth_and_eyes: [EYE_MASK, sh(circ(32, 39, 9.2, 6), 'secondary')],
   chest_neck: [],
   shoulder_spots: [HEAD_MUZZLE],
+  robin_breast: [sh('M 22 47 C 22 39 27 37 32 37 C 37 37 42 39 42 47 Z', 'secondary')],
+  koi_patches: [
+    sh('M 15 24 C 20 15 30 15 29 24 C 28 31 18 31 15 24 Z', 'secondary'),
+    sh('M 37 34 C 42 31 48 34 47 41 C 42 44 36 40 37 34 Z', 'secondary'),
+    sh(circ(41, 21, 3.6, 2.8), 'dark'),
+  ],
+  dolphin_belly: [
+    sh('M 19 47 C 20 35 25 32 32 32 C 39 32 44 35 45 47 Z', 'secondary'),
+  ],
 };
 
 const MEDIUM_BACK_HAIR = sh(
@@ -198,6 +247,8 @@ export const HAIR_BACK_SHAPES: Record<AvatarHair, readonly ShapeSpec[]> = {
   medium_bangs: [MEDIUM_BACK_HAIR],
   long: [LONG_BACK_HAIR],
   long_bangs: [LONG_BACK_HAIR],
+  feather_crest: [],
+  dorsal_fin: [],
 };
 
 export const HAIR_FRONT_SHAPES: Record<AvatarHair, readonly ShapeSpec[]> = {
@@ -243,6 +294,12 @@ export const HAIR_FRONT_SHAPES: Record<AvatarHair, readonly ShapeSpec[]> = {
       1.3
     ),
   ],
+  feather_crest: [
+    sh('M 27 17 C 24 8 28 5 31 12 C 33 4 38 5 36 13 C 39 8 42 10 38 17 C 34 15 30 15 27 17 Z', 'hair', 'dark', 1.2),
+  ],
+  dorsal_fin: [
+    sh('M 29 17 L 25 8 L 31 11 L 34 4 L 37 11 L 41 9 L 37 17 C 34 15 31 15 29 17 Z', 'hair', 'dark', 1.3),
+  ],
 };
 
 export const ACCESSORY_SHAPES: Record<AvatarAccessory, readonly ShapeSpec[]> = {
@@ -278,5 +335,11 @@ export const ACCESSORY_SHAPES: Record<AvatarAccessory, readonly ShapeSpec[]> = {
   ],
   bandana: [
     sh('M 19 46 Q 32 51 45 46 L 42 54 L 32 58 L 22 54 Z', 'accent', 'dark', 1.4),
+  ],
+  scuba_mask: [
+    sh('M 16 25 C 16 23 48 23 48 25 V 33 C 48 36 37 36 34 33 Q 32 31 30 33 C 27 36 16 36 16 33 Z', 'glass', 'accent', 2.2),
+    sh('M 14 29 H 16 M 48 29 H 51', 'none', 'dark', 2),
+    sh('M 50 11 V 35 C 50 38 46 39 41 39', 'none', 'accent', 2.6),
+    sh('M 39 38 H 43 V 40 H 39 Z', 'dark', 'dark', 1),
   ],
 };

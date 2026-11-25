@@ -20,6 +20,8 @@ import type { UserProfile } from './playerProfile';
 import { createSetupModal } from './setupModal';
 import type { SetupModalController } from './setupModal';
 import type { SoundFxController } from './soundFx';
+import { createStoreInspectorModal } from './storeInspectorModal';
+import type { StoreInspectorController } from './storeInspectorModal';
 import { createTopbar } from './topbar';
 import type { TopbarController } from './topbar';
 
@@ -47,8 +49,9 @@ export interface AppModals {
   lobbyModal: LobbyModalController;
   avatarModal: AvatarModalController;
   howToPlayModal: HowToPlayModalController;
+  storeInspectorModal: StoreInspectorController;
   openSetup: () => void;
-  openLobby: (code?: string) => void;
+  openLobby: (code?: string, inviteMode?: boolean) => void;
   syncTopbar: (hasSave?: boolean) => void;
   isAnyModalOpen: () => boolean;
   closeTopModal: () => void;
@@ -72,6 +75,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     onPreviewWalkSound: (c) => soundFx.playWalkSoundPreview(c),
   });
   const howToPlayModal = createHowToPlayModal();
+  const storeInspectorModal = createStoreInspectorModal({ getState: options.getState });
 
   const openSetup = () => {
     homeModal.close();
@@ -79,10 +83,10 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     setupModal.open(options.getSetup());
   };
 
-  const openLobby = (code?: string) => {
+  const openLobby = (code?: string, inviteMode = false) => {
     homeModal.close();
     setupModal.close();
-    lobbyModal.open(code);
+    lobbyModal.open(code, inviteMode);
   };
 
   const setupModal = createSetupModal({
@@ -122,6 +126,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     onUpdateHostSeat: options.onUpdateHostSeat,
     onOpenMatchSetup: openSetup,
     onProfileChange: options.onUpdateProfile,
+    onCancelInvite: () => homeModal.open(),
   });
 
   const homeModal = createHomeModal({
@@ -180,21 +185,6 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       const slot = loadManualMatchSlot();
       if (slot) options.onLoadMatch(slot.state);
     },
-    onNewMatch: (count) => {
-      const setup = options.getSetup();
-      options.onStartMatch({
-        ...setup,
-        players: Array.from(
-          { length: count },
-          (_, i) =>
-            setup.players[i] ?? {
-              name: `Player ${i + 1}`,
-              color: PLAYER_COLORS[i % PLAYER_COLORS.length]!,
-              isBot: false,
-            }
-        ),
-      });
-    },
   });
 
   const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
@@ -217,18 +207,22 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     lobbyModal,
     avatarModal,
     howToPlayModal,
+    storeInspectorModal,
     openSetup,
     openLobby,
     syncTopbar,
     isAnyModalOpen: () =>
       avatarModal.isOpen() ||
       howToPlayModal.isOpen() ||
+      storeInspectorModal.isOpen() ||
       homeModal.isOpen() ||
       setupModal.isOpen() ||
       lobbyModal.isOpen(),
     closeTopModal: () => {
       if (avatarModal.isOpen()) return avatarModal.close();
       if (howToPlayModal.isOpen()) return howToPlayModal.close();
+      if (storeInspectorModal.isOpen()) return storeInspectorModal.close();
+      if (lobbyModal.isOpen() && lobbyModal.isDismissBlocked()) return;
       homeModal.close();
       setupModal.close();
       lobbyModal.close();
@@ -237,6 +231,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       lobbyModal.refresh();
       setupModal.refresh();
       homeModal.refresh();
+      storeInspectorModal.refresh();
     },
   };
 }

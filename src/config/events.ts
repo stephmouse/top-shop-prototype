@@ -62,7 +62,7 @@ export const EVENT_CARDS: readonly EventCardDef[] = [
   { id: 'eve_070', name: 'Elevator Outage', description: 'No one can use the elevator for 1 round.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'none', rounds: 1 } },
   { id: 'eve_071', name: 'VIP Elevator', description: 'No one except you can use the elevator for 1 round.', awardsPoints: true, effect: { kind: 'elevator_lock', mode: 'only_self', rounds: 1 } },
   { id: 'eve_072', name: 'Cash Match', description: 'Everyone now has the same amount of money as you.', awardsPoints: true, effect: { kind: 'equalize_cash' } },
-  { id: 'eve_075', name: 'Chirp-Chirp Sandals', description: 'You have worn the "Chirp-Chirp" Sandals.', awardsPoints: true, effect: { kind: 'chirp_sandals' } },
+  { id: 'eve_075', name: 'Novelty Shoes', description: 'Equip or customize your novelty walking shoes!', awardsPoints: true, effect: { kind: 'chirp_sandals' } },
   { id: 'eve_076', name: 'Miss', description: '-------Miss-------', awardsPoints: false, effect: { kind: 'nothing' } },
 
   // EVE_080 - EVE_088: Seasonal / Sale events (all 1 round)

@@ -6,6 +6,7 @@ import type { MultiplayerSession } from '../net/session';
 import { renderActionPanel } from './actionPanel';
 import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './boardView';
 import { buildBoardShopPick } from './boardPickState';
+import { syncBoardHoverHighlight } from './choiceUi';
 import { createFxOverlay } from './fxOverlay';
 import type { TokenMoveHint } from './hudView';
 import { renderMatchLog } from './matchLogView';
@@ -26,6 +27,7 @@ export interface GameRendererOptions {
   soundFx: SoundFxController;
   dispatch: (action: GameAction) => void;
   onOpenSetup: () => void;
+  onInspectShop?: (shopId: string) => void;
   syncTopbar: () => void;
   onRefreshModals: () => void;
   onRefreshSetupModal: () => void;
@@ -42,6 +44,7 @@ export interface GameRenderer {
   clearHoverState: () => void;
   resetVisualState: () => void;
   setShowRoutes: (show: boolean) => void;
+  showTurnPing: (fromName: string, targetPlayerName: string, targetPlayerId: string) => void;
   renderSessionUi: () => void;
   render: () => void;
 }
@@ -150,6 +153,8 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
           paintBoard();
         }
       },
+      onPreviewWalkSound: (choice) => soundFx.playWalkSoundPreview(choice),
+      onPingTurn: netSession.getRole() !== 'offline' ? () => netSession.sendTurnPing() : undefined,
     });
   }
 
@@ -161,6 +166,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     renderBoard(boardEl, state, {
       preview,
       shopPick: canAct ? buildBoardShopPick(state, options.dispatch, refreshPickUi, hoveredPickShopId) : null,
+      onInspectShop: options.onInspectShop,
       onSelectNextStep: (opt) =>
         options.dispatch(
           state.phase === 'CHOOSE_DIRECTION' && opt.direction
@@ -177,6 +183,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
         hoveredEndTileId = tileId;
         drawRoutes(preview);
       },
+      onHoverShop: (shopId) => syncBoardHoverHighlight(actionBox, shopId),
     });
   }
 
@@ -200,11 +207,13 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     clearHoverState: () => {
       hoveredEndTileId = null;
       hoveredPickShopId = null;
+      syncBoardHoverHighlight(actionBox, null);
     },
     resetVisualState: () => {
       clearLandingLock();
       hoveredEndTileId = null;
       hoveredPickShopId = null;
+      syncBoardHoverHighlight(actionBox, null);
       turnCue.reset();
       resetPlayersHudCache(hudEl);
       tokensLayerEl.innerHTML = '';
@@ -214,6 +223,10 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     setShowRoutes: (show) => {
       showRoutes = show;
       drawRoutes();
+    },
+    showTurnPing: (fromName, targetPlayerName, targetPlayerId) => {
+      soundFx.playTurnPing();
+      fxOverlay.showTurnPing(fromName, targetPlayerName, targetPlayerId);
     },
     renderSessionUi: () => {
       const state = options.getState();

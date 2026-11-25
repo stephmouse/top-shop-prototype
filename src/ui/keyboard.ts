@@ -110,9 +110,10 @@ export function bindKeyboardControls({
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
 
     const state = getState();
+    const actionBox = getActionBox();
     if ((state.phase === 'ROLL_PENCIL' || state.phase === 'EVENT_PICK') && (e.key === ' ' || e.key === 'Enter')) {
       stopHold();
-      const pencilBtn = getActionBox().querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
+      const pencilBtn = actionBox.querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
       if (pencilBtn && !pencilBtn.disabled) { e.preventDefault(); pencilBtn.click(); }
       return;
     }
@@ -122,6 +123,35 @@ export function bindKeyboardControls({
       e.preventDefault();
       dispatch({ type: 'CANCEL_MOVE' });
       return;
+    }
+
+    if (!isMovingPhase(state.phase) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (!actionBox.classList.contains('is-landing-guard')) {
+        if (e.key >= '1' && e.key <= '9') {
+          const btn = actionBox.querySelector<HTMLButtonElement>(`button[data-hotkey="${e.key}"]`);
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            btn.click();
+          }
+          return;
+        }
+        if (e.key === 'Enter') {
+          const btn = actionBox.querySelector<HTMLButtonElement>('button[data-choice-confirm="true"]');
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            btn.click();
+          }
+          return;
+        }
+      }
+      if (e.key === 'Escape') {
+        const btn = actionBox.querySelector<HTMLButtonElement>('button[data-choice-back="true"]');
+        if (btn && !btn.disabled) {
+          e.preventDefault();
+          btn.click();
+        }
+        return;
+      }
     }
 
     if (!isMovingPhase(state.phase) || state.phase === 'ESCALATOR_RIDE' || state.phase === 'ESCALATOR_UNDO') return;

@@ -2,6 +2,7 @@ import { STORE_TYPES } from '../config/balance';
 import {
   appendLog,
   computeBuyoutCosts,
+  formatShopRef,
   getActivePlayer,
   getTile,
 } from './helpers';
@@ -63,7 +64,7 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   return resumeAfterPostAction({
     ...interim,
     shops: leveledShops,
-    log: appendLog(state, `${active.name} opened ${def.name} L${updatedNewShop.level} (-$${openCost}, stocked).`),
+    log: appendLog(state, `${active.name} opened ${formatShopRef(interim, updatedNewShop)} L${updatedNewShop.level} (-$${openCost}, stocked).`),
   });
 }
 
@@ -115,7 +116,7 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     shops: nextShops,
     log: appendLog(
       state,
-      `${active.name} bought out store as ${newDef.name} L${updatedNewShop.level} (-$${totalCost}, $${rivalPayout} to rival).`
+      `${active.name} bought out ${formatShopRef(state, shop)} as ${newDef.name} L${updatedNewShop.level} (-$${totalCost}, $${rivalPayout} to rival).`
     ),
   });
 }

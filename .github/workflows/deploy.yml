@@ -1,12 +1,11 @@
-# Manual deploy workflow (does not run automatically on push so private repo pushes stay quiet).
-# When you make the repository public and enable Settings -> Pages -> Source: GitHub Actions,
-# you can trigger this workflow manually from the Actions tab or uncomment the push trigger below.
+# Triggered on manual workflow_dispatch or when a GitHub Release / Pre-release is published.
+# Pushing commits directly to main stays quiet until you publish a release milestone.
 name: Deploy Static Site to GitHub Pages
 
 on:
   workflow_dispatch:
-  # push:
-  #   branches: [main]
+  release:
+    types: [published]
 
 permissions:
   contents: read

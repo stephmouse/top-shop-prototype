@@ -88,12 +88,12 @@ export function renderPencilPanel(
   const active = getActivePlayer(state);
   const faces = getFacesForPlayer(state);
   const isSlow = Boolean(active.pencilWindow && active.pencilMode === 'slow');
-  const speedDegPerSec = isSlow ? 180 : 900;
+  const speedDegPerSec = isSlow ? 180 : 1350;
   const coastDeg = isSlow ? 0 : 120;
   let stopDurationMs = isSlow ? 80 : 320;
 
   let spinPhase: 'idle' | 'spinning' | 'stopping' | 'landed' = 'idle';
-  let angleDeg = (((state.turnNumber * 3 + state.activePlayerIndex) % FACE_COUNT) * FACE_ANGLE) % 360;
+  let angleDeg = Math.floor(Math.random() * FACE_COUNT) * FACE_ANGLE;
   let lastFrameTs = 0;
   let stopStartTs = 0;
   let stopFromAngle = angleDeg;

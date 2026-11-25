@@ -1,5 +1,7 @@
 import { stripAvatarCustomImage } from '../config/avatarTypes';
 import { PENCIL_FACES } from '../config/balance';
+import { isValidWalkSoundStyle } from '../config/walkSounds';
+import type { WalkSoundStyle } from '../config/walkSounds';
 import type { GameState, HorizontalDir, PencilFace, VerticalDir } from './types';
 
 export type DirectionChoice = HorizontalDir | VerticalDir;
@@ -15,6 +17,7 @@ export type GameAction =
   | { type: 'PICK_EVENT_CARD'; cardId: string }
   | { type: 'RESOLVE_EVENT_STORE'; shopId: string; storeTypeId?: string }
   | { type: 'SKIP_EVENT_STORE' }
+  | { type: 'RESOLVE_SHOES'; mode: 'keep' | 'stack' | 'replace' | 'clear'; style?: WalkSoundStyle; slotIndex?: number }
   | { type: 'REDEEM_BANK_REWARD'; rewardId: string; targetPlayerId?: string; targetShopId?: string }
   | { type: 'CLOSE_BANK_MENU' }
   | { type: 'OPEN_SHOP'; storeTypeId: string }
@@ -89,6 +92,19 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
       return isNonEmptyString(raw.cardId);
     case 'RESOLVE_EVENT_STORE':
       return isNonEmptyString(raw.shopId) && isOptionalString(raw.storeTypeId);
+    case 'RESOLVE_SHOES':
+      if (raw.mode === 'keep' || raw.mode === 'clear') return true;
+      if (raw.mode === 'stack') return isValidWalkSoundStyle(raw.style);
+      if (raw.mode === 'replace') {
+        return (
+          isValidWalkSoundStyle(raw.style) &&
+          typeof raw.slotIndex === 'number' &&
+          Number.isInteger(raw.slotIndex) &&
+          raw.slotIndex >= 0 &&
+          raw.slotIndex <= 2
+        );
+      }
+      return false;
     case 'REDEEM_BANK_REWARD':
       return (
         isNonEmptyString(raw.rewardId) &&

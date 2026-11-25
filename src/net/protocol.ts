@@ -35,6 +35,7 @@ export type ClientToHostMessage =
   | { type: 'UPDATE_PROFILE'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
   | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean; stopFace?: PencilFace }
+  | { type: 'UI_TURN_PING'; clientToken: string }
   | { type: 'PING'; clientToken: string; ts: number };
 
 export type HostToClientMessage =
@@ -44,6 +45,7 @@ export type HostToClientMessage =
   | { type: 'AVATAR_SYNC'; avatars: Record<string, string> }
   | { type: 'AVATAR_PUT'; key: string; dataUrl: string | null }
   | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number; stopFace?: PencilFace }
+  | { type: 'UI_TURN_PING'; fromName: string; targetPlayerId: string; targetPlayerName: string }
   | { type: 'PONG'; ts: number }
   | { type: 'ERROR'; message: string };
 
@@ -239,6 +241,7 @@ export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
     return typeof raw.seq === 'number' && Number.isInteger(raw.seq) && raw.seq >= 0 && isValidGameAction(raw.action);
   }
   if (raw.type === 'UI_PENCIL_SPIN') return typeof raw.spinning === 'boolean' && isOptionalPencilFace(raw.stopFace);
+  if (raw.type === 'UI_TURN_PING') return true;
   if (raw.type === 'PING') return typeof raw.ts === 'number' && Number.isFinite(raw.ts);
   return false;
 }
@@ -286,6 +289,13 @@ export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
       typeof raw.activePlayerIndex === 'number' &&
       Number.isInteger(raw.activePlayerIndex) &&
       isOptionalPencilFace(raw.stopFace)
+    );
+  }
+  if (raw.type === 'UI_TURN_PING') {
+    return (
+      isShortStr(raw.fromName, 40) &&
+      isShortStr(raw.targetPlayerId, 64) &&
+      isShortStr(raw.targetPlayerName, 40)
     );
   }
   if (raw.type === 'PONG') return typeof raw.ts === 'number' && Number.isFinite(raw.ts);

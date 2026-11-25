@@ -40,6 +40,18 @@
 - [x] **Visual Slice 4 — Custom Image Upload, Interactive Manual Cropper & Online `AVATAR_SYNC`:**
   - Raster image uploader (`PNG`/`JPG`/`WebP`/`GIF`/`AVIF`) with drag-and-zoom crop overlay, `<canvas>` downsampling (`64×64`–`96×96`, `<= 12 KB`, never raw SVG), `player.color` standee ring + `P1`–`P6` corner pip, and session-scoped `AVATAR_SYNC` / `HELLO` peer distribution.
 
+## Near-Term Roadmap (Soon / Next Step)
+- **Victory Celebration Modal, Match Stats & Asset History Graph (Playtest #2 #26):** Pop-up modal on `GAME_OVER` with winner avatar/trophy/confetti burst, win condition label, short Web Audio victory jingle (`src/ui/soundFx.ts`), ranked standings + fun match stats (Cash Backs, Buyouts, Events Drawn), and a historical SVG line graph tracking each player's net worth sampled once per round/month.
+- **UI Theme Presets & Custom Interface Colors (Playtest #2 #27):** Refactor hardcoded surface hexes in `src/styles.css` into semantic CSS variables and add a client-side (`localStorage`) Themes & Custom Colors selector featuring 4–5 curated presets (`Midnight Mall`, `Retro PS1 Mall`, `Sakura Pastel`, `Arcade Neon`, `Daylight`) plus Background/Panel/Accent color pickers with contrast-safe auto-derivation.
+- **1-per-Player Signature Store (Playtest #2 #19, #29, #29a):** Allow each player to customize 1 personal store (custom name, built-in icon from `STORE_ICON_PATHS`, 6 custom item names) synced once out-of-band on join/profile update (0 bytes added to per-turn `STATE_SYNC`). Appears as an optional 4th choice (`★ Open as [Signature Store]`) alongside the normal 3 stores in segments where the high-value store is unowned and the player's Signature Store isn't currently on the board; keeps real PS1 `storeTypeId` (identical costs/prices/exclusivity) plus an optional `signatureOwnerId` flag; usable in 1 segment at a time (expands L1–L4, returns to pocket if completely wiped out/sold); Bank captures (`bank_15`/`41`/`51`) let the capturing player convert into their own unused Signature Store or the segment's standard high-value store.
+
+## Optional House Rules & Alternate Modes
+*Per Playtest #2 #28: Authentic PS1 rules always remain the default; all gameplay-altering additions live strictly behind opt-in Match Setup toggles.*
+- **Elevators Always Change Floors (Playtest #2 #11):** Exclude the current floor when rolling elevator destination stops (PS1 default includes current floor).
+- **Inflation Mode (Playtest #2 #23):** Two alternate inflation rulesets under one setting — (a) **Cosmetic Currency Multiplier** (scales displayed dollar amounts, e.g. `2×`/`10×`, without changing game math) and (b) **Annual Price Inflation** (store/item prices inflate each fiscal year while starting cash stays fixed).
+- **Weighted Event Points (Playtest #2 #14):** Award more Shopping Points for negative Event cards than positive ones (PS1 default awards uniform `1–3` pts on all non-Miss events).
+- **Selective / Non-Blind Events (Playtest #2 #7, #32 — low-priority "big maybe"):** Opt-in house rule to either preview all 3 drawn Event cards before choosing or spend Shopping Points to swap/re-draw an Event card.
+
 ## Future Networking Milestone — TURN Relay, NAT Traversal & IP Privacy (Phase 3B)
 
 Deferred while friend playtesting goes smoothly on direct connections; useful when friends play over mobile or restricted Wi-Fi:
@@ -56,3 +68,4 @@ Deferred while friend playtesting goes smoothly on direct connections; useful wh
 ## Future / Optional (Maybe Later)
 - **Tier 3 — Hybrid 2D Animated Mall Cross-Section (PixiJS + HTML/CSS UI):** Replace the CSS Grid board with a 2D WebGL canvas (`PixiJS`) featuring animated scrolling escalator treads, moving elevator cars between floors, walking customers/cashiers inside open stores, character reaction portraits on Events/Bank visits, illustrated icons across all 264 items, and smooth camera zoom/pan for larger stages (`16×4`, `11×5`), while keeping menus/modals in HTML/CSS.
   - **Physical Escalator & Hallway Token Paths:** Once actual mall visuals are in place, animate player tokens so they physically follow the escalator steps/rails up and down on screen (including multi-floor express towers and crossover hallways), rather than the placeholder direct tile-to-tile glide.
+- **Custom Stages & Experimental Tile Types (Playtest #2 #24):** Additional custom mall layouts (including middle-floor Banks, which `src/config/maps/builder.ts` already supports out of the box) and experimental new tile types kept separate from the 10 authentic PS1 stages.

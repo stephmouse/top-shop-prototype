@@ -88,10 +88,16 @@ function playWhoopee(
 
 export function playWalkStepSound(
   style: WalkSoundStyle,
-  tone: ToneFn,
+  rawTone: ToneFn,
   alt: boolean,
-  audio?: AudioContext | null
+  audio?: AudioContext | null,
+  baseDelay = 0
 ): void {
+  const tone: ToneFn =
+    baseDelay > 0
+      ? (freq, dur, type, delay = 0, endFreq = freq, vol = 0.055) =>
+          rawTone(freq, dur, type, delay + baseDelay, endFreq, vol)
+      : rawTone;
   switch (style) {
     case 'chirp': {
       const f1 = alt ? 1250 : 1350;
@@ -134,8 +140,8 @@ export function playWalkStepSound(
       return;
     }
     case 'poot': {
-      if (alt) playWhoopee(audio, tone, 195, 115, 0.11, 36);
-      else playWhoopee(audio, tone, 140, 58, 0.16, 28);
+      if (alt) playWhoopee(audio, rawTone, 195, 115, 0.11, 36, baseDelay);
+      else playWhoopee(audio, rawTone, 140, 58, 0.16, 28, baseDelay);
       return;
     }
   }

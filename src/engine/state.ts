@@ -8,6 +8,7 @@ import { randomInt } from './rng';
 import {
   handlePickEventCard,
   handleResolveEventStore,
+  handleResolveShoes,
   handleRevealEventCard,
   handleSkipEventStore,
 } from './events';
@@ -131,7 +132,7 @@ export function createInitialGameState(
     segmentPools,
     lastPurchaseReceipt: null,
     winnerId: null,
-    log: [`Match started at Floor 1 Bank (${stageDef.name} · Year 1, April).${starterNote}`],
+    log: [`Match started at 1F Bank (${stageDef.name} · Year 1, April).${starterNote}`],
   };
 }
 
@@ -157,6 +158,8 @@ function dispatchAction(state: GameState, action: GameAction): GameState {
       return handleResolveEventStore(state, action.shopId, action.storeTypeId);
     case 'SKIP_EVENT_STORE':
       return handleSkipEventStore(state);
+    case 'RESOLVE_SHOES':
+      return handleResolveShoes(state, action.mode, action.style, action.slotIndex);
     case 'REDEEM_BANK_REWARD':
       return handleRedeemBankReward(state, action.rewardId, action.targetPlayerId, action.targetShopId);
     case 'CLOSE_BANK_MENU':

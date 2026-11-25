@@ -408,4 +408,84 @@ describe('hostRouter security and session flows', () => {
     expect(afterAllLeft.sent.find((m) => m.type === 'WELCOME')).toBeDefined();
     expect(h.router.getRoster().peers).toHaveLength(MAX_ROOM_PEERS);
   });
+
+  it('broadcasts turn reminder pings from waiting guests with escalating burst cooldown (Item 21)', () => {
+    let state = createInitialGameState([{ name: 'Host' }, { name: 'Guest' }], {}, 42, 'stage_0');
+    let now = 1000;
+    const hostPings: Array<{ fromName: string; targetPlayerId: string; targetPlayerName: string }> = [];
+    const conns = new Map<string, MockConn>();
+    const broadcasts: HostToClientMessage[] = [];
+
+    const router = createHostRouter('PING01', state, {
+      getState: () => state,
+      onApplyHostAction: (action) => {
+        state = applyAction(state, action);
+        return state;
+      },
+      onSyncHostState: (synced) => {
+        state = synced;
+      },
+      onSessionChange: () => {},
+      onTurnPing: (ping) => hostPings.push(ping),
+      nowMs: () => now,
+      sendToPeer: (pid, msg) => conns.get(pid)?.sent.push(msg),
+      broadcast: (msg, exclude) => {
+        broadcasts.push(msg);
+        for (const [pid, c] of conns.entries()) {
+          if (pid !== exclude && !c.closed) c.sent.push(msg);
+        }
+      },
+      closePeer: () => {},
+    });
+
+    const guestConn: MockConn = {
+      sent: [],
+      closed: false,
+      sender: {
+        boundPublicId: null,
+        send: (msg) => guestConn.sent.push(msg),
+        close: () => { guestConn.closed = true; },
+        onBind: (pid) => {
+          guestConn.sender.boundPublicId = pid;
+          conns.set(pid, guestConn);
+        },
+      },
+    };
+    router.handleClientMessage(
+      { type: 'HELLO', clientToken: 'guest_ping_tok_1', name: 'Dan', color: '#3498db' },
+      guestConn.sender
+    );
+
+    // Waiting guest (activePlayerIndex is 0 / Host) can send 3 pings spaced by >= 1s
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toEqual([{ fromName: 'Dan', targetPlayerId: 'p_1', targetPlayerName: 'Host' }]);
+
+    // Within 1s -> blocked by 1s cooldown
+    now += 400;
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toHaveLength(1);
+    expect(guestConn.sent.at(-1)).toEqual({ type: 'ERROR', message: 'Ping cooldown (1s).' });
+
+    // Pings #2 and #3 succeed after 1s each
+    now += 700; // 2100
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    now += 1000; // 3100
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toHaveLength(3);
+
+    // 4th rapid ping within 10s triggers 12s spam lockout
+    now += 1000; // 4100
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toHaveLength(3);
+    expect(guestConn.sent.at(-1)).toEqual({ type: 'ERROR', message: 'Ping cooldown (12s).' });
+
+    // Still locked at +5s, unlocked after +12s
+    now += 5000;
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toHaveLength(3);
+    now += 8000;
+    router.handleClientMessage({ type: 'UI_TURN_PING', clientToken: 'guest_ping_tok_1' }, guestConn.sender);
+    expect(hostPings).toHaveLength(4);
+    expect(broadcasts.filter((m) => m.type === 'UI_TURN_PING')).toHaveLength(4);
+  });
 });

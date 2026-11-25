@@ -85,6 +85,7 @@ const netSession = createMultiplayerSession({
     if (!suppressSyncRender) renderer.render();
   },
   onSessionChange: () => renderer.renderSessionUi(),
+  onTurnPing: (ping) => renderer.showTurnPing(ping.fromName, ping.targetPlayerName, ping.targetPlayerId),
   onError: (msg) => {
     moveDriver.clearAckTimer();
     moveDriver.clearAwaitingAck();
@@ -185,6 +186,7 @@ renderer = createGameRenderer({
   soundFx,
   dispatch,
   onOpenSetup: () => modals.openSetup(),
+  onInspectShop: (shopId) => modals.storeInspectorModal.open(shopId),
   syncTopbar: () => modals.syncTopbar(),
   onRefreshModals: () => modals.refreshAll(),
   onRefreshSetupModal: () => modals.setupModal.refresh(),
@@ -227,7 +229,8 @@ renderer.shell.append(
   modals.setupModal.el,
   modals.lobbyModal.el,
   modals.avatarModal.el,
-  modals.howToPlayModal.el
+  modals.howToPlayModal.el,
+  modals.storeInspectorModal.el
 );
 root.appendChild(renderer.shell);
 
@@ -251,5 +254,5 @@ window.addEventListener('beforeunload', (e) => {
 
 renderer.render();
 const roomParam = new URLSearchParams(window.location.search).get('room')?.trim();
-if (roomParam) modals.openLobby(roomParam);
+if (roomParam) modals.openLobby(roomParam, true);
 else modals.homeModal.open();

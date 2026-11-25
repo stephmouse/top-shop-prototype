@@ -4,6 +4,7 @@ import {
   clampPoints,
   computePlayerRank,
   computeShopAssetValue,
+  formatShopRef,
   getActivePlayer,
   getEffectiveItemRetailPrice,
   getTile,
@@ -58,7 +59,7 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
     shops: nextShops,
     pendingBankRefundPts: 0,
     deliveredShopIdsThisTurn: deliveredIds,
-    log: appendLog(state, `${active.name} delivered ${totalAdd} item(s) to ${def.name} (-$${totalCost}).`),
+    log: appendLog(state, `${active.name} delivered ${totalAdd} item(s) to ${formatShopRef(state, shop)} (-$${totalCost}).`),
   };
 
   if (mode === 'all_own_paid') {
@@ -182,11 +183,12 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
     cashbackRefund,
     refundedItemNames,
   };
+  const shopRef = formatShopRef(state, shop);
   const ptsNote = ptsAwarded > 0 ? `, +${ptsAwarded} pts` : '';
   const logMsg =
     refundedItemNames.length > 0
-      ? `${active.name} bought ${item.name} at ${def.name} for $${grossPaid}${ptsNote} — CASH BACK! ${ownerName} paid back $${cashbackRefund}!`
-      : `${active.name} bought ${item.name} at ${def.name} for $${grossPaid}${ptsNote}.`;
+      ? `${active.name} bought ${item.name} at ${shopRef} for $${grossPaid}${ptsNote} — CASH BACK! ${ownerName} paid back $${cashbackRefund}!`
+      : `${active.name} bought ${item.name} at ${shopRef} for $${grossPaid}${ptsNote}.`;
 
   const nextBoughtCount = boughtSoFar + 1;
   const nextState: GameState = {
@@ -248,6 +250,6 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     ...state,
     players,
     shops: nextShops,
-    log: appendLog(state, `${active.name} liquidated store for +$${payout}.`),
+    log: appendLog(state, `${active.name} liquidated ${formatShopRef(state, shop)} for +$${payout}.`),
   });
 }

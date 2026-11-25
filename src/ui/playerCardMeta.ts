@@ -1,4 +1,4 @@
-import { WALK_SOUND_META } from '../config/walkSounds';
+import { getPlayerWalkSounds, WALK_SOUND_META } from '../config/walkSounds';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState, Player } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
@@ -81,8 +81,13 @@ export function collectStatusChips(
       title: formatTimedWindowEndpoint(state, player.blockNewStoreWindow, 'New store block ends'),
     });
   }
-  if (player.chirpSandals) {
-    chips.push({ text: WALK_SOUND_META[player.equippedWalkSound ?? 'chirp'].shortChip, variant: 'info' });
+  const walkSounds = getPlayerWalkSounds(player);
+  if (walkSounds.length > 0) {
+    chips.push({
+      text: walkSounds.map((s) => WALK_SOUND_META[s].shortChip).join('+'),
+      variant: 'info',
+      title: `Novelty Shoes: ${walkSounds.map((s) => WALK_SOUND_META[s].label).join(' + ')}`,
+    });
   }
   return chips;
 }

@@ -1,7 +1,10 @@
 import { STORE_TYPES } from '../config/balance';
+import { getPlayerWalkSounds, MAX_WALK_SOUND_LAYERS, WALK_SOUND_META } from '../config/walkSounds';
+import type { WalkSoundStyle } from '../config/walkSounds';
 import {
   appendLog,
   computeShopAssetValue,
+  formatShopRef,
   getActivePlayer,
 } from './helpers';
 import {
@@ -68,7 +71,7 @@ export function handleResolveEventStore(
       ...state,
       players,
       shops: nextShops,
-      log: appendLog(state, `${active.name} sold store for +$${payout}.`),
+      log: appendLog(state, `${active.name} sold ${formatShopRef(state, shop)} for +$${payout}.`),
     });
   }
 
@@ -109,7 +112,7 @@ export function handleResolveEventStore(
       ...state,
       players,
       shops: nextShops,
-      log: appendLog(state, `${active.name} opened ${def.name} L${leveled.level} (${payerNote}).`),
+      log: appendLog(state, `${active.name} opened ${formatShopRef(state, leveled)} L${leveled.level} (${payerNote}).`),
     });
   }
 
@@ -148,4 +151,53 @@ export function handleSkipEventStore(state: GameState): GameState {
     };
   }
   return resumeAfterPostAction(state);
+}
+
+export function handleResolveShoes(
+  state: GameState,
+  mode: 'keep' | 'stack' | 'replace' | 'clear',
+  style?: WalkSoundStyle,
+  slotIndex?: number
+): GameState {
+  if (state.phase !== 'EVENT_SHOES_CHOICE') return state;
+  const active = getActivePlayer(state);
+  const current = getPlayerWalkSounds(active);
+
+  if (mode === 'keep') {
+    return resumeAfterPostAction({
+      ...state,
+      log: appendLog(state, `${active.name} kept current novelty shoes.`),
+    });
+  }
+
+  let nextSounds: WalkSoundStyle[];
+  let note: string;
+  if (mode === 'clear') {
+    nextSounds = [];
+    note = `${active.name} took off all novelty shoes.`;
+  } else if (mode === 'stack') {
+    if (!style || current.length >= MAX_WALK_SOUND_LAYERS) return state;
+    nextSounds = [...current, style];
+    note = `${active.name} stacked ${WALK_SOUND_META[style].label} (Layer ${nextSounds.length}).`;
+  } else {
+    if (!style || slotIndex === undefined || slotIndex < 0 || slotIndex >= current.length) return state;
+    nextSounds = current.map((s, idx) => (idx === slotIndex ? style : s));
+    note = `${active.name} swapped Layer ${slotIndex + 1} to ${WALK_SOUND_META[style].label}.`;
+  }
+
+  const players = state.players.map((p, idx) =>
+    idx === state.activePlayerIndex
+      ? {
+          ...p,
+          chirpSandals: nextSounds.length > 0,
+          equippedWalkSound: nextSounds[nextSounds.length - 1],
+          equippedWalkSounds: nextSounds,
+        }
+      : p
+  );
+  return resumeAfterPostAction({
+    ...state,
+    players,
+    log: appendLog(state, note),
+  });
 }

@@ -29,6 +29,7 @@ export interface GuestTransportCallbacks {
   onReceiveRemoteState: (state: GameState, seq: number) => void;
   onActionAck?: () => void;
   onSessionChange: () => void;
+  onTurnPing?: (ping: { fromName: string; targetPlayerId: string; targetPlayerName: string }) => void;
   onError?: (message: string) => void;
   onLostSession: () => void;
 }
@@ -47,6 +48,7 @@ export interface GuestTransport {
   isLocalTurn: (state: GameState) => boolean;
   sendAction: (action: GameAction) => boolean;
   notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
+  sendTurnPing: () => { ok: boolean; waitSec?: number };
   updateProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
 }
 
@@ -69,6 +71,9 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
   let connectTimer: ReturnType<typeof setTimeout> | null = null;
   let profile: { name: string; color: string; avatar?: AvatarSpec } | null = null;
   let triggerDrop: (() => void) | null = null;
+  let pingLastAt = -Infinity;
+  let pingRecent: number[] = [];
+  let pingBlockedUntil = 0;
 
   const avatarSync = createAvatarSyncStore();
   const heartbeat = createHeartbeatMonitor(
@@ -201,6 +206,12 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
           remoteSpinning = raw.spinning;
           remoteStopFace = raw.spinning ? null : (raw.stopFace ?? null);
           callbacks.onSessionChange();
+        } else if (raw.type === 'UI_TURN_PING') {
+          callbacks.onTurnPing?.({
+            fromName: raw.fromName,
+            targetPlayerId: raw.targetPlayerId,
+            targetPlayerName: raw.targetPlayerName,
+          });
         } else if (raw.type === 'ERROR') {
           if (!settled || raw.message === 'You were removed by the host.') failPermanent(raw.message);
           else callbacks.onError?.(raw.message);
@@ -322,6 +333,25 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
         spinning,
         ...(stopFace !== undefined ? { stopFace } : {}),
       } satisfies ClientToHostMessage);
+    },
+    sendTurnPing: () => {
+      if (!active || reconnecting || !hostConn?.open) return { ok: false };
+      const now = Date.now();
+      if (now < pingBlockedUntil) {
+        return { ok: false, waitSec: Math.max(1, Math.ceil((pingBlockedUntil - now) / 1000)) };
+      }
+      if (now - pingLastAt < 1000) return { ok: false, waitSec: 1 };
+      pingRecent = pingRecent.filter((ts) => now - ts <= 10_000);
+      if (pingRecent.length >= 3) {
+        pingBlockedUntil = now + 12_000;
+        pingRecent = [];
+        return { ok: false, waitSec: 12 };
+      }
+      pingLastAt = now;
+      pingRecent.push(now);
+      pingBlockedUntil = 0;
+      hostConn.send({ type: 'UI_TURN_PING', clientToken } satisfies ClientToHostMessage);
+      return { ok: true };
     },
     updateProfile: (nextProfile) => {
       if (!active) return;

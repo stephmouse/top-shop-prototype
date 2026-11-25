@@ -1,5 +1,5 @@
 import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
-import { WALK_SOUND_META } from '../config/walkSounds';
+import { getPlayerWalkSounds, WALK_SOUND_META } from '../config/walkSounds';
 import { drawThreeEventIds } from './eventDraw';
 import { applyStockTransform, resetShopSlot } from './eventStore';
 import {
@@ -20,7 +20,7 @@ import {
 import { createTimedWindow, extendTimedWindow } from './timedEffects';
 import type { EventCardDef, GameState } from './types';
 
-export { handleResolveEventStore, handleRevealEventCard, handleSkipEventStore } from './eventStore';
+export { handleResolveEventStore, handleResolveShoes, handleRevealEventCard, handleSkipEventStore } from './eventStore';
 export type { EventCardDef };
 
 export function computeEventBaseCash(totalMonths: number): number {
@@ -220,12 +220,23 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
       };
 
     case 'chirp_sandals': {
+      const existing = getPlayerWalkSounds(active);
+      if (existing.length > 0) {
+        return { ...nextBase('Choose whether to stack, swap, keep, or remove shoes.'), phase: 'EVENT_SHOES_CHOICE' };
+      }
       const resolved = resolveEquippedWalkSound(active.avatar?.walkSound, seed);
       seed = resolved.nextSeed;
       players = players.map((p, i) =>
-        i === state.activePlayerIndex ? { ...p, chirpSandals: true, equippedWalkSound: resolved.style } : p
+        i === state.activePlayerIndex
+          ? {
+              ...p,
+              chirpSandals: true,
+              equippedWalkSound: resolved.style,
+              equippedWalkSounds: [resolved.style],
+            }
+          : p
       );
-      return resumeAfterPostAction(nextBase(WALK_SOUND_META[resolved.style].badgeText));
+      return resumeAfterPostAction(nextBase(`Equipped ${WALK_SOUND_META[resolved.style].label}!`));
     }
 
     case 'elevator_lock':

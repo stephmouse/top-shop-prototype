@@ -25,6 +25,7 @@ export interface MultiplayerSessionCallbacks {
   onActionAck?: () => void;
   onSyncHostState?: (state: GameState) => void;
   onSessionChange: () => void;
+  onTurnPing?: (ping: { fromName: string; targetPlayerId: string; targetPlayerName: string }) => void;
   onError?: (message: string) => void;
 }
 
@@ -45,6 +46,7 @@ export interface MultiplayerSession {
   sendOrApplyAction: (action: GameAction) => boolean;
   broadcastHostState: (nextState: GameState) => void;
   notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
+  sendTurnPing: () => { ok: boolean; waitSec?: number };
   assignSeat: (seatIndex: number, ownerId: string) => void;
   updateMyProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
   kickPeer: (peerId: string) => void;
@@ -67,6 +69,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     onReceiveRemoteState: callbacks.onReceiveRemoteState,
     onActionAck: callbacks.onActionAck,
     onSessionChange: callbacks.onSessionChange,
+    onTurnPing: callbacks.onTurnPing,
     onError: callbacks.onError,
     onLostSession: () => {
       if (role === 'guest') role = 'offline';
@@ -150,6 +153,7 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
       onApplyHostAction: callbacks.onApplyHostAction,
       onSyncHostState: callbacks.onSyncHostState,
       onSessionChange: callbacks.onSessionChange,
+      onTurnPing: callbacks.onTurnPing,
       sendToPeer: (publicId, msg) => {
         const c = connByPublicId.get(publicId);
         if (c?.open) c.send(msg);
@@ -276,6 +280,11 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     notifyPencilSpin: (spinning, stopFace) => {
       if (role === 'host') hostRouter?.notifyPencilSpin(spinning, stopFace);
       else if (role === 'guest') guest.notifyPencilSpin(spinning, stopFace);
+    },
+    sendTurnPing: () => {
+      if (role === 'host' && hostRouter) return hostRouter.sendHostTurnPing();
+      if (role === 'guest') return guest.sendTurnPing();
+      return { ok: false };
     },
     assignSeat: (seatIndex, ownerId) => {
       if (role === 'host') hostRouter?.assignSeat(seatIndex, ownerId);

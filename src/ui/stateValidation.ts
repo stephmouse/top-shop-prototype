@@ -1,5 +1,6 @@
 import { MAX_PLAYERS, MIN_PLAYERS } from '../config/balance';
 import { OFFICIAL_STAGES } from '../config/maps';
+import { isValidWalkSoundStyle, MAX_WALK_SOUND_LAYERS } from '../config/walkSounds';
 import type { GameState } from '../engine/types';
 
 export const SAVE_SCHEMA_VERSION = 2;
@@ -23,6 +24,7 @@ const VALID_TURN_PHASES: ReadonlySet<string> = new Set([
   'ESCALATOR_UNDO',
   'EVENT_PICK',
   'EVENT_PICK_STORE',
+  'EVENT_SHOES_CHOICE',
   'BANK_MENU',
   'SHOP_BUY_RIVAL',
   'SHOP_BUY_SLOT',
@@ -69,6 +71,14 @@ function isValidPlayer(p: unknown, tilesObj: Record<string, unknown>): boolean {
     !isValidNullableTimedWindow(p.blockNewStoreWindow) ||
     !isValidNullableTimedWindow(p.pencilWindow) ||
     !isValidNullableTimedWindow(p.doublePriceWindow)
+  ) {
+    return false;
+  }
+  if (
+    p.equippedWalkSounds !== undefined &&
+    (!Array.isArray(p.equippedWalkSounds) ||
+      p.equippedWalkSounds.length > MAX_WALK_SOUND_LAYERS ||
+      !p.equippedWalkSounds.every(isValidWalkSoundStyle))
   ) {
     return false;
   }

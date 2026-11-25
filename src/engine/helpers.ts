@@ -36,6 +36,19 @@ export function appendLog(state: GameState, message: string): string[] {
   return [entry, ...state.log].slice(0, 40);
 }
 
+/** Formats a map coordinate consistently across tiles, UI pickers, and logs (e.g. `3F:7`). */
+export function formatTileCoord(tile: Pick<Tile, 'floor' | 'col'>): string {
+  return `${tile.floor}F:${tile.col + 1}`;
+}
+
+/** Formats a store slot consistently for player-facing logs and prompts (`Store Name (3F:7)`). */
+export function formatShopRef(state: GameState, shop: Shop): string {
+  const tile = state.tiles[shop.tileId];
+  const loc = tile ? formatTileCoord(tile) : shop.id;
+  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+  return def ? `${def.name} (${loc})` : `Empty Lot (${loc})`;
+}
+
 export function resolveEscalatorExit(
   link: EscalatorLink,
   entryDir: HorizontalDir | null

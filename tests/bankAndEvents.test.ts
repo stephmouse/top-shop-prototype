@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultAvatarForSeat } from '../src/config/avatarTypes';
-import { EVENT_CARDS, STORE_TYPES } from '../src/config/balance';
+import { BANK_REWARDS, EVENT_CARDS, STORE_TYPES } from '../src/config/balance';
 import { redactStateForClient } from '../src/engine/actions';
 import { drawThreeEventIds, getEventRubberBandColumn } from '../src/engine/eventDraw';
-import { computePaydayAmount, getEffectiveItemRetailPrice } from '../src/engine/helpers';
+import { computePaydayAmount, formatShopRef, formatTileCoord, getEffectiveItemRetailPrice } from '../src/engine/helpers';
 import { applyAction, createInitialGameState } from '../src/engine/state';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft, getTurnClock } from '../src/engine/timedEffects';
 import type { GameState } from '../src/engine/types';
@@ -329,5 +329,87 @@ describe('bank rewards, paydays, events, rubber-banding, and calendar', () => {
     expect(slowState.phase).toBe('ROLL_PENCIL');
     expect(slowState.players[0]!.pencilWindow).not.toBeNull();
     expect(getTimedWindowRoundsLeft(slowState, slowState.players[0]!.pencilWindow)).toBe(2);
+  });
+
+  it('formats tile coordinates and shop references consistently without leaking raw shop IDs (Item 20)', () => {
+    const base = createInitialGameState(PLAYERS, { startingCash: 3000 }, 55, 'stage_0');
+    const shop = base.shops.shop_1_2!;
+    const tile = base.tiles[shop.tileId]!;
+    expect(formatTileCoord(tile)).toBe('1F:3');
+    expect(formatShopRef(base, shop)).toBe('Empty Lot (1F:3)');
+
+    const ownedShop = { ...shop, ownerId: 'p_2', storeTypeId: 'bakery', level: 1 as const, stock: { bun: 1 } };
+    const bankState = {
+      ...base,
+      phase: 'BANK_MENU' as const,
+      players: base.players.map((p, i) => (i === 0 ? { ...p, points: 20 } : p)),
+      shops: { ...base.shops, shop_1_2: ownedShop },
+    };
+    expect(formatShopRef(bankState, ownedShop)).toBe('Bakery (1F:3)');
+
+    const closed = applyAction(bankState, {
+      type: 'REDEEM_BANK_REWARD',
+      rewardId: 'bank_09_close_rival_l1',
+      targetShopId: 'shop_1_2',
+    });
+    expect(closed.log[0]).toContain('Closed Bakery (1F:3) chain (L1).');
+    expect(closed.log[0]).not.toContain('shop_1_2');
+  });
+
+  it('restores Chrip-Chrip Bank label and supports Novelty Shoes stacking, swapping, keeping, and removal (Items 12 & 25)', () => {
+    const bankShoes = BANK_REWARDS.find((r) => r.id === 'bank_24_chirp_shoes');
+    expect(bankShoes?.label).toBe('Equip "Chrip-Chrip" shoes');
+
+    const base = createInitialGameState(PLAYERS, { startingCash: 3000 }, 88, 'stage_0');
+    const eventShoes = {
+      ...base,
+      phase: 'EVENT_PICK' as const,
+      eventChoices: ['eve_075', 'eve_001', 'eve_002'],
+      revealedEventSlot: 0,
+    };
+
+    // First trigger equips player profile sound ('poot') immediately
+    const first = applyAction(eventShoes, { type: 'PICK_EVENT_CARD', cardId: 'eve_075' });
+    expect(first.phase).toBe('ROLL_PENCIL');
+    expect(first.players[0]!.chirpSandals).toBe(true);
+    expect(first.players[0]!.equippedWalkSounds).toEqual(['poot']);
+
+    // Second trigger opens EVENT_SHOES_CHOICE (since already wearing shoes)
+    const repeat = applyAction(
+      { ...first, activePlayerIndex: 0, phase: 'EVENT_PICK' as const, eventChoices: ['eve_075', 'eve_001', 'eve_002'], revealedEventSlot: 0 },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_075' }
+    );
+    expect(repeat.phase).toBe('EVENT_SHOES_CHOICE');
+
+    // Keep leaves layer unchanged
+    const kept = applyAction(repeat, { type: 'RESOLVE_SHOES', mode: 'keep' });
+    expect(kept.players[0]!.equippedWalkSounds).toEqual(['poot']);
+    expect(kept.phase).toBe('ROLL_PENCIL');
+
+    // Stack up to 3 layers; 4th stack is rejected
+    const layer2 = applyAction(repeat, { type: 'RESOLVE_SHOES', mode: 'stack', style: 'honk' });
+    expect(layer2.players[0]!.equippedWalkSounds).toEqual(['poot', 'honk']);
+
+    const openFor3 = applyAction(
+      { ...layer2, activePlayerIndex: 0, phase: 'EVENT_PICK' as const, eventChoices: ['eve_075', 'eve_001', 'eve_002'], revealedEventSlot: 0 },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_075' }
+    );
+    const layer3 = applyAction(openFor3, { type: 'RESOLVE_SHOES', mode: 'stack', style: 'boing' });
+    expect(layer3.players[0]!.equippedWalkSounds).toEqual(['poot', 'honk', 'boing']);
+
+    const openAtCap = applyAction(
+      { ...layer3, activePlayerIndex: 0, phase: 'EVENT_PICK' as const, eventChoices: ['eve_075', 'eve_001', 'eve_002'], revealedEventSlot: 0 },
+      { type: 'PICK_EVENT_CARD', cardId: 'eve_075' }
+    );
+    expect(applyAction(openAtCap, { type: 'RESOLVE_SHOES', mode: 'stack', style: 'tap' })).toBe(openAtCap);
+
+    // Swap Layer 2 ('honk' -> 'tap')
+    const swapped = applyAction(openAtCap, { type: 'RESOLVE_SHOES', mode: 'replace', slotIndex: 1, style: 'tap' });
+    expect(swapped.players[0]!.equippedWalkSounds).toEqual(['poot', 'tap', 'boing']);
+
+    // Take off all shoes
+    const cleared = applyAction(openAtCap, { type: 'RESOLVE_SHOES', mode: 'clear' });
+    expect(cleared.players[0]!.chirpSandals).toBe(false);
+    expect(cleared.players[0]!.equippedWalkSounds).toEqual([]);
   });
 });
