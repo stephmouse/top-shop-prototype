@@ -3,9 +3,10 @@ import { appendLog, clampPoints, computePlayerNetWorth, formatShopRef, formatTil
 import { recordAssetSnapshot, syncPeakNetWorth } from '../engine/matchStats';
 import type { PlayerMatchStats, WinReason } from '../engine/matchStats';
 import { buildStarterStock, recomputeSegmentChainLevels } from '../engine/shops';
+import { applyAction } from '../engine/state';
 import { createTimedWindow } from '../engine/timedEffects';
 import { advanceToNextTurn } from '../engine/turn';
-import type { GameState, Shop } from '../engine/types';
+import type { GameState, PencilFace, Shop } from '../engine/types';
 
 export interface DebugPlayerPatch {
   cashDelta?: number;
@@ -62,12 +63,20 @@ export function debugAdjustPlayer(state: GameState, playerId: string, patch: Deb
   });
 }
 
+/** Forces a specific Pencil Die face directly (works for Host even on a Guest's turn). */
+export function debugForceRoll(state: GameState, chosenFace: PencilFace): GameState {
+  return applyAction(state, { type: 'ROLL_PENCIL', chosenFace });
+}
+
 /** Jumps directly into BANK_MENU for the active player. */
 export function debugOpenBankMenu(state: GameState): GameState {
   const active = getActivePlayer(state);
   return {
     ...state,
     phase: 'BANK_MENU',
+    winnerId: null,
+    winnerIds: undefined,
+    winReason: null,
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
     pendingUndoSnapshot: null,
@@ -84,6 +93,9 @@ export function debugTriggerEventCard(state: GameState, cardId: string): GameSta
   return {
     ...state,
     phase: 'EVENT_PICK',
+    winnerId: null,
+    winnerIds: undefined,
+    winReason: null,
     eventChoices: [card.id, ...decoys],
     revealedEventSlot: 0,
     eventStorePrompt: null,

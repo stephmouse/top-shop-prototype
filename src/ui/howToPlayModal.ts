@@ -16,17 +16,19 @@ const RULE_SECTIONS: readonly RuleSection[] = [
   {
     title: '1. Objective',
     items: [
-      ['Win by Net Worth:', 'Be the first player to reach the Target Assets goal (Cash + Owned Store Value).'],
-      ['Win by Elimination:', 'If enough rivals go Bankrupt to meet the Bankrupt Limit, the richest active player wins.'],
+      ['Win by Net Worth:', 'Be the first player to reach the Target Assets goal (Cash + Owned Store Value). Exact Net Worth ties share 1st place as co-winners.'],
+      ['Win by Elimination:', 'If enough rivals go Bankrupt to meet the Bankrupt Limit, the richest active player (or tied leaders) wins.'],
+      ['99-Point Bank Claim:', 'Redeeming 99 Shopping Points at the Bank claims immediate victory.'],
     ],
   },
   {
     title: '2. Rolling & Moving',
     items: [
-      ['Pencil Die (1–8 & E):', 'Spin and stop the Pencil Die (Space or button) to walk 1–8 steps, or roll E to draw 1 of 3 face-down Event Cards.'],
+      ['Pencil Die (1–8 & E):', 'Click/tap the 3D pencil, press Space, or press Q (Quick Roll) to walk 1–8 steps, or roll E to draw 1 of 3 face-down Event Cards.'],
       ['Rounds vs. Turns:', 'A Turn is one player’s move; a Round is one full cycle around the table (1 calendar month). Timed effects (like 2× Prices or Closed Stores) last N full rounds and expire right after the triggering player finishes their turn N rounds later—so a badge like 4 rd stays at 4 rd across everyone’s turn until that round finishes.'],
       ['Direction Locking:', 'Once you pick a direction (←/→ or escalator ↑/↓), you keep traveling that way until you pass/land on the Bank, stop at an Elevator, or draw a direction-unlocking Event.'],
-      ['Controls:', 'Use the bottom direction buttons, click dashed LAND tiles on the board to auto-walk, or press Arrow / WASD keys (opposite direction steps Back, Esc resets your move).'],
+      ['Movement Controls:', 'Use the bottom direction buttons, click dashed LAND tiles on the board to auto-walk, or press Arrow / WASD keys (opposite direction steps Back, Esc resets your move).'],
+      ['Menus & Store Inspector:', 'Use 1–9 or Arrow keys + Enter in menus, 0/S to Skip or Earn +1 Bank Point, -/Z & C in Restock, U for Bank Usable Only, and click any owned store tile to open the Store Inspector.'],
     ],
   },
   {

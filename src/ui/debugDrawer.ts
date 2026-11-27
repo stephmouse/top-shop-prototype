@@ -8,6 +8,7 @@ import {
   debugAdjustPlayer,
   debugAdvanceMonth,
   debugAdvanceTurn,
+  debugForceRoll,
   debugMutateShop,
   debugOpenBankMenu,
   debugSeedSampleStats,
@@ -133,7 +134,7 @@ export function createDebugDrawer(options: DebugDrawerOptions): DebugDrawerContr
     for (const face of PENCIL_FACES) {
       const btn = mkBtn(
         String(face),
-        () => options.onDispatchAction({ type: 'ROLL_PENCIL', chosenFace: face }),
+        () => options.onApplyDebugState(debugForceRoll(options.getState(), face)),
         face === 'E' ? 'primary' : '',
         state.phase !== 'ROLL_PENCIL'
       );
