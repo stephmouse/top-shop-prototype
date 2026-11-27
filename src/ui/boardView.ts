@@ -1,5 +1,6 @@
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { StoreIconId } from '../config/storeVisuals';
 import { formatTileCoord, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
@@ -23,6 +24,7 @@ export { renderPlayersHud } from './playerCardView';
 export interface BoardInteractionOptions {
   preview: MovePreview;
   shopPick?: BoardShopPickSpec | null;
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>;
   onSelectNextStep: (option: MoveOption) => void;
   onSelectEndTarget: (target: EndTarget) => void;
   onHoverEndTarget?: (tileId: string | null) => void;
@@ -241,7 +243,7 @@ export function renderBoard(
     const pickTarget = Boolean(pick && tile.shopSlotId && pick.selectableShopIds.has(tile.shopSlotId));
     const pickSelected = Boolean(pickTarget && tile.shopSlotId === pick?.selectedShopId);
     const pickHovered = Boolean(pickTarget && tile.shopSlotId === pick?.hoveredShopId);
-    const content = formatTileContent(state, tile, hasMultiShaft);
+    const content = formatTileContent(state, tile, hasMultiShaft, interaction?.syncedSignatures);
     const { chainLeft, chainRight } = computeChainAdjacency(state, tile, content.shop);
     const escAdj = computeEscalatorAdjacency(state, tile);
 
@@ -254,6 +256,7 @@ export function renderBoard(
     if (pickHovered) classes.push('tile--pick-hover');
     if (pick && !pickTarget) classes.push('tile--pick-dim');
     if (content.isOwned) classes.push('is-owned');
+    if (content.isSignature) classes.push('is-signature');
     if (content.isVacantShop) classes.push('is-vacant');
     if (content.isClosed) classes.push('is-closed');
     if (chainLeft) classes.push('chain-left');

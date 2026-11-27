@@ -1,4 +1,6 @@
 import type { AvatarSpec } from '../config/avatarTypes';
+import { sanitizeSignatureStore } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { DEFAULT_MATCH_CONFIG, PLAYER_COLORS } from '../config/balance';
 import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
@@ -38,6 +40,7 @@ export interface PlayerSetupInput {
   color?: string;
   isBot?: boolean;
   avatar?: AvatarSpec;
+  signatureStore?: SignatureStoreSpec;
 }
 
 export function createInitialGameState(
@@ -55,12 +58,15 @@ export function createInitialGameState(
   };
   const { tiles, shops, segmentPools, startTileId } = createStageMap(stageId);
 
-  const players: Player[] = playerInputs.map((input, idx) => ({
-    id: `p_${idx + 1}`,
-    name: input.name.trim() || `Player ${idx + 1}`,
-    color: input.color || PLAYER_COLORS[idx % PLAYER_COLORS.length] || '#ffffff',
-    ...(input.avatar ? { avatar: input.avatar } : {}),
-    cash: config.startingCash,
+  const players: Player[] = playerInputs.map((input, idx) => {
+    const cleanSig = sanitizeSignatureStore(input.signatureStore);
+    return {
+      id: `p_${idx + 1}`,
+      name: input.name.trim() || `Player ${idx + 1}`,
+      color: input.color || PLAYER_COLORS[idx % PLAYER_COLORS.length] || '#ffffff',
+      ...(input.avatar ? { avatar: input.avatar } : {}),
+      ...(cleanSig ? { signatureStore: cleanSig } : {}),
+      cash: config.startingCash,
     points: 0,
     tileId: startTileId,
     horizontalDir: null,
@@ -79,7 +85,8 @@ export function createInitialGameState(
     chirpSandals: false,
     isBankrupt: false,
     isBot: Boolean(input.isBot),
-  }));
+  };
+  });
 
   let nextSeed = seed;
   let startIdx = 0;
@@ -164,7 +171,7 @@ function dispatchAction(state: GameState, action: GameAction): GameState {
     case 'PICK_EVENT_CARD':
       return handlePickEventCard(state, action.cardId);
     case 'RESOLVE_EVENT_STORE':
-      return handleResolveEventStore(state, action.shopId, action.storeTypeId);
+      return handleResolveEventStore(state, action.shopId, action.storeTypeId, action.asSignature);
     case 'SKIP_EVENT_STORE':
       return handleSkipEventStore(state);
     case 'RESOLVE_SHOES':
@@ -174,9 +181,9 @@ function dispatchAction(state: GameState, action: GameAction): GameState {
     case 'CLOSE_BANK_MENU':
       return state.phase === 'BANK_MENU' ? resumeAfterPostAction(state) : state;
     case 'OPEN_SHOP':
-      return handleOpenShop(state, action.storeTypeId);
+      return handleOpenShop(state, action.storeTypeId, action.asSignature);
     case 'BUYOUT_SHOP':
-      return handleBuyoutShop(state, action.storeTypeId);
+      return handleBuyoutShop(state, action.storeTypeId, action.asSignature);
     case 'SKIP_SHOP_SLOT':
       return state.phase === 'SHOP_BUY_SLOT' ? resumeAfterPostAction(state) : state;
     case 'DELIVER_ITEMS':

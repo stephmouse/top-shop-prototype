@@ -22,6 +22,8 @@ import { loadUserProfile } from './playerProfile';
 import type { UserProfile } from './playerProfile';
 import { createSetupModal } from './setupModal';
 import type { SetupModalController } from './setupModal';
+import { createSignatureStoreModal } from './signatureStoreModal';
+import type { SignatureStoreModalController } from './signatureStoreModal';
 import type { SoundFxController } from './soundFx';
 import { createStoreInspectorModal } from './storeInspectorModal';
 import type { StoreInspectorController } from './storeInspectorModal';
@@ -59,6 +61,7 @@ export interface AppModals {
   setupModal: SetupModalController;
   lobbyModal: LobbyModalController;
   avatarModal: AvatarModalController;
+  signatureStoreModal: SignatureStoreModalController;
   howToPlayModal: HowToPlayModalController;
   storeInspectorModal: StoreInspectorController;
   victoryModal: VictoryModalController;
@@ -88,8 +91,15 @@ export function createAppModals(options: AppModalsOptions): AppModals {
   const avatarModal = createAvatarModal({
     onPreviewWalkSound: (c) => soundFx.playWalkSoundPreview(c),
   });
+  const signatureStoreModal = createSignatureStoreModal();
   const howToPlayModal = createHowToPlayModal();
-  const storeInspectorModal = createStoreInspectorModal({ getState: options.getState });
+  const storeInspectorModal = createStoreInspectorModal({
+    getState: options.getState,
+    getOnlineContext: () => ({
+      roster: netSession.getRoster(),
+      syncedSignatures: netSession.getSyncedSignatures(),
+    }),
+  });
   const themeModal = createThemeModal({ onThemeChange: options.onThemeChange });
 
   const openSetup = () => {
@@ -132,6 +142,8 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     onSaveMatch: options.onSaveMatch,
     onLoadMatch: options.onLoadMatch,
     onEditAvatar: (idx, cur, col, onSave) => avatarModal.open(cur, col, `Customize Player ${idx + 1} Standee`, onSave),
+    onEditSignatureStore: (idx, cur, col, onSave) =>
+      signatureStoreModal.open(cur, col, `P${idx + 1} Signature Store`, onSave),
     getOnlineContext: () => ({
       role: netSession.getRole(),
       roster: netSession.getRoster(),
@@ -160,6 +172,8 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       lobbyModal.showStatus(`Added Player ${players.length} slot for ${peer.name}.`);
     },
     onEditAvatar: (cur, col, onSave, title = 'Customize Guest Standee') => avatarModal.open(cur, col, title, onSave),
+    onEditSignatureStore: (cur, col, onSave, title = 'Customize Signature Store') =>
+      signatureStoreModal.open(cur, col, title, onSave),
     onUpdateHostSeat: options.onUpdateHostSeat,
     onOpenMatchSetup: openSetup,
     onProfileChange: options.onUpdateProfile,
@@ -171,6 +185,8 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     getProfile: () => loadUserProfile(getPrimaryFallback()),
     onUpdateProfile: options.onUpdateProfile,
     onEditAvatar: (cur, col, onSave, title = 'Customize Your Standee') => avatarModal.open(cur, col, title, onSave),
+    onEditSignatureStore: (cur, col, onSave, title = 'Customize Your Signature Store') =>
+      signatureStoreModal.open(cur, col, title, onSave),
     onOpenHowToPlay: () => howToPlayModal.open(),
     onOpenAppearance: () => themeModal.open(),
     onPlayLocal: () => setupModal.open(options.getSetup()),
@@ -261,6 +277,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     setupModal,
     lobbyModal,
     avatarModal,
+    signatureStoreModal,
     howToPlayModal,
     storeInspectorModal,
     victoryModal,
@@ -271,6 +288,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     syncTopbar,
     isAnyModalOpen: () =>
       avatarModal.isOpen() ||
+      signatureStoreModal.isOpen() ||
       howToPlayModal.isOpen() ||
       storeInspectorModal.isOpen() ||
       victoryModal.isOpen() ||
@@ -280,6 +298,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       lobbyModal.isOpen(),
     closeTopModal: () => {
       if (avatarModal.isOpen()) return avatarModal.close();
+      if (signatureStoreModal.isOpen()) return signatureStoreModal.close();
       if (howToPlayModal.isOpen()) return howToPlayModal.close();
       if (storeInspectorModal.isOpen()) return storeInspectorModal.close();
       if (victoryModal.isOpen()) return victoryModal.close();

@@ -1,6 +1,7 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
 import type { GameState, PencilFace } from '../engine/types';
@@ -36,19 +37,28 @@ export interface MultiplayerSession {
   getSeq: () => number;
   getRoomCode: () => string | null;
   getCustomAvatars: () => Record<string, string>;
+  getSyncedSignatures: () => Record<string, SignatureStoreSpec>;
   isRemotePencilSpinning: () => boolean;
   getRemotePencilStopFace: () => PencilFace | null;
   isReconnecting: () => boolean;
   isLocalTurn: (state: GameState) => boolean;
   shouldTickEscalator: () => boolean;
   hostRoom: (customCode?: string) => Promise<string>;
-  joinRoom: (roomCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }) => Promise<void>;
+  joinRoom: (
+    roomCode: string,
+    profile: { name: string; color: string; avatar?: AvatarSpec; signatureStore?: SignatureStoreSpec }
+  ) => Promise<void>;
   sendOrApplyAction: (action: GameAction) => boolean;
   broadcastHostState: (nextState: GameState) => void;
   notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
   sendTurnPing: () => { ok: boolean; waitSec?: number };
   assignSeat: (seatIndex: number, ownerId: string) => void;
-  updateMyProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
+  updateMyProfile: (profile: {
+    name: string;
+    color: string;
+    avatar?: AvatarSpec;
+    signatureStore?: SignatureStoreSpec;
+  }) => void;
   kickPeer: (peerId: string) => void;
   disconnect: () => void;
 }
@@ -237,7 +247,10 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     });
   }
 
-  function joinRoom(rawCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }): Promise<void> {
+  function joinRoom(
+    rawCode: string,
+    profile: { name: string; color: string; avatar?: AvatarSpec; signatureStore?: SignatureStoreSpec }
+  ): Promise<void> {
     cleanup();
     const code = normalizeRoomCode(rawCode);
     if (code.length < 4) return Promise.reject(new Error('Enter a valid room code.'));
@@ -252,6 +265,8 @@ export function createMultiplayerSession(callbacks: MultiplayerSessionCallbacks)
     getSeq: () => (role === 'host' && hostRouter ? hostRouter.getSeq() : guest.getSeq()),
     getRoomCode: () => (role === 'host' ? hostRoomCode : guest.getRoomCode()),
     getCustomAvatars: () => (role === 'host' && hostRouter ? hostRouter.getCustomAvatars() : guest.getCustomAvatars()),
+    getSyncedSignatures: () =>
+      role === 'host' && hostRouter ? hostRouter.getSyncedSignatures() : guest.getSyncedSignatures(),
     isRemotePencilSpinning: () =>
       role === 'host' && hostRouter ? hostRouter.isRemotePencilSpinning() : guest.isRemotePencilSpinning(),
     getRemotePencilStopFace: () =>

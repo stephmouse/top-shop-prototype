@@ -3,6 +3,7 @@ import { getActivePlayer } from '../engine/helpers';
 import { computeMovePreview } from '../engine/movePreview';
 import type { GameState, PencilFace } from '../engine/types';
 import type { MultiplayerSession } from '../net/session';
+import { resolvePlayerSignatures } from '../net/signatureSync';
 import { renderActionPanel } from './actionPanel';
 import { getBoardTileElement, renderBoard, renderPlayersHud, renderTokensOverlay } from './boardView';
 import { buildBoardShopPick } from './boardPickState';
@@ -131,6 +132,14 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     renderActionBox(canAct);
   }
 
+  function currentSignatures() {
+    return resolvePlayerSignatures(
+      options.getState(),
+      netSession.getRoster(),
+      netSession.getSyncedSignatures()
+    );
+  }
+
   function renderActionBox(
     canAct: boolean,
     remoteSpin = netSession.isRemotePencilSpinning(),
@@ -147,6 +156,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
       onOpenVictory: options.onOpenVictory,
       readOnly: !canAct,
       reconnecting,
+      syncedSignatures: currentSignatures(),
       remotePencilSpinning: remoteSpin,
       remotePencilStopFace: remoteStop,
       onPencilSpinChange: (spinning, stopFace) => netSession.notifyPencilSpin(spinning, stopFace),
@@ -171,6 +181,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     const state = options.getState();
     renderBoard(boardEl, state, {
       preview,
+      syncedSignatures: currentSignatures(),
       shopPick: canAct ? buildBoardShopPick(state, options.dispatch, refreshPickUi, hoveredPickShopId) : null,
       onInspectShop: options.onInspectShop,
       onSelectNextStep: (opt) =>

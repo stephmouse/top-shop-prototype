@@ -1,4 +1,6 @@
-import { BANK_REWARDS, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { BANK_REWARDS, STORE_CAPACITY_BY_LEVEL } from '../config/balance';
+import { getShopDisplayName } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameAction } from '../engine/actions';
 import {
   canRedeemBankReward,
@@ -22,15 +24,20 @@ type DispatchFn = (action: GameAction) => void;
 
 let filterUsableOnly = true;
 
-function formatShopOption(state: GameState, shop: Shop, includeOwner: boolean): string {
+function formatShopOption(
+  state: GameState,
+  shop: Shop,
+  includeOwner: boolean,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
+): string {
   const tile = state.tiles[shop.tileId];
   const loc = tile ? formatTileCoord(tile) : shop.id;
-  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+  const storeName = getShopDisplayName(shop, state.players, syncedSignatures);
   const stock = getShopTotalStock(shop);
   const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
   const owner = state.players.find((p) => p.id === shop.ownerId);
   const ownerTag = includeOwner ? ` (${owner?.name ?? '?'})` : '';
-  return `${loc} ${def?.name ?? shop.id} L${shop.level} [${stock}/${cap}]${ownerTag}`;
+  return `${loc} ${storeName} L${shop.level} [${stock}/${cap}]${ownerTag}`;
 }
 
 function appendTargetStep(
@@ -41,7 +48,8 @@ function appendTargetStep(
   dispatch: DispatchFn,
   notify: () => void,
   onBack: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const backBtn = createChoiceButton(
     '← Back to Rewards',
@@ -93,7 +101,7 @@ function appendTargetStep(
       const ownerIndex = s.ownerId ? state.players.findIndex((p) => p.id === s.ownerId) : -1;
       const owner = ownerIndex >= 0 ? state.players[ownerIndex] : undefined;
       const isConfirming = confirmId === s.id;
-      const shopLabel = formatShopOption(state, s, targets.includeOwner);
+      const shopLabel = formatShopOption(state, s, targets.includeOwner, syncedSignatures);
       const btn = createChoiceButton(
         isConfirming ? `Confirm? ${shopLabel}` : shopLabel,
         () => {
@@ -122,7 +130,8 @@ export function renderBankPanel(
   state: GameState,
   dispatch: DispatchFn,
   onUiChange?: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
 
@@ -162,7 +171,8 @@ export function renderBankPanel(
           setBankPendingRewardId(state, null);
           notify();
         },
-        onHoverShop
+        onHoverShop,
+        syncedSignatures
       );
       container.appendChild(list);
       return;

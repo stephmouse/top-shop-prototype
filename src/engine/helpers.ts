@@ -1,6 +1,7 @@
 import { PAYDAY_CONFIG, SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
+import { getShopDisplayName } from '../config/signatureStore';
 import { isValidWalkSoundStyle, WALK_SOUND_STYLES } from '../config/walkSounds';
 import type { WalkSoundChoice, WalkSoundStyle } from '../config/walkSounds';
 import { pickRandom } from './rng';
@@ -45,8 +46,7 @@ export function formatTileCoord(tile: Pick<Tile, 'floor' | 'col'>): string {
 export function formatShopRef(state: GameState, shop: Shop): string {
   const tile = state.tiles[shop.tileId];
   const loc = tile ? formatTileCoord(tile) : shop.id;
-  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
-  return def ? `${def.name} (${loc})` : `Empty Lot (${loc})`;
+  return shop.storeTypeId ? `${getShopDisplayName(shop, state.players)} (${loc})` : `Empty Lot (${loc})`;
 }
 
 export function resolveEscalatorExit(

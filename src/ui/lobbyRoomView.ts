@@ -1,5 +1,6 @@
 import type { AvatarSpec } from '../config/avatarTypes';
 import { MAX_PLAYERS } from '../config/balance';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameState } from '../engine/types';
 import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
@@ -19,6 +20,12 @@ export interface ActiveRoomViewContext {
   guestProfile?: UserProfile;
   onSaveGuestProfile?: (next: UserProfile) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onEditSignatureStore?: (
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void,
+    title?: string
+  ) => void;
   onUpdateHostSeat?: (seatIndex: number, next: UserProfile) => void;
   onOpenMatchSetup?: () => void;
 }
@@ -114,6 +121,9 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
       onEditAvatar: ctx.onEditAvatar
         ? (cur, col, onSave) => ctx.onEditAvatar!(cur, col, onSave, 'Customize Your Standee')
         : undefined,
+      onEditSignatureStore: ctx.onEditSignatureStore
+        ? (cur, col, onSave) => ctx.onEditSignatureStore!(cur, col, onSave, 'Customize Your Signature Store')
+        : undefined,
     }));
     container.appendChild(profSec);
   }
@@ -182,7 +192,12 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
       avBtn.appendChild(createAvatarElement(resolvedAv, player.color));
       avBtn.addEventListener('click', () => {
         ctx.onEditAvatar!(resolvedAv, player.color, (nextAv) => {
-          ctx.onUpdateHostSeat!(idx, { name: player.name, color: player.color, avatar: nextAv });
+          ctx.onUpdateHostSeat!(idx, {
+            name: player.name,
+            color: player.color,
+            avatar: nextAv,
+            ...(player.signatureStore ? { signatureStore: player.signatureStore } : {}),
+          });
         }, `Customize P${idx + 1} Standee`);
       });
       left.appendChild(avBtn);
@@ -210,6 +225,7 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
           name: nameIn.value.trim() || `Player ${idx + 1}`,
           color: colIn.value,
           avatar: resolvedAv,
+          ...(player.signatureStore ? { signatureStore: player.signatureStore } : {}),
         });
       nameIn.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
@@ -219,6 +235,22 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
       });
       colIn.addEventListener('change', commitSeat);
       inlineEdit.append(nameIn, colIn, mkBtn('Apply', commitSeat));
+      if (ctx.onEditSignatureStore) {
+        const sigBtn = mkBtn(
+          player.signatureStore ? `★ ${player.signatureStore.name}` : '★ Store',
+          () =>
+            ctx.onEditSignatureStore!(player.signatureStore, player.color, (nextSig) => {
+              ctx.onUpdateHostSeat!(idx, {
+                name: player.name,
+                color: player.color,
+                avatar: resolvedAv,
+                ...(nextSig ? { signatureStore: nextSig } : {}),
+              });
+            }, `Customize P${idx + 1} Signature Store`),
+          player.signatureStore ? 'signature-edit-btn is-configured' : 'signature-edit-btn'
+        );
+        inlineEdit.appendChild(sigBtn);
+      }
       left.appendChild(inlineEdit);
     }
     if (isMine) left.appendChild(mk('span', 'net-seat-badge is-you', 'YOU'));

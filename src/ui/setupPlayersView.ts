@@ -1,6 +1,7 @@
 import { isValidCustomImageDataUrl, sanitizeAvatarSpec } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
 import { PLAYER_COLORS } from '../config/balance';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
 import { HOST_TOKEN } from '../net/protocol';
 import { createAvatarElement } from './avatarSvg';
@@ -14,6 +15,12 @@ export interface SetupOnlineContext {
 
 export interface SetupPlayersCallbacks {
   onEditAvatar?: (idx: number, current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
+  onEditSignatureStore?: (
+    idx: number,
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void
+  ) => void;
   onPlayersMutated: () => void;
   onNameInput?: () => void;
 }
@@ -140,14 +147,29 @@ export function renderSetupPlayersList(
       swatches.appendChild(sw);
     }
 
+    const sigBtn = Object.assign(document.createElement('button'), {
+      type: 'button' as const,
+      className: player.signatureStore ? 'signature-edit-btn is-configured' : 'signature-edit-btn',
+      textContent: player.signatureStore ? `★ ${player.signatureStore.name}` : '★ Store',
+      title: `Customize P${idx + 1} Signature Store`,
+    });
+    sigBtn.addEventListener('click', () =>
+      callbacks.onEditSignatureStore?.(idx, player.signatureStore, pColor, (nextSig) => {
+        const cur = draft.players[idx]!;
+        const { signatureStore: _old, ...rest } = cur;
+        draft.players[idx] = nextSig ? { ...rest, signatureStore: nextSig } : rest;
+        callbacks.onPlayersMutated();
+      })
+    );
+
     if (isHostOnline) {
       const hostBadge = Object.assign(document.createElement('span'), {
         className: 'net-seat-badge is-host',
         textContent: 'HOST',
       });
-      row.append(tag, hostBadge, avatarBtn, nameInput, colorInput, swatches);
+      row.append(tag, hostBadge, avatarBtn, nameInput, colorInput, swatches, sigBtn);
     } else {
-      row.append(tag, avatarBtn, nameInput, colorInput, swatches);
+      row.append(tag, avatarBtn, nameInput, colorInput, swatches, sigBtn);
     }
     container.appendChild(row);
   });

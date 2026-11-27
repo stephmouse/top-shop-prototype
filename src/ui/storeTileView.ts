@@ -1,4 +1,6 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { getShopDisplayName, getShopDisplayVisual } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { getStoreVisual, STORE_ICON_PATHS } from '../config/storeVisuals';
 import type { StoreIconId, StoreVisualCategory } from '../config/storeVisuals';
 import { canPlayerUseElevator, getActivePlayer } from '../engine/helpers';
@@ -16,6 +18,7 @@ export interface TileContent {
   category?: StoreVisualCategory;
   accent?: string;
   isOwned: boolean;
+  isSignature: boolean;
   isVacantShop: boolean;
   isClosed: boolean;
   closedRounds: number;
@@ -162,9 +165,14 @@ export function updateShopShelf(shelfEl: HTMLElement, shop: Shop | undefined): v
   }
 }
 
-export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: boolean): TileContent {
+export function formatTileContent(
+  state: GameState,
+  tile: Tile,
+  hasMultiShaft: boolean,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
+): TileContent {
   const active = getActivePlayer(state);
-  const base = { isOwned: false, isVacantShop: false, isClosed: false, closedRounds: 0, level: null };
+  const base = { isOwned: false, isSignature: false, isVacantShop: false, isClosed: false, closedRounds: 0, level: null };
 
   switch (tile.type) {
     case 'bank':
@@ -222,18 +230,20 @@ export function formatTileContent(state: GameState, tile: Tile, hasMultiShaft: b
       const mult = (state.globalSale?.priceMultiplier ?? 1) * doubleMult;
       const minPrice = getCheapestItemPrice(shop, mult);
       const priceStr = minPrice !== null ? `$${minPrice}${doubleMult > 1 ? '×2' : ''}` : 'EMPTY';
-      const vis = getStoreVisual(shop.storeTypeId);
+      const vis = getShopDisplayVisual(shop, state.players, syncedSignatures);
+      const displayName = getShopDisplayName(shop, state.players, syncedSignatures);
       const closedRounds = getTimedWindowRoundsLeft(state, shop.closedWindow);
       const closedTooltip = shop.closedWindow
         ? formatTimedWindowEndpoint(state, shop.closedWindow, 'Reopens')
         : undefined;
       return {
-        name: def?.name ?? 'Shop',
+        name: vis.isSignature ? `★ ${displayName}` : displayName,
         stats: `L${shop.level} · ${total}/${cap} · ${priceStr}`,
         iconId: vis.iconId,
         category: vis.category,
         accent: vis.accent,
         isOwned: true,
+        isSignature: vis.isSignature,
         isVacantShop: false,
         isClosed: Boolean(shop.closedWindow),
         closedRounds,

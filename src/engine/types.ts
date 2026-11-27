@@ -1,4 +1,5 @@
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { WalkSoundStyle } from '../config/walkSounds';
 import type {
   BankRewardDef,
@@ -97,6 +98,7 @@ export interface Shop {
   segmentId: string;
   ownerId: string | null;
   storeTypeId: string | null;
+  signatureOwnerId?: string | null;
   level: 1 | 2 | 3 | 4;
   stock: Record<string, number>; // itemId -> quantity
   closedWindow: TimedEffectWindow | null;
@@ -109,6 +111,7 @@ export interface Player {
   name: string;
   color: string;
   avatar?: AvatarSpec;
+  signatureStore?: SignatureStoreSpec;
   cash: number;
   points: number;
   tileId: string;

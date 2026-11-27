@@ -1,4 +1,6 @@
 import { SHOP_RULES, STORE_TYPES } from '../config/balance';
+import { getPlayerSignatureSpec, getShopDisplayName, getShopItemDisplayName } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import {
   computeBuyoutCosts,
   computeOpenCostForLevel,
@@ -7,7 +9,7 @@ import {
   getEffectiveItemRetailPrice,
   getTile,
 } from '../engine/helpers';
-import { computeResultingChainLevel, getAllowedStoreTypeIds } from '../engine/shops';
+import { computeResultingChainLevel, getAllowedStoreTypeIds, getSignatureOpenEligibility } from '../engine/shops';
 import { formatTimedWindowEndpoint } from '../engine/timedEffects';
 import type { GameState, ItemDef } from '../engine/types';
 import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPickState';
@@ -22,7 +24,8 @@ export { renderDeliverPanel };
 export function renderBuySlotPanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
   const tile = getTile(state, active.tileId);
@@ -30,12 +33,13 @@ export function renderBuySlotPanel(
   if (!shop) return;
 
   const isBuyout = shop.ownerId !== null && shop.ownerId !== active.id;
+  const activeSpec = getPlayerSignatureSpec(active.id, state.players, syncedSignatures);
 
   const list = document.createElement('div');
   list.className = 'card-list';
   container.appendChild(list);
 
-  let confirmStoreTypeId: string | null = null;
+  let confirmKey: string | null = null;
 
   const renderList = () => {
     list.innerHTML = '';
@@ -54,55 +58,104 @@ export function renderBuySlotPanel(
           computeOpenCostForLevel(a.id, resultingLevel)
       );
 
+    const sigElig = active.blockNewStoreWindow
+      ? { canOpenAsSignature: false, isExpandingSignature: false, highValueTypeId: null }
+      : getSignatureOpenEligibility(
+          state,
+          active.id,
+          shop.segmentId,
+          isBuyout ? shop.id : undefined,
+          Boolean(activeSpec?.name)
+        );
+
+    const entries: Array<{
+      storeTypeId: string;
+      asSignature: boolean;
+      displayName: string;
+      key: string;
+      isSigChoice: boolean;
+    }> = sortedDefs.map((def) => {
+      const expandSig = sigElig.isExpandingSignature && Boolean(activeSpec?.name);
+      return {
+        storeTypeId: def.id,
+        asSignature: expandSig,
+        displayName: expandSig ? `★ ${activeSpec!.name}` : def.name,
+        key: def.id,
+        isSigChoice: expandSig,
+      };
+    });
+
+    if (sigElig.canOpenAsSignature && sigElig.highValueTypeId && activeSpec?.name) {
+      const hvDef = STORE_TYPES[sigElig.highValueTypeId];
+      if (hvDef) {
+        entries.push({
+          storeTypeId: hvDef.id,
+          asSignature: true,
+          displayName: `★ ${activeSpec.name}`,
+          key: `${hvDef.id}:sig`,
+          isSigChoice: true,
+        });
+      }
+    }
+
     const promptText = active.blockNewStoreWindow
       ? `This store can't be opened due to vandalism (${formatTimedWindowEndpoint(state, active.blockNewStoreWindow, 'Ends')}).`
-      : sortedDefs.length === 0
+      : entries.length === 0
         ? 'All store types in this segment are already claimed by rivals.'
         : isBuyout
-          ? 'Choose a store for buyout (click twice or press 1–3 then Enter):'
-          : 'Choose a store to open (click twice or press 1–3 then Enter):';
+          ? `Choose a store for buyout (click twice or press 1–${entries.length} then Enter):`
+          : `Choose a store to open (click twice or press 1–${entries.length} then Enter):`;
 
     const skipBtn = createChoiceButton(
       'Do Not Open / Skip',
       () => {
-        confirmStoreTypeId = null;
+        confirmKey = null;
         dispatch({ type: 'SKIP_SHOP_SLOT' });
       },
-      { primary: Boolean(active.blockNewStoreWindow) || sortedDefs.length === 0, skip: true }
+      { primary: Boolean(active.blockNewStoreWindow) || entries.length === 0, skip: true }
     );
     const { headerRow, promptEl } = makeChoiceHeaderRow([skipBtn], promptText);
     list.appendChild(headerRow);
     if (promptEl) list.appendChild(promptEl);
 
-    sortedDefs.forEach((def, idx) => {
-      const buyout = isBuyout ? computeBuyoutCosts(shop, def.id, resultingLevel) : null;
-      const openCost = buyout ? buyout.openCost : computeOpenCostForLevel(def.id, resultingLevel);
+    entries.forEach((entry, idx) => {
+      const buyout = isBuyout ? computeBuyoutCosts(shop, entry.storeTypeId, resultingLevel) : null;
+      const openCost = buyout ? buyout.openCost : computeOpenCostForLevel(entry.storeTypeId, resultingLevel);
       const cost = buyout ? buyout.totalCost : openCost;
       const baseLabel = buyout
-        ? `Buyout & Convert to ${def.name}${levelTag} ($${cost} = $${buyout.rivalPayout} + $${openCost}, auto-stocks)`
-        : `Open ${def.name}${levelTag} ($${cost}, auto-stocks)`;
-      const isConfirming = confirmStoreTypeId === def.id;
-      list.appendChild(
-        createChoiceButton(
-          isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
-          () => {
-            if (confirmStoreTypeId !== def.id) {
-              confirmStoreTypeId = def.id;
-              renderList();
-              return;
-            }
-            confirmStoreTypeId = null;
-            dispatch({ type: isBuyout ? 'BUYOUT_SHOP' : 'OPEN_SHOP', storeTypeId: def.id });
-          },
-          {
-            hotkey: idx < 9 ? idx + 1 : undefined,
-            primary: isConfirming,
-            confirm: isConfirming,
-            nav: true,
-            disabled: active.cash < cost,
+        ? `Buyout & Convert to ${entry.displayName}${levelTag} ($${cost} = $${buyout.rivalPayout} + $${openCost}, auto-stocks)`
+        : sigElig.isExpandingSignature
+          ? `Expand ${entry.displayName}${levelTag} ($${cost}, auto-stocks)`
+          : entry.isSigChoice
+            ? `Open as ${entry.displayName}${levelTag} ($${cost}, auto-stocks)`
+            : `Open ${entry.displayName}${levelTag} ($${cost}, auto-stocks)`;
+      const isConfirming = confirmKey === entry.key;
+      const btn = createChoiceButton(
+        isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
+        () => {
+          if (confirmKey !== entry.key) {
+            confirmKey = entry.key;
+            renderList();
+            return;
           }
-        )
+          confirmKey = null;
+          dispatch({
+            type: isBuyout ? 'BUYOUT_SHOP' : 'OPEN_SHOP',
+            storeTypeId: entry.storeTypeId,
+            ...(entry.asSignature ? { asSignature: true } : {}),
+          });
+        },
+        {
+          hotkey: idx < 9 ? idx + 1 : undefined,
+          primary: isConfirming,
+          confirm: isConfirming,
+          nav: true,
+          disabled: active.cash < cost,
+          accentColor: entry.isSigChoice ? activeSpec?.accent : undefined,
+        }
       );
+      if (entry.isSigChoice) btn.classList.add('is-signature-choice');
+      list.appendChild(btn);
     });
   };
 
@@ -112,7 +165,8 @@ export function renderBuySlotPanel(
 export function renderBuyRivalPanel(
   container: HTMLElement,
   state: GameState,
-  dispatch: DispatchFn
+  dispatch: DispatchFn,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
   const tile = getTile(state, active.tileId);
@@ -183,9 +237,10 @@ export function renderBuyRivalPanel(
         : `Optional item ${boughtCount + 1} of ${SHOP_RULES.maxItemsPerVisit}`;
     const buyoutNote = slots.length === 1 ? ' · Clears store for buyout!' : '';
     summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | ${stepText}${buyoutNote}`;
+    const chosenName = chosen ? getShopItemDisplayName(shop, chosen.item, state.players, syncedSignatures) : '';
     setMoneyText(
       buyLabelEl,
-      chosen ? `Buy ${chosen.item.name} ($${chosen.price}) (Enter)` : 'Buy Selected (Enter)'
+      chosen ? `Buy ${chosenName} ($${chosen.price}) (Enter)` : 'Buy Selected (Enter)'
     );
     buyBtn.disabled = !chosen;
   };
@@ -196,7 +251,7 @@ export function renderBuyRivalPanel(
     btn.className = 'rival-item-card';
     const nameEl = document.createElement('span');
     nameEl.className = 'rival-item-name';
-    nameEl.textContent = slot.item.name;
+    nameEl.textContent = getShopItemDisplayName(shop, slot.item, state.players, syncedSignatures);
     const metaEl = document.createElement('span');
     metaEl.className = 'rival-item-meta';
     setMoneyText(metaEl, `$${slot.price} · CB ${Math.round(slot.item.cashbackChance * 100)}%`);
@@ -234,7 +289,8 @@ export function renderLiquidatePanel(
   state: GameState,
   dispatch: DispatchFn,
   onUiChange?: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
   const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
@@ -255,11 +311,11 @@ export function renderLiquidatePanel(
 
     const confirmId = getLiquidateConfirmShopId(state);
     owned.forEach((s, idx) => {
-      const def = s.storeTypeId ? STORE_TYPES[s.storeTypeId] : undefined;
+      const storeName = getShopDisplayName(s, state.players, syncedSignatures);
       const loc = formatShopLocation(state, s);
       const payout = Math.floor(computeShopAssetValue(s) * SHOP_RULES.sellLiquidationRate);
       const isConfirming = confirmId === s.id;
-      const label = `Sell ${loc} ${def?.name ?? 'Store'} L${s.level} (+$${payout})`;
+      const label = `Sell ${loc} ${storeName} L${s.level} (+$${payout})`;
       const btn = createChoiceButton(
         isConfirming ? `Confirm? ${label}` : label,
         () => {

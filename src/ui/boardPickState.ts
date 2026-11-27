@@ -141,6 +141,10 @@ export const handleEventSellPickClick = (
   state: GameState, shopId: string, dispatch: DispatchFn, onUiChange?: () => void
 ): void => handleTwoClickConfirm(state, 'event', shopId, 'primaryId', onUiChange, () => dispatch({ type: 'RESOLVE_EVENT_STORE', shopId }));
 
+export const handleEventConvertPickClick = (
+  state: GameState, shopId: string, dispatch: DispatchFn, onUiChange?: () => void
+): void => handleTwoClickConfirm(state, 'event', shopId, 'primaryId', onUiChange, () => dispatch({ type: 'RESOLVE_EVENT_STORE', shopId }));
+
 export const handleLiquidatePickClick = (
   state: GameState, shopId: string, dispatch: DispatchFn, onUiChange?: () => void
 ): void => handleTwoClickConfirm(state, 'liquidate', shopId, 'confirmId', onUiChange, () => dispatch({ type: 'SELL_SHOP_LIQUIDATE', shopId }));
@@ -207,6 +211,18 @@ function buildRawBoardShopPick(
   }
 
   if (state.phase === 'EVENT_PICK_STORE' && state.eventStorePrompt) {
+    if (state.eventStorePrompt.mode === 'convert_signature') {
+      const selectableIds = new Set(state.eventStorePrompt.candidateShopIds ?? []);
+      if (selectableIds.size === 0) return null;
+      const curConfirm = getEventSelectedShopId(state);
+      return {
+        selectableShopIds: selectableIds,
+        selectedShopId: curConfirm && selectableIds.has(curConfirm) ? curConfirm : null,
+        badgeText: '★ SIGN',
+        selectedBadgeText: 'CONFIRM?',
+        onSelectShop: (shopId) => handleEventConvertPickClick(state, shopId, dispatch, onUiChange),
+      };
+    }
     if (state.eventStorePrompt.mode === 'sell') {
       const selectableIds = new Set(Object.values(state.shops).filter((s) => s.ownerId === active.id).map((s) => s.id));
       if (selectableIds.size === 0) return null;

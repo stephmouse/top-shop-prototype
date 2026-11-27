@@ -1,4 +1,5 @@
 import { sanitizeAvatarSpec } from '../config/avatarTypes';
+import { sanitizeSignatureStore } from '../config/signatureStore';
 import { DEFAULT_MATCH_CONFIG, MAX_PLAYERS, MIN_PLAYERS, PLAYER_COLORS } from '../config/balance';
 import { DEFAULT_STAGE_ID, getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
@@ -86,7 +87,14 @@ export function sanitizeMatchSetup(raw: unknown): MatchSetupData | null {
       typeof p.color === 'string' && HEX_COLOR_RE.test(p.color)
         ? p.color.toLowerCase()
         : PLAYER_COLORS[idx % PLAYER_COLORS.length]!;
-    return { name, color, isBot: Boolean(p.isBot), avatar: sanitizeAvatarSpec(p.avatar, idx) };
+    const sig = sanitizeSignatureStore(p.signatureStore);
+    return {
+      name,
+      color,
+      isBot: Boolean(p.isBot),
+      avatar: sanitizeAvatarSpec(p.avatar, idx),
+      ...(sig ? { signatureStore: sig } : {}),
+    };
   });
 
   const rawCfg = isRecord(raw.config) ? raw.config : {};
@@ -120,7 +128,11 @@ export function extractSetupFromState(state: GameState): MatchSetupData {
   const sanitized = sanitizeMatchSetup({
     stageId: state.mapId,
     players: state.players.map((p, idx) => ({
-      name: p.name, color: p.color, isBot: p.isBot, avatar: sanitizeAvatarSpec(p.avatar, idx),
+      name: p.name,
+      color: p.color,
+      isBot: p.isBot,
+      avatar: sanitizeAvatarSpec(p.avatar, idx),
+      ...(p.signatureStore ? { signatureStore: sanitizeSignatureStore(p.signatureStore) } : {}),
     })),
     config: state.config,
   });

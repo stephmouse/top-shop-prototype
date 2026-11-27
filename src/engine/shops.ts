@@ -1,4 +1,5 @@
 import { STORE_TYPES } from '../config/balance';
+import { getShopDisplayName } from '../config/signatureStore';
 import {
   appendLog,
   computeBuyoutCosts,
@@ -12,7 +13,10 @@ import {
   computeOpenShopCost,
   computeResultingChainLevel,
   getAllowedStoreTypeIds,
+  getPlayerActiveSignatureSegment,
+  getSegmentHighValueStoreTypeId,
   getShopTotalStock,
+  getSignatureOpenEligibility,
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
 } from './shopHelpers';
@@ -25,8 +29,11 @@ export {
   getAllowedStoreTypeIds,
   getCheapestItemPrice,
   getConnectedChainShops,
+  getPlayerActiveSignatureSegment,
+  getSegmentHighValueStoreTypeId,
   getSegmentSlotCount,
   getShopTotalStock,
+  getSignatureOpenEligibility,
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
 } from './shopHelpers';
@@ -38,7 +45,7 @@ export {
   handleSkipDeliver,
 } from './shopShopping';
 
-export function handleOpenShop(state: GameState, storeTypeId: string): GameState {
+export function handleOpenShop(state: GameState, storeTypeId: string, asSignature = false): GameState {
   if (state.phase !== 'SHOP_BUY_SLOT') return state;
   const active = getActivePlayer(state);
   if (active.blockNewStoreWindow) return state;
@@ -53,10 +60,16 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   const { openCost } = computeOpenShopCost(state, shop.id, active.id, storeTypeId);
   if (!allowed.includes(storeTypeId) || active.cash < openCost) return state;
 
+  const sig = getSignatureOpenEligibility(state, active.id, shop.segmentId);
+  if (asSignature && !sig.isExpandingSignature && (!sig.canOpenAsSignature || storeTypeId !== sig.highValueTypeId)) {
+    return state;
+  }
+  const signatureOwnerId = sig.isExpandingSignature || asSignature ? active.id : null;
+
   const players = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, cash: p.cash - openCost } : p
   );
-  const claimedShop: Shop = { ...shop, ownerId: active.id, storeTypeId, stock: {} };
+  const claimedShop: Shop = { ...shop, ownerId: active.id, storeTypeId, signatureOwnerId, stock: {} };
   const interim: GameState = { ...state, players, shops: { ...state.shops, [shop.id]: claimedShop } };
   const leveledShops = recomputeSegmentChainLevels(interim, shop.segmentId, active.id);
   const updatedNewShop = leveledShops[shop.id]!;
@@ -70,7 +83,7 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   });
 }
 
-export function handleBuyoutShop(state: GameState, storeTypeId: string): GameState {
+export function handleBuyoutShop(state: GameState, storeTypeId: string, asSignature = false): GameState {
   if (state.phase !== 'SHOP_BUY_SLOT') return state;
   const active = getActivePlayer(state);
   if (active.blockNewStoreWindow) return state;
@@ -88,6 +101,12 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
   const { rivalPayout, totalCost } = computeBuyoutCosts(shop, storeTypeId, resultingLevel);
   if (active.cash < totalCost) return state;
 
+  const sig = getSignatureOpenEligibility(state, active.id, shop.segmentId, shop.id);
+  if (asSignature && !sig.isExpandingSignature && (!sig.canOpenAsSignature || storeTypeId !== sig.highValueTypeId)) {
+    return state;
+  }
+  const signatureOwnerId = sig.isExpandingSignature || asSignature ? active.id : null;
+
   const prevOwnerId = shop.ownerId;
   const players = state.players.map((p) => {
     if (p.id === active.id) return { ...p, cash: p.cash - totalCost };
@@ -99,6 +118,7 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     ...shop,
     ownerId: active.id,
     storeTypeId,
+    signatureOwnerId,
     stock: {},
     closedWindow: null,
   };
@@ -111,6 +131,7 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
 
   const updatedNewShop = nextShops[shop.id]!;
   nextShops[shop.id] = { ...updatedNewShop, stock: buildStarterStock(storeTypeId, updatedNewShop.level) };
+  const newShopName = getShopDisplayName(nextShops[shop.id]!, players);
 
   return resumeAfterPostAction({
     ...state,
@@ -122,7 +143,7 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     ]),
     log: appendLog(
       state,
-      `${active.name} bought out ${formatShopRef(state, shop)} as ${newDef.name} L${updatedNewShop.level} (-$${totalCost}, $${rivalPayout} to rival).`
+      `${active.name} bought out ${formatShopRef(state, shop)} as ${newShopName} L${updatedNewShop.level} (-$${totalCost}, $${rivalPayout} to rival).`
     ),
   });
 }

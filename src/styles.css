@@ -4140,6 +4140,116 @@ html[data-theme-mode="light"] .victory-award-val {
   gap: 2px;
 }
 
+/* =========================================================================
+   1-per-Player Signature Store Editor & Tile Styling
+   ========================================================================= */
+
+.signature-modal {
+  width: min(740px, 100%);
+}
+
+.signature-edit-btn {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
+.signature-edit-btn.is-configured {
+  border-color: var(--asset-color);
+  color: var(--asset-color);
+  background: color-mix(in srgb, var(--asset-color) 12%, var(--panel-elevated));
+}
+
+.signature-preview-card {
+  position: relative;
+  border: 2px solid var(--border-strong);
+  border-radius: 8px;
+  background: linear-gradient(180deg, var(--panel-elevated) 0%, var(--surface-card) 100%);
+  padding: 14px 12px 10px;
+  display: grid;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.signature-preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.signature-preview-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.signature-preview-sub {
+  font-size: 11.5px;
+}
+
+.signature-name-row {
+  gap: 8px;
+}
+
+.signature-name-row .setup-input {
+  flex: 1;
+  min-width: 190px;
+}
+
+.signature-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+}
+
+.signature-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0;
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+}
+
+.signature-icon-btn:hover {
+  border-color: var(--accent);
+}
+
+.signature-icon-btn.is-active {
+  border-color: var(--asset-color);
+  background: color-mix(in srgb, var(--asset-color) 18%, var(--panel-elevated));
+  color: var(--asset-color);
+  box-shadow: 0 0 0 1px var(--asset-color);
+}
+
+.signature-accent-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.signature-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.tile--shop.is-signature {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cat-accent, var(--asset-color)) 55%, transparent);
+}
+
+.tile--shop.is-signature .tile-name-text {
+  color: var(--asset-color);
+  font-weight: 800;
+}
+
+.choice-btn.is-signature-choice:not(.primary) {
+  background: color-mix(in srgb, var(--asset-color) 10%, var(--panel-elevated));
+}
+
 
 
 

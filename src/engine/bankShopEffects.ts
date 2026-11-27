@@ -21,6 +21,8 @@ import {
   buildStarterStock,
   computeOpenShopCost,
   getAllowedStoreTypeIds,
+  getPlayerActiveSignatureSegment,
+  getSegmentHighValueStoreTypeId,
   getSegmentSlotCount,
   getShopTotalStock,
   recomputeSegmentChainLevels,
@@ -193,7 +195,9 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const pickedType = pickRandom(seed, allowed);
       seed = pickedType.nextSeed;
       const typeId = pickedType.value;
-      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, stock: {} };
+      const activeSigSeg = getPlayerActiveSignatureSegment(state, active.id);
+      const signatureOwnerId = activeSigSeg === pickedSlot.value.segmentId ? active.id : null;
+      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, signatureOwnerId, stock: {} };
       const nextShops = recomputeSegmentChainLevels(
         { ...state, shops: { ...ctx.shops, [claimed.id]: claimed } },
         claimed.segmentId,
@@ -204,7 +208,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       return resumeAfterPostAction(
         buildResultState(
           ctx,
-          `Opened free ${formatShopRef(state, nextShops[claimed.id]!)}.`,
+          `Opened free ${formatShopRef({ ...state, shops: nextShops }, nextShops[claimed.id]!)}.`,
           nextShops,
           seed,
           ctx.players,
@@ -231,7 +235,9 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const players = ctx.players.map((p) =>
         p.id === rival.id ? { ...p, cash: p.cash - openCost } : p
       );
-      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, stock: {} };
+      const activeSigSeg = getPlayerActiveSignatureSegment(state, active.id);
+      const signatureOwnerId = activeSigSeg === pickedSlot.value.segmentId ? active.id : null;
+      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, signatureOwnerId, stock: {} };
       const nextShops = recomputeSegmentChainLevels(
         { ...state, players, shops: { ...ctx.shops, [claimed.id]: claimed } },
         claimed.segmentId,
@@ -242,7 +248,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       return resumeAfterPostAction(
         buildResultState(
           ctx,
-          `Opened ${formatShopRef(state, nextShops[claimed.id]!)} using ${rival.name}'s cash (-$${openCost}).`,
+          `Opened ${formatShopRef({ ...state, players, shops: nextShops }, nextShops[claimed.id]!)} using ${rival.name}'s cash (-$${openCost}).`,
           nextShops,
           seed,
           players,
@@ -252,6 +258,40 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
     }
 
     case 'capture_rival_store': {
+      const finishCapture = (resultState: GameState): GameState => {
+        if (
+          !active.signatureStore?.name ||
+          getPlayerActiveSignatureSegment(resultState, active.id) !== null
+        ) {
+          return resumeAfterPostAction(resultState);
+        }
+        const seenSegs = new Set<string>();
+        const candidateShopIds: string[] = [];
+        for (const s of Object.values(resultState.shops)) {
+          const prev = ctx.shops[s.id];
+          if (!prev || prev.ownerId === active.id || s.ownerId !== active.id) continue;
+          if (seenSegs.has(s.segmentId)) continue;
+          if (s.storeTypeId === getSegmentHighValueStoreTypeId(resultState, s.segmentId)) {
+            seenSegs.add(s.segmentId);
+            candidateShopIds.push(s.id);
+          }
+        }
+        if (candidateShopIds.length === 0) return resumeAfterPostAction(resultState);
+        return {
+          ...resultState,
+          phase: 'EVENT_PICK_STORE',
+          moveHistory: [],
+          hadBranchChoiceThisTurn: false,
+          eventStorePrompt: {
+            mode: 'convert_signature',
+            multiplier: 0,
+            forced: false,
+            fromBank: false,
+            candidateShopIds,
+          },
+        };
+      };
+
       if (eff.mode === 'all_empty') {
         let cur: GameState = { ...state, shops: ctx.shops };
         for (const s of Object.values(ctx.shops)) {
@@ -259,7 +299,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
             cur = { ...cur, shops: captureRivalShopForPlayer(cur, s.id, active.id) };
           }
         }
-        return resumeAfterPostAction(
+        return finishCapture(
           buildResultState(
             ctx,
             "Captured rivals' empty stores.",
@@ -282,7 +322,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
         const picked = pickRandom(seed, l4Chains);
         seed = picked.nextSeed;
         const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
-        return resumeAfterPostAction(
+        return finishCapture(
           buildResultState(
             ctx,
             `Captured ${rival.name}'s L4 ${formatShopRef(state, picked.value)} chain.`,
@@ -304,7 +344,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const picked = pickRandom(seed, eligible);
       seed = picked.nextSeed;
       const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
-      return resumeAfterPostAction(
+      return finishCapture(
         buildResultState(
           ctx,
           `Captured ${rival.name}'s ${formatShopRef(state, picked.value)}.`,

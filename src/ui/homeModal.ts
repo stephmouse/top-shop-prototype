@@ -1,5 +1,6 @@
 import { APP_VERSION } from '../config/appVersion';
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import { formatCalendarDate } from '../engine/eventDraw';
@@ -14,6 +15,12 @@ export interface HomeModalOptions {
   getProfile: () => UserProfile;
   onUpdateProfile: (next: UserProfile) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onEditSignatureStore?: (
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void,
+    title?: string
+  ) => void;
   onOpenHowToPlay?: () => void;
   onOpenAppearance?: () => void;
   onPlayLocal: () => void;
@@ -91,6 +98,9 @@ export function createHomeModal(options: HomeModalOptions): HomeModalController 
       onChange: (next) => options.onUpdateProfile(next),
       onEditAvatar: options.onEditAvatar
         ? (cur, col, onSave) => options.onEditAvatar!(cur, col, onSave, 'Customize Your Standee')
+        : undefined,
+      onEditSignatureStore: options.onEditSignatureStore
+        ? (cur, col, onSave) => options.onEditSignatureStore!(cur, col, onSave, 'Customize Your Signature Store')
         : undefined,
     }));
     bodyEl.appendChild(profSec);

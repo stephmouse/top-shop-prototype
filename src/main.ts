@@ -256,6 +256,7 @@ renderer.shell.append(
   modals.setupModal.el,
   modals.lobbyModal.el,
   modals.avatarModal.el,
+  modals.signatureStoreModal.el,
   modals.howToPlayModal.el,
   modals.storeInspectorModal.el,
   modals.victoryModal.el,

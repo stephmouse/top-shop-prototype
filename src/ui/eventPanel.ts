@@ -1,13 +1,16 @@
 import { EVENT_CARDS, STORE_TYPES } from '../config/balance';
+import { getPlayerSignatureSpec, getShopDisplayName } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameAction } from '../engine/actions';
 import { computeEventBaseCash } from '../engine/events';
 import { computeShopAssetValue, formatTileCoord, getActivePlayer } from '../engine/helpers';
-import { computeOpenShopCost, getAllowedStoreTypeIds } from '../engine/shops';
+import { computeOpenShopCost, getAllowedStoreTypeIds, getSignatureOpenEligibility } from '../engine/shops';
 import type { EventCardDef, GameState, Shop } from '../engine/types';
 import {
   getEligibleEventEmptySlots,
   getEventConfirmStoreTypeId,
   getEventSelectedShopId,
+  handleEventConvertPickClick,
   handleEventSellPickClick,
   setEventConfirmStoreTypeId,
   setEventSelectedShopId,
@@ -121,11 +124,13 @@ export function renderEventStorePanel(
   state: GameState,
   dispatch: DispatchFn,
   onUiChange?: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const prompt = state.eventStorePrompt;
   if (!prompt) return;
   const active = getActivePlayer(state);
+  const activeSpec = getPlayerSignatureSpec(active.id, state.players, syncedSignatures);
   const list = document.createElement('div');
   list.className = 'card-list';
   container.appendChild(list);
@@ -134,9 +139,15 @@ export function renderEventStorePanel(
     const notify = () => (onUiChange ? onUiChange() : render());
     list.innerHTML = '';
 
+    const skipLabel =
+      prompt.mode === 'convert_signature'
+        ? 'Keep Standard Store'
+        : prompt.fromBank
+          ? 'Cancel & Return to Bank'
+          : 'Decline / Skip';
     const skipBtn = !prompt.forced
       ? createChoiceButton(
-          prompt.fromBank ? 'Cancel & Return to Bank' : 'Decline / Skip',
+          skipLabel,
           () => {
             onHoverShop?.(null);
             setEventSelectedShopId(state, null);
@@ -146,7 +157,42 @@ export function renderEventStorePanel(
         )
       : null;
 
-    if (prompt.mode === 'sell') {
+    if (prompt.mode === 'convert_signature') {
+      const candidateIds = prompt.candidateShopIds ?? [];
+      const confirmId = getEventSelectedShopId(state);
+      const { headerRow, promptEl } = makeChoiceHeaderRow(
+        skipBtn ? [skipBtn] : [],
+        `Convert captured top-value store into ★ ${activeSpec?.name ?? 'Signature Store'}? (click twice or press 1–9 then Enter):`
+      );
+      if (skipBtn) list.appendChild(headerRow);
+      if (promptEl) list.appendChild(promptEl);
+
+      candidateIds.forEach((shopId, idx) => {
+        const shop = state.shops[shopId];
+        if (!shop) return;
+        const curName = getShopDisplayName(shop, state.players, syncedSignatures);
+        const isConfirming = confirmId === shop.id;
+        const baseLabel = `★ Convert ${formatLoc(state, shop)} ${curName} L${shop.level} → ${activeSpec?.name ?? 'Signature Store'}`;
+        const btn = createChoiceButton(
+          isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
+          () => {
+            onHoverShop?.(null);
+            handleEventConvertPickClick(state, shop.id, dispatch, notify);
+          },
+          {
+            hotkey: idx < 9 ? idx + 1 : undefined,
+            shopId: shop.id,
+            onHoverShop,
+            primary: isConfirming,
+            confirm: isConfirming,
+            nav: true,
+            accentColor: activeSpec?.accent,
+          }
+        );
+        btn.classList.add('is-signature-choice');
+        list.appendChild(btn);
+      });
+    } else if (prompt.mode === 'sell') {
       const owned = Object.values(state.shops).filter((s) => s.ownerId === active.id);
       const confirmId = getEventSelectedShopId(state);
       const { headerRow, promptEl } = makeChoiceHeaderRow(
@@ -157,10 +203,10 @@ export function renderEventStorePanel(
       if (promptEl) list.appendChild(promptEl);
 
       owned.forEach((shop, idx) => {
-        const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+        const storeName = getShopDisplayName(shop, state.players, syncedSignatures);
         const payout = Math.floor(computeShopAssetValue(shop) * prompt.multiplier);
         const isConfirming = confirmId === shop.id;
-        const baseLabel = `Sell ${formatLoc(state, shop)} ${def?.name ?? 'Store'} L${shop.level} (+$${payout})`;
+        const baseLabel = `Sell ${formatLoc(state, shop)} ${storeName} L${shop.level} (+$${payout})`;
         const btn = createChoiceButton(
           isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
           () => {
@@ -205,32 +251,72 @@ export function renderEventStorePanel(
         list.appendChild(headerRow);
         if (promptEl) list.appendChild(promptEl);
 
+        const sigElig = getSignatureOpenEligibility(
+          state,
+          active.id,
+          pickedSlot.segmentId,
+          undefined,
+          Boolean(activeSpec?.name)
+        );
         const optionsWithCost = getAllowedStoreTypeIds(state, active.id, pickedSlot.segmentId)
           .map((id) => {
             const def = STORE_TYPES[id];
             if (!def) return null;
             const { openCost, level } = computeOpenShopCost(state, pickedSlot.id, active.id, id);
-            return { def, openCost, level };
+            const expandSig = sigElig.isExpandingSignature && Boolean(activeSpec?.name);
+            return {
+              storeTypeId: def.id,
+              displayName: expandSig ? `★ ${activeSpec!.name}` : def.name,
+              openCost,
+              level,
+              asSignature: expandSig,
+              key: def.id,
+              isSigChoice: expandSig,
+            };
           })
           .filter((x): x is NonNullable<typeof x> => Boolean(x))
           .sort((a, b) => b.openCost - a.openCost);
 
-        const confirmTypeId = getEventConfirmStoreTypeId(state);
+        if (sigElig.canOpenAsSignature && sigElig.highValueTypeId && activeSpec?.name) {
+          const hvDef = STORE_TYPES[sigElig.highValueTypeId];
+          if (hvDef) {
+            const { openCost, level } = computeOpenShopCost(state, pickedSlot.id, active.id, hvDef.id);
+            optionsWithCost.push({
+              storeTypeId: hvDef.id,
+              displayName: `★ ${activeSpec.name}`,
+              openCost,
+              level,
+              asSignature: true,
+              key: `${hvDef.id}:sig`,
+              isSigChoice: true,
+            });
+          }
+        }
+
+        const confirmTypeKey = getEventConfirmStoreTypeId(state);
         const payerTag = payer.id === active.id ? '' : ` — paid by ${payer.name}`;
-        optionsWithCost.forEach(({ def, openCost, level }, idx) => {
-          const isConfirming = confirmTypeId === def.id;
-          const baseLabel = `Open ${def.name}${level > 1 ? ` L${level}` : ''} ($${openCost}${payerTag})`;
+        optionsWithCost.forEach(({ storeTypeId, displayName, openCost, level, asSignature, key, isSigChoice }, idx) => {
+          const isConfirming = confirmTypeKey === key;
+          const levelTag = level > 1 ? ` L${level}` : '';
+          const baseLabel = isSigChoice && !sigElig.isExpandingSignature
+            ? `Open as ${displayName}${levelTag} ($${openCost}${payerTag})`
+            : `Open ${displayName}${levelTag} ($${openCost}${payerTag})`;
           const btn = createChoiceButton(
             isConfirming ? `Confirm? ${baseLabel}` : baseLabel,
             () => {
-              if (confirmTypeId !== def.id) {
-                setEventConfirmStoreTypeId(state, def.id);
+              if (confirmTypeKey !== key) {
+                setEventConfirmStoreTypeId(state, key);
                 notify();
                 return;
               }
               onHoverShop?.(null);
               setEventSelectedShopId(state, null);
-              dispatch({ type: 'RESOLVE_EVENT_STORE', shopId: pickedSlot.id, storeTypeId: def.id });
+              dispatch({
+                type: 'RESOLVE_EVENT_STORE',
+                shopId: pickedSlot.id,
+                storeTypeId,
+                ...(asSignature ? { asSignature: true } : {}),
+              });
             },
             {
               hotkey: idx < 9 ? idx + 1 : undefined,
@@ -238,8 +324,10 @@ export function renderEventStorePanel(
               confirm: isConfirming,
               nav: true,
               disabled: payer.cash < openCost,
+              accentColor: isSigChoice ? activeSpec?.accent : undefined,
             }
           );
+          if (isSigChoice) btn.classList.add('is-signature-choice');
           list.appendChild(btn);
         });
       } else {

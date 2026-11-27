@@ -1,13 +1,20 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
-import { getStoreVisual } from '../config/storeVisuals';
+import {
+  getShopDisplayName,
+  getShopDisplayVisual,
+  getShopItemDisplayName,
+} from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import {
   computeShopAssetValue,
-  formatShopRef,
+  formatTileCoord,
   getEffectiveItemRetailPrice,
 } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState } from '../engine/types';
+import type { RoomRoster } from '../net/protocol';
+import { resolvePlayerSignatures } from '../net/signatureSync';
 import { addLobbySection, mk, mkBtn } from './lobbyRoomView';
 import { setMoneyText } from './moneyText';
 import { createStoreIconSvg } from './storeTileView';
@@ -15,6 +22,10 @@ import { getDisplayPlayerColor } from './themeConfig';
 
 export interface StoreInspectorOptions {
   getState: () => GameState;
+  getOnlineContext?: () => {
+    roster: RoomRoster | null;
+    syncedSignatures: Record<string, SignatureStoreSpec>;
+  };
 }
 
 export interface StoreInspectorController {
@@ -66,16 +77,28 @@ export function createStoreInspectorModal(options: StoreInspectorOptions): Store
     }
 
     const def = STORE_TYPES[shop.storeTypeId];
+    const online = options.getOnlineContext?.();
+    const sigMap = online
+      ? resolvePlayerSignatures(state, online.roster, online.syncedSignatures)
+      : undefined;
     const owner = state.players.find((p) => p.id === shop.ownerId);
     const ownerIdx = owner ? state.players.findIndex((p) => p.id === owner.id) : -1;
     const ownerColor = owner && ownerIdx >= 0 ? getDisplayPlayerColor(ownerIdx, owner.color) : '';
-    const vis = getStoreVisual(shop.storeTypeId);
+    const vis = getShopDisplayVisual(shop, state.players, sigMap);
+    const tile = state.tiles[shop.tileId];
+    const loc = tile ? formatTileCoord(tile) : shop.id;
+    const displayName = getShopDisplayName(shop, state.players, sigMap);
     iconWrap.appendChild(createStoreIconSvg(vis.iconId));
     iconWrap.style.color = vis.accent;
-    titleEl.textContent = formatShopRef(state, shop);
+    titleEl.textContent = vis.isSignature ? `★ ${displayName} (${loc})` : `${displayName} (${loc})`;
 
     const metaSec = addLobbySection('Store Overview');
     const pills = mk('div', 'inspector-pills');
+    if (vis.isSignature) {
+      const sigPill = mk('span', 'player-meta-chip is-buff', '★ Signature Store');
+      sigPill.title = `Uses ${def?.name ?? shop.storeTypeId} prices & rules`;
+      pills.appendChild(sigPill);
+    }
     const ownerPill = mk('span', 'player-meta-chip is-stores', `Owner: ${owner?.name ?? '?'}`);
     if (ownerColor) ownerPill.style.borderColor = ownerColor;
     const total = getShopTotalStock(shop);
@@ -123,7 +146,7 @@ export function createStoreInspectorModal(options: StoreInspectorOptions): Store
       const subSpan = mk('span', 'inspector-item-sub', '');
       setMoneyText(subSpan, `L${item.tier} · Wholesale $${item.wholesaleCost} · Cash Back ${cbPct}%`);
       left.append(
-        mk('span', 'inspector-item-name', item.name),
+        mk('span', 'inspector-item-name', getShopItemDisplayName(shop, item, state.players, sigMap)),
         subSpan
       );
       const right = mk('div', 'inspector-item-right');

@@ -1,5 +1,7 @@
 import { sanitizeAvatarSpec } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
+import { sanitizeSignatureStore } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameState } from '../engine/types';
 import { HEX_COLOR_RE } from '../net/protocol';
 import { createAvatarElement } from './avatarSvg';
@@ -10,6 +12,7 @@ export interface UserProfile {
   name: string;
   color: string;
   avatar: AvatarSpec;
+  signatureStore?: SignatureStoreSpec;
 }
 
 export interface ProfileEditorOptions {
@@ -17,6 +20,11 @@ export interface ProfileEditorOptions {
   onChange: (next: UserProfile) => void;
   onCommit?: (next: UserProfile) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
+  onEditSignatureStore?: (
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void
+  ) => void;
   avatarTitle?: string;
   saveLabel?: string;
   placeholder?: string;
@@ -30,11 +38,18 @@ function getLocalStore(): Storage | null {
   }
 }
 
-export function loadUserProfile(fallback: { name: string; color: string; avatar?: AvatarSpec }): UserProfile {
+export function loadUserProfile(fallback: {
+  name: string;
+  color: string;
+  avatar?: AvatarSpec;
+  signatureStore?: SignatureStoreSpec;
+}): UserProfile {
+  const fbSig = sanitizeSignatureStore(fallback.signatureStore);
   const def: UserProfile = {
     name: fallback.name.trim().slice(0, 18) || 'Guest',
     color: HEX_COLOR_RE.test(fallback.color) ? fallback.color : '#3498db',
     avatar: sanitizeAvatarSpec(fallback.avatar, 1),
+    ...(fbSig ? { signatureStore: fbSig } : {}),
   };
   const store = getLocalStore();
   if (!store) return def;
@@ -44,10 +59,12 @@ export function loadUserProfile(fallback: { name: string; color: string; avatar?
     const raw: unknown = JSON.parse(rawText);
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return def;
     const r = raw as Record<string, unknown>;
+    const sig = sanitizeSignatureStore(r.signatureStore) ?? def.signatureStore;
     return {
       name: typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 18) : def.name,
       color: typeof r.color === 'string' && HEX_COLOR_RE.test(r.color) ? r.color : def.color,
       avatar: sanitizeAvatarSpec(r.avatar, 1),
+      ...(sig ? { signatureStore: sig } : {}),
     };
   } catch {
     return def;
@@ -69,10 +86,12 @@ export function isMatchInProgress(state: GameState): boolean {
 }
 
 export function createProfileEditorRow(opts: ProfileEditorOptions): HTMLElement {
+  const cleanSig = sanitizeSignatureStore(opts.profile.signatureStore);
   let current: UserProfile = {
     name: opts.profile.name,
     color: HEX_COLOR_RE.test(opts.profile.color) ? opts.profile.color : '#3498db',
     avatar: sanitizeAvatarSpec(opts.profile.avatar, 0),
+    ...(cleanSig ? { signatureStore: cleanSig } : {}),
   };
 
   const row = Object.assign(document.createElement('div'), { className: 'setup-player-row' });
@@ -139,6 +158,26 @@ export function createProfileEditorRow(opts: ProfileEditorOptions): HTMLElement 
   customBtn.addEventListener('click', openCustomize);
 
   row.append(avatarBtn, nameInput, colorInput, customBtn);
+  if (opts.onEditSignatureStore) {
+    const storeBtn = document.createElement('button');
+    storeBtn.type = 'button';
+    const syncStoreBtn = () => {
+      storeBtn.textContent = current.signatureStore ? `★ ${current.signatureStore.name}` : '★ My Store';
+      storeBtn.className = current.signatureStore ? 'signature-edit-btn is-configured' : 'signature-edit-btn';
+      storeBtn.title = 'Customize your 1-per-player Signature Store';
+    };
+    syncStoreBtn();
+    storeBtn.addEventListener('click', () =>
+      opts.onEditSignatureStore!(current.signatureStore, current.color, (nextSig) => {
+        const { signatureStore: _old, ...rest } = current;
+        current = nextSig ? { ...rest, signatureStore: nextSig } : rest;
+        syncStoreBtn();
+        opts.onChange(current);
+        opts.onCommit?.(current);
+      })
+    );
+    row.appendChild(storeBtn);
+  }
   if (opts.saveLabel && opts.onCommit) {
     const saveBtn = Object.assign(document.createElement('button'), {
       type: 'button' as const,

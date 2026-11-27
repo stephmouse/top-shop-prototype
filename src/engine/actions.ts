@@ -15,13 +15,13 @@ export type GameAction =
   | { type: 'RESOLVE_ELEVATOR'; ride: boolean }
   | { type: 'REVEAL_EVENT_CARD'; slotIndex: number }
   | { type: 'PICK_EVENT_CARD'; cardId: string }
-  | { type: 'RESOLVE_EVENT_STORE'; shopId: string; storeTypeId?: string }
+  | { type: 'RESOLVE_EVENT_STORE'; shopId: string; storeTypeId?: string; asSignature?: boolean }
   | { type: 'SKIP_EVENT_STORE' }
   | { type: 'RESOLVE_SHOES'; mode: 'keep' | 'stack' | 'replace' | 'clear'; style?: WalkSoundStyle; slotIndex?: number }
   | { type: 'REDEEM_BANK_REWARD'; rewardId: string; targetPlayerId?: string; targetShopId?: string }
   | { type: 'CLOSE_BANK_MENU' }
-  | { type: 'OPEN_SHOP'; storeTypeId: string }
-  | { type: 'BUYOUT_SHOP'; storeTypeId: string }
+  | { type: 'OPEN_SHOP'; storeTypeId: string; asSignature?: boolean }
+  | { type: 'BUYOUT_SHOP'; storeTypeId: string; asSignature?: boolean }
   | { type: 'SKIP_SHOP_SLOT' }
   | { type: 'DELIVER_ITEMS'; shopId: string; order: Record<string, number> }
   | { type: 'SKIP_DELIVER' }
@@ -39,6 +39,10 @@ function isNonEmptyString(value: unknown): value is string {
 
 function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || isNonEmptyString(value);
+}
+
+function isOptionalBool(value: unknown): value is boolean | undefined {
+  return value === undefined || typeof value === 'boolean';
 }
 
 function isDirection(value: unknown): value is DirectionChoice {
@@ -91,7 +95,7 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
     case 'PICK_EVENT_CARD':
       return isNonEmptyString(raw.cardId);
     case 'RESOLVE_EVENT_STORE':
-      return isNonEmptyString(raw.shopId) && isOptionalString(raw.storeTypeId);
+      return isNonEmptyString(raw.shopId) && isOptionalString(raw.storeTypeId) && isOptionalBool(raw.asSignature);
     case 'RESOLVE_SHOES':
       if (raw.mode === 'keep' || raw.mode === 'clear') return true;
       if (raw.mode === 'stack') return isValidWalkSoundStyle(raw.style);
@@ -113,7 +117,7 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
       );
     case 'OPEN_SHOP':
     case 'BUYOUT_SHOP':
-      return isNonEmptyString(raw.storeTypeId);
+      return isNonEmptyString(raw.storeTypeId) && isOptionalBool(raw.asSignature);
     case 'DELIVER_ITEMS':
       return isNonEmptyString(raw.shopId) && isValidOrderRecord(raw.order);
     case 'BUY_RIVAL_ITEMS':
@@ -130,9 +134,14 @@ export function isValidGameAction(raw: unknown): raw is GameAction {
 }
 
 export function redactStateForClient(state: GameState): GameState {
-  const hasCustomImg = state.players.some((p) => p.avatar?.customImage !== undefined);
-  const players = hasCustomImg
-    ? state.players.map((p) => (p.avatar ? { ...p, avatar: stripAvatarCustomImage(p.avatar) } : p))
+  const needsStrip = state.players.some(
+    (p) => p.avatar?.customImage !== undefined || p.signatureStore !== undefined
+  );
+  const players = needsStrip
+    ? state.players.map((p) => {
+        const { signatureStore: _sig, ...rest } = p;
+        return rest.avatar ? { ...rest, avatar: stripAvatarCustomImage(rest.avatar) } : rest;
+      })
     : state.players;
   if (state.phase === 'EVENT_PICK' && (state.revealedEventSlot ?? null) === null) {
     return {

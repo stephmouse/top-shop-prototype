@@ -1,3 +1,4 @@
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { WalkSoundChoice } from '../config/walkSounds';
 import type { GameAction } from '../engine/actions';
 import { formatCalendarDate } from '../engine/eventDraw';
@@ -138,6 +139,7 @@ export interface ActionPanelViewOptions {
   onOpenVictory?: () => void;
   readOnly?: boolean;
   reconnecting?: boolean;
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>;
   remotePencilSpinning?: boolean;
   remotePencilStopFace?: PencilFace | null;
   onPencilSpinChange?: (spinning: boolean, stopFace?: PencilFace) => void;
@@ -294,7 +296,14 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'EVENT_PICK_STORE') {
-    renderEventStorePanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
+    renderEventStorePanel(
+      stack,
+      state,
+      dispatch,
+      viewOptions.onUiChange,
+      viewOptions.onHoverShop,
+      viewOptions.syncedSignatures
+    );
     return;
   }
 
@@ -304,30 +313,51 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'BANK_MENU') {
-    renderBankPanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
+    renderBankPanel(
+      stack,
+      state,
+      dispatch,
+      viewOptions.onUiChange,
+      viewOptions.onHoverShop,
+      viewOptions.syncedSignatures
+    );
     return;
   }
 
   if (state.phase === 'SHOP_BUY_SLOT') {
-    renderBuySlotPanel(stack, state, dispatch);
+    renderBuySlotPanel(stack, state, dispatch, viewOptions.syncedSignatures);
     appendUndoControls(stack, state, dispatch, true);
     return;
   }
 
   if (state.phase === 'SHOP_DELIVER') {
-    renderDeliverPanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
+    renderDeliverPanel(
+      stack,
+      state,
+      dispatch,
+      viewOptions.onUiChange,
+      viewOptions.onHoverShop,
+      viewOptions.syncedSignatures
+    );
     appendUndoControls(stack, state, dispatch, true);
     return;
   }
 
   if (state.phase === 'SHOP_BUY_RIVAL') {
-    renderBuyRivalPanel(stack, state, dispatch);
+    renderBuyRivalPanel(stack, state, dispatch, viewOptions.syncedSignatures);
     appendUndoControls(stack, state, dispatch, true);
     return;
   }
 
   if (state.phase === 'LIQUIDATE_ASSETS') {
-    renderLiquidatePanel(stack, state, dispatch, viewOptions.onUiChange, viewOptions.onHoverShop);
+    renderLiquidatePanel(
+      stack,
+      state,
+      dispatch,
+      viewOptions.onUiChange,
+      viewOptions.onHoverShop,
+      viewOptions.syncedSignatures
+    );
     return;
   }
 

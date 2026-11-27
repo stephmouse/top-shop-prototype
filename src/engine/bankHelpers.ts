@@ -4,6 +4,7 @@ import {
   computeOpenShopCost,
   getAllowedStoreTypeIds,
   getConnectedChainShops,
+  getPlayerActiveSignatureSegment,
   getShopTotalStock,
   recomputeSegmentChainLevels,
 } from './shops';
@@ -89,7 +90,15 @@ export function getDistinctChains(state: GameState, shops: Shop[]): Shop[] {
 }
 
 function makeVacantShop(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, closedWindow: null };
+  return {
+    ...shop,
+    ownerId: null,
+    storeTypeId: null,
+    signatureOwnerId: null,
+    level: 1,
+    stock: {},
+    closedWindow: null,
+  };
 }
 
 function recomputeSegmentOwners(
@@ -136,7 +145,15 @@ export function captureRivalShopForPlayer(
   const prevOwnerId = shop.ownerId;
   const nextTypeId = shop.storeTypeId && allowed.includes(shop.storeTypeId) ? shop.storeTypeId : allowed[0]!;
   const keepStock = nextTypeId === shop.storeTypeId && getShopTotalStock(shop) > 0;
-  const claimed: Shop = { ...shop, ownerId: newOwnerId, storeTypeId: nextTypeId, closedWindow: null };
+  const activeSigSeg = getPlayerActiveSignatureSegment(state, newOwnerId, shop.id);
+  const signatureOwnerId = activeSigSeg === shop.segmentId ? newOwnerId : null;
+  const claimed: Shop = {
+    ...shop,
+    ownerId: newOwnerId,
+    storeTypeId: nextTypeId,
+    signatureOwnerId,
+    closedWindow: null,
+  };
 
   const nextShops = recomputeSegmentOwners(
     state,
@@ -159,9 +176,11 @@ export function captureRivalChainForPlayer(
   const shop = state.shops[shopId];
   if (!shop || !shop.ownerId || shop.ownerId === newOwnerId) return state.shops;
 
+  const activeSigSeg = getPlayerActiveSignatureSegment(state, newOwnerId, shop.id);
+  const signatureOwnerId = activeSigSeg === shop.segmentId ? newOwnerId : null;
   const nextShops = { ...state.shops };
   for (const member of getConnectedChainShops(state, shopId)) {
-    nextShops[member.id] = { ...member, ownerId: newOwnerId, closedWindow: null };
+    nextShops[member.id] = { ...member, ownerId: newOwnerId, signatureOwnerId, closedWindow: null };
   }
   return recomputeSegmentOwners(state, nextShops, shop.segmentId, shop.ownerId, newOwnerId);
 }
@@ -179,6 +198,7 @@ export function upgradeOwnSegmentToChain(
   if (!target || target.ownerId !== ownerId || !target.storeTypeId) return state.shops;
 
   const storeTypeId = target.storeTypeId;
+  const signatureOwnerId = target.signatureOwnerId ?? null;
   const newlyClaimedIds = new Set<string>();
   const claimedShops: Record<string, Shop> = { ...state.shops };
 
@@ -186,7 +206,14 @@ export function upgradeOwnSegmentToChain(
     if (s.segmentId !== target.segmentId) continue;
     const isOwn = s.ownerId === ownerId;
     if (!isOwn) newlyClaimedIds.add(s.id);
-    claimedShops[s.id] = { ...s, ownerId, storeTypeId, stock: isOwn ? s.stock : {}, closedWindow: null };
+    claimedShops[s.id] = {
+      ...s,
+      ownerId,
+      storeTypeId,
+      signatureOwnerId,
+      stock: isOwn ? s.stock : {},
+      closedWindow: null,
+    };
   }
 
   const nextShops = recomputeSegmentOwners(state, claimedShops, target.segmentId, ownerId);

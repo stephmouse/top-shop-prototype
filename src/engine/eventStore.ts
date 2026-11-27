@@ -12,14 +12,25 @@ import {
   buildStarterStock,
   computeOpenShopCost,
   getAllowedStoreTypeIds,
+  getPlayerActiveSignatureSegment,
+  getSegmentHighValueStoreTypeId,
   getShopTotalStock,
+  getSignatureOpenEligibility,
   recomputeSegmentChainLevels,
   resumeAfterPostAction,
 } from './shops';
 import type { GameState, Player, Shop } from './types';
 
 export function resetShopSlot(shop: Shop): Shop {
-  return { ...shop, ownerId: null, storeTypeId: null, level: 1, stock: {}, closedWindow: null };
+  return {
+    ...shop,
+    ownerId: null,
+    storeTypeId: null,
+    signatureOwnerId: null,
+    level: 1,
+    stock: {},
+    closedWindow: null,
+  };
 }
 
 export function applyStockTransform(
@@ -49,7 +60,8 @@ export function applyStockTransform(
 export function handleResolveEventStore(
   state: GameState,
   shopId: string,
-  storeTypeId?: string
+  storeTypeId?: string,
+  asSignature = false
 ): GameState {
   if (state.phase !== 'EVENT_PICK_STORE' || !state.eventStorePrompt) return state;
   const prompt = state.eventStorePrompt;
@@ -92,6 +104,12 @@ export function handleResolveEventStore(
       return state;
     }
 
+    const sig = getSignatureOpenEligibility(state, active.id, shop.segmentId);
+    if (asSignature && !sig.isExpandingSignature && (!sig.canOpenAsSignature || storeTypeId !== sig.highValueTypeId)) {
+      return state;
+    }
+    const signatureOwnerId = sig.isExpandingSignature || asSignature ? active.id : null;
+
     const players = state.players.map((p) =>
       p.id === payer.id ? { ...p, cash: p.cash - openCost } : p
     );
@@ -99,6 +117,7 @@ export function handleResolveEventStore(
       ...shop,
       ownerId: active.id,
       storeTypeId,
+      signatureOwnerId,
       stock: {},
     };
     const nextShops = recomputeSegmentChainLevels(
@@ -115,7 +134,31 @@ export function handleResolveEventStore(
       players,
       shops: nextShops,
       matchStats: bumpMatchStats(state, active.id, { storesOpened: 1 }),
-      log: appendLog(state, `${active.name} opened ${formatShopRef(state, leveled)} L${leveled.level} (${payerNote}).`),
+      log: appendLog(state, `${active.name} opened ${formatShopRef({ ...state, shops: nextShops }, nextShops[shop.id]!)} L${leveled.level} (${payerNote}).`),
+    });
+  }
+
+  if (prompt.mode === 'convert_signature') {
+    if (
+      !prompt.candidateShopIds?.includes(shop.id) ||
+      shop.ownerId !== active.id ||
+      !active.signatureStore?.name ||
+      getPlayerActiveSignatureSegment(state, active.id) !== null ||
+      shop.storeTypeId !== getSegmentHighValueStoreTypeId(state, shop.segmentId)
+    ) {
+      return state;
+    }
+    const prevRef = formatShopRef(state, shop);
+    const nextShops = { ...state.shops };
+    for (const s of Object.values(nextShops)) {
+      if (s.ownerId === active.id && s.segmentId === shop.segmentId) {
+        nextShops[s.id] = { ...s, signatureOwnerId: active.id };
+      }
+    }
+    return resumeAfterPostAction({
+      ...state,
+      shops: nextShops,
+      log: appendLog(state, `${active.name} converted ${prevRef} into ★ ${active.signatureStore.name}!`),
     });
   }
 

@@ -1,4 +1,6 @@
 import { STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { getShopDisplayName, getShopItemDisplayName } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameAction } from '../engine/actions';
 import { formatTileCoord, getActivePlayer, getTile } from '../engine/helpers';
 import { getShopTotalStock } from '../engine/shops';
@@ -47,12 +49,18 @@ function getCancelLabel(state: GameState, mode: DeliverMode): string {
   return state.deliverMode !== null ? 'Cancel & Return to Bank' : 'Do Not Deliver';
 }
 
-function formatShopLabel(state: GameState, shop: Shop, includeOwner: boolean, landedShopId?: string): string {
-  const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
+function formatShopLabel(
+  state: GameState,
+  shop: Shop,
+  includeOwner: boolean,
+  landedShopId?: string,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
+): string {
+  const storeName = getShopDisplayName(shop, state.players, syncedSignatures);
   const owner = shop.ownerId ? state.players.find((p) => p.id === shop.ownerId) : undefined;
   const ownerTag = includeOwner ? ` (${owner?.name ?? '?'})` : '';
   const hereTag = state.deliverMode === null && shop.id === landedShopId ? ' (Here)' : '';
-  return `${formatShopLocation(state, shop)} ${def?.name ?? shop.id} L${shop.level} [${getShopTotalStock(shop)}/${STORE_CAPACITY_BY_LEVEL[shop.level]}]${ownerTag}${hereTag}`;
+  return `${formatShopLocation(state, shop)} ${storeName} L${shop.level} [${getShopTotalStock(shop)}/${STORE_CAPACITY_BY_LEVEL[shop.level]}]${ownerTag}${hereTag}`;
 }
 
 function appendStorePickerStep(
@@ -63,7 +71,8 @@ function appendStorePickerStep(
   isSelectable: (s: Shop) => boolean,
   dispatch: DispatchFn,
   onPickShop: (shopId: string) => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const landedShopId = getTile(state, getActivePlayer(state).tileId).shopSlotId;
   const cancelBtn = createChoiceButton(
@@ -97,7 +106,7 @@ function appendStorePickerStep(
     const full = getShopTotalStock(s) >= STORE_CAPACITY_BY_LEVEL[s.level];
     const selectable = isSelectable(s);
     const suffix = delivered ? ' — Delivered' : full ? ' — Full' : ' → Restock';
-    const label = `${formatShopLabel(state, s, mode === 'rival_paid', landedShopId)}${suffix}`;
+    const label = `${formatShopLabel(state, s, mode === 'rival_paid', landedShopId, syncedSignatures)}${suffix}`;
     const ownerIndex = s.ownerId ? state.players.findIndex((p) => p.id === s.ownerId) : -1;
     const owner = ownerIndex >= 0 ? state.players[ownerIndex] : undefined;
     const assignedKey = selectable && hotkey <= 9 ? hotkey++ : undefined;
@@ -129,7 +138,8 @@ function appendRestockStep(
   isFree: boolean,
   dispatch: DispatchFn,
   onBack: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
   const def = shop.storeTypeId ? STORE_TYPES[shop.storeTypeId] : undefined;
@@ -146,7 +156,7 @@ function appendRestockStep(
   );
   const { headerRow, promptEl } = makeChoiceHeaderRow(
     [backBtn],
-    `${formatShopLabel(state, shop, mode === 'rival_paid', landedShopId)}${isFree ? ' (FREE)' : ''}`
+    `${formatShopLabel(state, shop, mode === 'rival_paid', landedShopId, syncedSignatures)}${isFree ? ' (FREE)' : ''}`
   );
   root.appendChild(headerRow);
   if (promptEl) root.appendChild(promptEl);
@@ -213,7 +223,7 @@ function appendRestockStep(
     infoEl.className = 'restock-item-info';
     const nameEl = document.createElement('span');
     nameEl.className = 'restock-item-name';
-    nameEl.textContent = item.name;
+    nameEl.textContent = getShopItemDisplayName(shop, item, state.players, syncedSignatures);
     const metaEl = document.createElement('span');
     metaEl.className = 'restock-item-meta';
     setMoneyText(metaEl, `$${unitCost} → $${item.retailPrice} · Shelf: ${shop.stock[item.id] ?? 0}`);
@@ -267,7 +277,8 @@ export function renderDeliverPanel(
   state: GameState,
   dispatch: DispatchFn,
   onUiChange?: () => void,
-  onHoverShop?: (shopId: string | null) => void
+  onHoverShop?: (shopId: string | null) => void,
+  syncedSignatures?: Readonly<Record<string, SignatureStoreSpec>>
 ): void {
   const active = getActivePlayer(state);
   const { mode, isFree, candidateShops, isSelectable } = getDeliverShopSelectionInfo(state);
@@ -308,7 +319,8 @@ export function renderDeliverPanel(
         isFree,
         dispatch,
         () => { setDeliverSelectedShopId(state, null); notify(); },
-        onHoverShop
+        onHoverShop,
+        syncedSignatures
       );
       return;
     }
@@ -324,7 +336,8 @@ export function renderDeliverPanel(
         setDeliverSelectedShopId(state, id);
         notify();
       },
-      onHoverShop
+      onHoverShop,
+      syncedSignatures
     );
   };
   render();

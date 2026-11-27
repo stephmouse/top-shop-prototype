@@ -23,6 +23,74 @@ export function getAllowedStoreTypeIds(
   return (state.segmentPools[segmentId] ?? []).filter((id) => !rivalTakenTypes.has(id));
 }
 
+/** Returns the highest-value store type ID in a segment pool (ties broken by open cost). */
+export function getSegmentHighValueStoreTypeId(state: GameState, segmentId: string): string | null {
+  const pool = state.segmentPools[segmentId] ?? [];
+  let bestId: string | null = null;
+  let bestBase = -1;
+  let bestOpen = -1;
+  for (const id of pool) {
+    const def = STORE_TYPES[id];
+    if (!def) continue;
+    if (def.emptyBaseCost > bestBase || (def.emptyBaseCost === bestBase && def.baseOpenCost > bestOpen)) {
+      bestId = id;
+      bestBase = def.emptyBaseCost;
+      bestOpen = def.baseOpenCost;
+    }
+  }
+  return bestId;
+}
+
+/** Returns the segmentId where `playerId` currently has their Signature Store placed, if any. */
+export function getPlayerActiveSignatureSegment(
+  state: GameState,
+  playerId: string,
+  excludingShopId?: string
+): string | null {
+  for (const s of Object.values(state.shops)) {
+    if (s.id !== excludingShopId && s.ownerId === playerId && s.signatureOwnerId === playerId) {
+      return s.segmentId;
+    }
+  }
+  return null;
+}
+
+/** Computes whether opening/buying out in `segmentId` can create or expand a Signature Store. */
+export function getSignatureOpenEligibility(
+  state: GameState,
+  playerId: string,
+  segmentId: string,
+  excludingShopId?: string,
+  hasSignatureOverride?: boolean
+): {
+  canOpenAsSignature: boolean;
+  isExpandingSignature: boolean;
+  highValueTypeId: string | null;
+} {
+  const hasSpec =
+    hasSignatureOverride ?? Boolean(state.players.find((p) => p.id === playerId)?.signatureStore?.name);
+  const existingOwn = Object.values(state.shops).find(
+    (s) => s.id !== excludingShopId && s.ownerId === playerId && s.segmentId === segmentId && s.storeTypeId
+  );
+  if (existingOwn?.storeTypeId) {
+    return {
+      canOpenAsSignature: false,
+      isExpandingSignature: hasSpec && existingOwn.signatureOwnerId === playerId,
+      highValueTypeId: existingOwn.storeTypeId,
+    };
+  }
+  if (!hasSpec || getPlayerActiveSignatureSegment(state, playerId, excludingShopId) !== null) {
+    return { canOpenAsSignature: false, isExpandingSignature: false, highValueTypeId: null };
+  }
+  const highValueTypeId = getSegmentHighValueStoreTypeId(state, segmentId);
+  const allowed = getAllowedStoreTypeIds(state, playerId, segmentId, excludingShopId);
+  return {
+    canOpenAsSignature: Boolean(highValueTypeId && allowed.includes(highValueTypeId)),
+    isExpandingSignature: false,
+    highValueTypeId,
+  };
+}
+
 export function getShopTotalStock(shop: Shop): number {
   return Object.values(shop.stock).reduce((sum, qty) => sum + qty, 0);
 }

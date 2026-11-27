@@ -1,8 +1,10 @@
 import { isValidCustomImageDataUrl } from '../config/avatarTypes';
+import { sanitizeSignatureStore } from '../config/signatureStore';
 import { MAX_PLAYERS } from '../config/balance';
 import type { GameState } from '../engine/types';
 import { HEX_COLOR_RE, HOST_TOKEN, MAX_ROOM_PEERS } from './protocol';
 import type { RoomRoster } from './protocol';
+import { specsEqual } from './signatureSync';
 
 export const PEER_ICE_CONFIG: RTCConfiguration = {
   iceServers: [
@@ -24,11 +26,20 @@ export function applyPeerSeatProfiles(state: GameState, roster: RoomRoster | nul
     const nextColor = HEX_COLOR_RE.test(peer.color) ? peer.color : player.color;
     const peerWalk = peer.avatar?.walkSound;
     const walkChanged = peerWalk !== undefined && peerWalk !== player.avatar?.walkSound;
-    if (nextName === player.name && nextColor === player.color && !walkChanged) return player;
+    const peerSig = sanitizeSignatureStore(peer.signatureStore);
+    const sigChanged = !specsEqual(peerSig, player.signatureStore);
+    if (nextName === player.name && nextColor === player.color && !walkChanged && !sigChanged) return player;
     changed = true;
     const nextAvatar =
       walkChanged && player.avatar ? { ...player.avatar, walkSound: peerWalk } : player.avatar;
-    return { ...player, name: nextName, color: nextColor, ...(nextAvatar ? { avatar: nextAvatar } : {}) };
+    const { signatureStore: _oldSig, ...restPlayer } = player;
+    return {
+      ...restPlayer,
+      name: nextName,
+      color: nextColor,
+      ...(nextAvatar ? { avatar: nextAvatar } : {}),
+      ...(peerSig ? { signatureStore: peerSig } : {}),
+    };
   });
   return changed ? { ...state, players } : state;
 }

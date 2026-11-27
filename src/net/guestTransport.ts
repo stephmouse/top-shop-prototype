@@ -1,6 +1,7 @@
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
 import type { GameState, PencilFace } from '../engine/types';
@@ -22,6 +23,7 @@ import {
   roomCodeToPeerId,
 } from './protocol';
 import type { ClientToHostMessage, HostToClientMessage, RoomRoster } from './protocol';
+import { createSignatureSyncStore } from './signatureSync';
 import { hydrateWireGameState } from './wireState';
 
 export interface GuestTransportCallbacks {
@@ -36,12 +38,16 @@ export interface GuestTransportCallbacks {
 
 export interface GuestTransport {
   cleanup: () => void;
-  joinRoom: (rawCode: string, profile: { name: string; color: string; avatar?: AvatarSpec }) => Promise<void>;
+  joinRoom: (
+    rawCode: string,
+    profile: { name: string; color: string; avatar?: AvatarSpec; signatureStore?: SignatureStoreSpec }
+  ) => Promise<void>;
   getRoster: () => RoomRoster | null;
   getMyPeerId: () => string;
   getSeq: () => number;
   getRoomCode: () => string | null;
   getCustomAvatars: () => Record<string, string>;
+  getSyncedSignatures: () => Record<string, SignatureStoreSpec>;
   isRemotePencilSpinning: () => boolean;
   getRemotePencilStopFace: () => PencilFace | null;
   isReconnecting: () => boolean;
@@ -49,7 +55,12 @@ export interface GuestTransport {
   sendAction: (action: GameAction) => boolean;
   notifyPencilSpin: (spinning: boolean, stopFace?: PencilFace) => void;
   sendTurnPing: () => { ok: boolean; waitSec?: number };
-  updateProfile: (profile: { name: string; color: string; avatar?: AvatarSpec }) => void;
+  updateProfile: (profile: {
+    name: string;
+    color: string;
+    avatar?: AvatarSpec;
+    signatureStore?: SignatureStoreSpec;
+  }) => void;
 }
 
 /** Manages guest-side PeerJS transport, reconnects, heartbeat, and incoming host syncs. */
@@ -69,13 +80,14 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
   let hostConn: DataConnection | null = null;
   let backoff: ReconnectBackoff | null = null;
   let connectTimer: ReturnType<typeof setTimeout> | null = null;
-  let profile: { name: string; color: string; avatar?: AvatarSpec } | null = null;
+  let profile: { name: string; color: string; avatar?: AvatarSpec; signatureStore?: SignatureStoreSpec } | null = null;
   let triggerDrop: (() => void) | null = null;
   let pingLastAt = -Infinity;
   let pingRecent: number[] = [];
   let pingBlockedUntil = 0;
 
   const avatarSync = createAvatarSyncStore();
+  const signatureSync = createSignatureSyncStore();
   const heartbeat = createHeartbeatMonitor(
     () => {
       if (active && hostConn?.open) {
@@ -107,6 +119,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
     reconnecting = false;
     profile = null;
     avatarSync.clear();
+    signatureSync.clear();
     teardownSocket();
     roomCode = null;
     myPeerId = '';
@@ -118,7 +131,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
 
   function joinRoom(
     rawCode: string,
-    nextProfile: { name: string; color: string; avatar?: AvatarSpec }
+    nextProfile: { name: string; color: string; avatar?: AvatarSpec; signatureStore?: SignatureStoreSpec }
   ): Promise<void> {
     cleanup();
     const gen = generation;
@@ -171,6 +184,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
             }
           } else {
             avatarSync.clear();
+            signatureSync.clear();
             myPeerId = raw.myPeerId;
             const wasReconnecting = reconnecting;
             reconnecting = false;
@@ -202,6 +216,11 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
           callbacks.onSessionChange();
         } else if (raw.type === 'AVATAR_PUT') {
           if (avatarSync.applyRemotePut(raw.key, raw.dataUrl)) callbacks.onSessionChange();
+        } else if (raw.type === 'SIGNATURE_SYNC') {
+          signatureSync.setRemoteMap(raw.signatures);
+          callbacks.onSessionChange();
+        } else if (raw.type === 'SIGNATURE_PUT') {
+          if (signatureSync.applyRemotePut(raw.key, raw.signatureStore)) callbacks.onSessionChange();
         } else if (raw.type === 'UI_PENCIL_SPIN') {
           remoteSpinning = raw.spinning;
           remoteStopFace = raw.spinning ? null : (raw.stopFace ?? null);
@@ -252,6 +271,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
               name: curProfile.name || 'Guest',
               color: safeColor,
               ...(curProfile.avatar ? { avatar: curProfile.avatar } : {}),
+              ...(curProfile.signatureStore ? { signatureStore: curProfile.signatureStore } : {}),
             } satisfies ClientToHostMessage);
           });
           conn.on('data', (raw) => {
@@ -296,6 +316,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
     getSeq: () => seq,
     getRoomCode: () => roomCode,
     getCustomAvatars: () => avatarSync.getMap(),
+    getSyncedSignatures: () => signatureSync.getMap(),
     isRemotePencilSpinning: () => remoteSpinning,
     getRemotePencilStopFace: () => remoteStopFace,
     isReconnecting: () => reconnecting,
@@ -365,6 +386,7 @@ export function createGuestTransport(callbacks: GuestTransportCallbacks): GuestT
         name,
         color,
         ...(nextProfile.avatar ? { avatar: nextProfile.avatar } : {}),
+        ...(nextProfile.signatureStore ? { signatureStore: nextProfile.signatureStore } : {}),
       } satisfies ClientToHostMessage);
     },
   };

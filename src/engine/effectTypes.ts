@@ -51,12 +51,13 @@ export interface ElevatorLockState {
 }
 
 export interface EventStorePrompt {
-  mode: 'sell' | 'buy_empty';
+  mode: 'sell' | 'buy_empty' | 'convert_signature';
   multiplier: number;
   forced: boolean;
   payerId?: string;
   allowOwnedSegment?: boolean;
   fromBank?: boolean;
+  candidateShopIds?: string[];
 }
 
 export type BankTargetKind =

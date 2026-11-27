@@ -1,4 +1,5 @@
 import type { AvatarSpec } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameState } from '../engine/types';
 import { normalizeRoomCode } from '../net/protocol';
 import type { ConnectedPeerInfo } from '../net/protocol';
@@ -20,6 +21,12 @@ export interface LobbyModalOptions {
   getDefaultProfile: () => { name: string; color: string; avatar?: AvatarSpec };
   onAddPlayerSlot?: (peer: ConnectedPeerInfo) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
+  onEditSignatureStore?: (
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void,
+    title?: string
+  ) => void;
   onUpdateHostSeat?: (seatIndex: number, next: UserProfile) => void;
   onOpenMatchSetup?: () => void;
   onProfileChange?: (next: UserProfile) => void;
@@ -199,6 +206,7 @@ export function createLobbyModal(options: LobbyModalOptions): LobbyModalControll
           renderBody();
         },
         onEditAvatar: options.onEditAvatar,
+        onEditSignatureStore: options.onEditSignatureStore,
         onUpdateHostSeat: options.onUpdateHostSeat,
         onOpenMatchSetup: options.onOpenMatchSetup,
       });

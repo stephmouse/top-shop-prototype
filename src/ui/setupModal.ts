@@ -3,6 +3,7 @@ import type { AvatarSpec } from '../config/avatarTypes';
 import { PLAYER_COLORS } from '../config/balance';
 import { getStageDef, OFFICIAL_STAGES } from '../config/maps';
 import type { StageId } from '../config/maps';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { formatCalendarDate } from '../engine/eventDraw';
 import type { GameState } from '../engine/types';
 import {
@@ -21,6 +22,12 @@ export interface SetupModalOptions {
   onSaveMatch: () => SavedMatchEnvelope;
   onLoadMatch: (state: GameState) => void;
   onEditAvatar?: (idx: number, current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void) => void;
+  onEditSignatureStore?: (
+    idx: number,
+    current: SignatureStoreSpec | undefined,
+    color: string,
+    onSave: (next: SignatureStoreSpec | undefined) => void
+  ) => void;
   getOnlineContext?: () => SetupOnlineContext;
   onOpenLobby?: () => void;
 }
@@ -209,6 +216,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
         color: prev?.color ?? PLAYER_COLORS[idx % PLAYER_COLORS.length]!,
         isBot: prev?.isBot ?? false,
         avatar: sanitizeAvatarSpec(prev?.avatar, idx),
+        ...(prev?.signatureStore ? { signatureStore: prev.signatureStore } : {}),
       };
     });
     draft = sanitizeMatchSetup({ ...draft, players: nextPlayers }) ?? draft;
@@ -273,6 +281,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     syncExtendedNote();
     renderSetupPlayersList(playersList, draft, online, {
       onEditAvatar: options.onEditAvatar,
+      onEditSignatureStore: options.onEditSignatureStore,
       onPlayersMutated: () => syncForm(),
       onNameInput: () => syncFirstPlayerOptions(online),
     });

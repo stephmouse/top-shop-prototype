@@ -1,4 +1,5 @@
 import { stripAvatarCustomImage } from '../config/avatarTypes';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameAction } from '../engine/actions';
 import type { GameState, PencilFace } from '../engine/types';
 import { applyPeerSeatProfiles, createAvatarSyncStore } from './avatarSync';
@@ -13,6 +14,7 @@ import {
   upsertPeerInRoster,
 } from './protocol';
 import type { ClientToHostMessage, HostToClientMessage, RoomRoster } from './protocol';
+import { createSignatureSyncStore } from './signatureSync';
 import { packWireGameState } from './wireState';
 
 export interface HostPeerSender {
@@ -38,6 +40,7 @@ export interface HostRouter {
   getRoster: () => RoomRoster;
   getSeq: () => number;
   getCustomAvatars: () => Record<string, string>;
+  getSyncedSignatures: () => Record<string, SignatureStoreSpec>;
   isRemotePencilSpinning: () => boolean;
   getRemotePencilStopFace: () => PencilFace | null;
   handleClientMessage: (raw: unknown, sender: HostPeerSender) => void;
@@ -64,6 +67,8 @@ export function createHostRouter(
   const pingStates = new Map<string, { lastAt: number; recent: number[]; blockedUntil: number }>();
   const avatarSync = createAvatarSyncStore();
   avatarSync.refreshHostMap(initialState, roster);
+  const signatureSync = createSignatureSyncStore();
+  signatureSync.refreshHostMap(initialState, roster);
 
   function attemptTurnPing(senderId: string, fromName: string): { ok: boolean; waitSec?: number } {
     const curState = callbacks.getState();
@@ -103,6 +108,7 @@ export function createHostRouter(
       roster.peers.find((p) => !p.connected);
     if (!victim) return false;
     avatarSync.removePeerImage(victim.id);
+    signatureSync.removePeerSpec(victim.id);
     deleteTokenMappingsForPeer(victim.id);
     roster = removePeerFromRoster(roster, victim.id);
     return true;
@@ -144,6 +150,19 @@ export function createHostRouter(
     }
   }
 
+  function syncSignatures(forceTarget?: HostPeerSender, excludePublicId?: string): void {
+    const { map, diffs } = signatureSync.refreshHostMap(callbacks.getState(), roster);
+    for (const diff of diffs) {
+      callbacks.broadcast(
+        { type: 'SIGNATURE_PUT', key: diff.key, signatureStore: diff.signatureStore },
+        excludePublicId
+      );
+    }
+    if (forceTarget && Object.keys(map).length > 0) {
+      forceTarget.send({ type: 'SIGNATURE_SYNC', signatures: map });
+    }
+  }
+
   function syncSeatProfiles(baseState = callbacks.getState()): { state: GameState; changed: boolean } {
     const next = applyPeerSeatProfiles(baseState, roster);
     if (next !== baseState) {
@@ -167,6 +186,7 @@ export function createHostRouter(
       pencilSpinning: false,
     });
     syncAvatars();
+    syncSignatures();
   }
 
   function handleHello(msg: Extract<ClientToHostMessage, { type: 'HELLO' }>, sender: HostPeerSender): void {
@@ -185,12 +205,14 @@ export function createHostRouter(
 
     sender.onBind(publicId);
     avatarSync.setPeerImage(publicId, msg.avatar?.customImage);
+    signatureSync.setPeerSpec(publicId, msg.signatureStore);
     const peerAvatar = stripAvatarCustomImage(msg.avatar);
     roster = upsertPeerInRoster(roster, {
       id: publicId,
       name: msg.name,
       color: msg.color,
       ...(peerAvatar ? { avatar: peerAvatar } : {}),
+      ...(msg.signatureStore ? { signatureStore: msg.signatureStore } : {}),
       connected: true,
     });
 
@@ -221,6 +243,7 @@ export function createHostRouter(
     }
 
     syncAvatars(sender, publicId);
+    syncSignatures(sender, publicId);
     callbacks.onSessionChange();
   }
 
@@ -229,6 +252,7 @@ export function createHostRouter(
     publicId: string
   ): void {
     avatarSync.setPeerImage(publicId, msg.avatar?.customImage);
+    signatureSync.setPeerSpec(publicId, msg.signatureStore);
     const peerAvatar = stripAvatarCustomImage(msg.avatar);
     roster = upsertPeerInRoster(
       roster,
@@ -237,6 +261,7 @@ export function createHostRouter(
         name: msg.name.trim().slice(0, 20) || 'Guest',
         color: msg.color,
         ...(peerAvatar ? { avatar: peerAvatar } : {}),
+        ...(msg.signatureStore ? { signatureStore: msg.signatureStore } : {}),
         connected: true,
       },
       false
@@ -256,6 +281,7 @@ export function createHostRouter(
       callbacks.broadcast({ type: 'ROSTER_SYNC', roster });
     }
     syncAvatars();
+    syncSignatures();
     callbacks.onSessionChange();
   }
 
@@ -263,6 +289,7 @@ export function createHostRouter(
     getRoster: () => roster,
     getSeq: () => seq,
     getCustomAvatars: () => avatarSync.getMap(),
+    getSyncedSignatures: () => signatureSync.getMap(),
     isRemotePencilSpinning: () => remotePencilSpinning,
     getRemotePencilStopFace: () => remotePencilStopFace,
 
@@ -380,10 +407,12 @@ export function createHostRouter(
       callbacks.sendToPeer(publicId, { type: 'ERROR', message: 'You were removed by the host.' });
       callbacks.closePeer(publicId);
       avatarSync.removePeerImage(publicId);
+      signatureSync.removePeerSpec(publicId);
       deleteTokenMappingsForPeer(publicId);
       roster = removePeerFromRoster(roster, publicId);
       callbacks.broadcast({ type: 'ROSTER_SYNC', roster });
       syncAvatars();
+      syncSignatures();
       if (wasActive) clearRemoteSpin(activeIdx);
       callbacks.onSessionChange();
     },

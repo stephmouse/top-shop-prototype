@@ -1,5 +1,7 @@
 import { isValidAvatarSpec, isValidCustomImageDataUrl } from '../config/avatarTypes';
 import type { AvatarSpec } from '../config/avatarTypes';
+import { isValidSignatureStore } from '../config/signatureStore';
+import type { SignatureStoreSpec } from '../config/signatureStore';
 import { MAX_PLAYERS, MIN_PLAYERS, PENCIL_FACES } from '../config/balance';
 import { isValidGameAction } from '../engine/actions';
 import type { GameAction } from '../engine/actions';
@@ -21,6 +23,7 @@ export interface ConnectedPeerInfo {
   name: string;
   color: string;
   avatar?: AvatarSpec;
+  signatureStore?: SignatureStoreSpec;
   connected: boolean;
 }
 
@@ -31,8 +34,22 @@ export interface RoomRoster {
 }
 
 export type ClientToHostMessage =
-  | { type: 'HELLO'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
-  | { type: 'UPDATE_PROFILE'; clientToken: string; name: string; color: string; avatar?: AvatarSpec }
+  | {
+      type: 'HELLO';
+      clientToken: string;
+      name: string;
+      color: string;
+      avatar?: AvatarSpec;
+      signatureStore?: SignatureStoreSpec;
+    }
+  | {
+      type: 'UPDATE_PROFILE';
+      clientToken: string;
+      name: string;
+      color: string;
+      avatar?: AvatarSpec;
+      signatureStore?: SignatureStoreSpec;
+    }
   | { type: 'ACTION_REQUEST'; clientToken: string; seq: number; action: GameAction }
   | { type: 'UI_PENCIL_SPIN'; clientToken: string; spinning: boolean; stopFace?: PencilFace }
   | { type: 'UI_TURN_PING'; clientToken: string }
@@ -44,6 +61,8 @@ export type HostToClientMessage =
   | { type: 'ROSTER_SYNC'; roster: RoomRoster }
   | { type: 'AVATAR_SYNC'; avatars: Record<string, string> }
   | { type: 'AVATAR_PUT'; key: string; dataUrl: string | null }
+  | { type: 'SIGNATURE_SYNC'; signatures: Record<string, SignatureStoreSpec> }
+  | { type: 'SIGNATURE_PUT'; key: string; signatureStore: SignatureStoreSpec | null }
   | { type: 'UI_PENCIL_SPIN'; spinning: boolean; activePlayerIndex: number; stopFace?: PencilFace }
   | { type: 'UI_TURN_PING'; fromName: string; targetPlayerId: string; targetPlayerName: string }
   | { type: 'PONG'; ts: number }
@@ -211,6 +230,7 @@ function isValidRoster(raw: unknown): raw is RoomRoster {
       typeof p.color === 'string' &&
       HEX_COLOR_RE.test(p.color) &&
       (p.avatar === undefined || isValidAvatarSpec(p.avatar)) &&
+      (p.signatureStore === undefined || isValidSignatureStore(p.signatureStore)) &&
       typeof p.connected === 'boolean'
   );
 }
@@ -234,7 +254,8 @@ export function isValidClientMessage(raw: unknown): raw is ClientToHostMessage {
       isShortStr(raw.name, 40) &&
       typeof raw.color === 'string' &&
       HEX_COLOR_RE.test(raw.color) &&
-      (raw.avatar === undefined || isValidAvatarSpec(raw.avatar))
+      (raw.avatar === undefined || isValidAvatarSpec(raw.avatar)) &&
+      (raw.signatureStore === undefined || isValidSignatureStore(raw.signatureStore))
     );
   }
   if (raw.type === 'ACTION_REQUEST') {
@@ -255,6 +276,13 @@ function isValidAvatarMap(raw: unknown): raw is Record<string, string> {
   const entries = Object.entries(raw);
   if (entries.length > MAX_ROOM_PEERS + MAX_PLAYERS) return false;
   return entries.every(([key, val]) => isValidAvatarKey(key) && isValidCustomImageDataUrl(val));
+}
+
+function isValidSignatureMap(raw: unknown): raw is Record<string, SignatureStoreSpec> {
+  if (!isRecord(raw)) return false;
+  const entries = Object.entries(raw);
+  if (entries.length > MAX_ROOM_PEERS + MAX_PLAYERS) return false;
+  return entries.every(([key, val]) => isValidAvatarKey(key) && isValidSignatureStore(val));
 }
 
 export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
@@ -282,6 +310,10 @@ export function isValidHostMessage(raw: unknown): raw is HostToClientMessage {
   if (raw.type === 'AVATAR_SYNC') return isValidAvatarMap(raw.avatars);
   if (raw.type === 'AVATAR_PUT') {
     return isValidAvatarKey(raw.key) && (raw.dataUrl === null || isValidCustomImageDataUrl(raw.dataUrl));
+  }
+  if (raw.type === 'SIGNATURE_SYNC') return isValidSignatureMap(raw.signatures);
+  if (raw.type === 'SIGNATURE_PUT') {
+    return isValidAvatarKey(raw.key) && (raw.signatureStore === null || isValidSignatureStore(raw.signatureStore));
   }
   if (raw.type === 'UI_PENCIL_SPIN') {
     return (

@@ -1,4 +1,5 @@
 import { SHOP_RULES, STORE_CAPACITY_BY_LEVEL, STORE_TYPES } from '../config/balance';
+import { getShopDisplayName, getShopItemDisplayName } from '../config/signatureStore';
 import {
   appendLog,
   clampPoints,
@@ -133,11 +134,13 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
   let cashbackRefund = 0;
   const refundedItemNames: string[] = [];
 
+  const storeDisplayName = getShopDisplayName(shop, state.players);
+  const itemDisplayName = getShopItemDisplayName(shop, item, state.players);
   const cbRoll = nextRandom(seed);
   seed = cbRoll.nextSeed;
   if (cbRoll.value < item.cashbackChance) {
     cashbackRefund = grossPaid * 2;
-    refundedItemNames.push(item.name);
+    refundedItemNames.push(itemDisplayName);
   }
 
   let ptsAwarded = 0;
@@ -186,8 +189,8 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
     ownerId,
     shopId: shop.id,
     tileId: shop.tileId,
-    storeName: def.name,
-    itemName: item.name,
+    storeName: storeDisplayName,
+    itemName: itemDisplayName,
     grossPaid,
     pointsAwarded: ptsAwarded,
     cashbackCount: refundedItemNames.length,
@@ -198,8 +201,8 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
   const ptsNote = ptsAwarded > 0 ? `, +${ptsAwarded} pts` : '';
   const logMsg =
     refundedItemNames.length > 0
-      ? `${active.name} bought ${item.name} at ${shopRef} for $${grossPaid}${ptsNote} — CASH BACK! ${ownerName} paid back $${cashbackRefund}!`
-      : `${active.name} bought ${item.name} at ${shopRef} for $${grossPaid}${ptsNote}.`;
+      ? `${active.name} bought ${itemDisplayName} at ${shopRef} for $${grossPaid}${ptsNote} — CASH BACK! ${ownerName} paid back $${cashbackRefund}!`
+      : `${active.name} bought ${itemDisplayName} at ${shopRef} for $${grossPaid}${ptsNote}.`;
 
   const nextBoughtCount = boughtSoFar + 1;
   const nextState: GameState = {
@@ -268,6 +271,7 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     ...shop,
     ownerId: null,
     storeTypeId: null,
+    signatureOwnerId: null,
     level: 1,
     stock: {},
     closedWindow: null,
