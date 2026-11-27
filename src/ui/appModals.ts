@@ -1,11 +1,14 @@
 import { MAX_PLAYERS, PLAYER_COLORS } from '../config/balance';
 import { getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
+import type { GameAction } from '../engine/actions';
 import type { GameState } from '../engine/types';
 import type { ConnectedPeerInfo } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
 import { createAvatarModal } from './avatarModal';
 import type { AvatarModalController } from './avatarModal';
+import { createDebugDrawer, isDebugUnlocked, setDebugUnlocked } from './debugDrawer';
+import type { DebugDrawerController } from './debugDrawer';
 import { createHomeModal } from './homeModal';
 import type { HomeModalController } from './homeModal';
 import { createHowToPlayModal } from './howToPlayModal';
@@ -24,6 +27,8 @@ import { createStoreInspectorModal } from './storeInspectorModal';
 import type { StoreInspectorController } from './storeInspectorModal';
 import { createTopbar } from './topbar';
 import type { TopbarController } from './topbar';
+import { createVictoryModal } from './victoryModal';
+import type { VictoryModalController } from './victoryModal';
 
 export interface AppModalsOptions {
   netSession: MultiplayerSession;
@@ -35,11 +40,14 @@ export interface AppModalsOptions {
   onToggleRoutes: (show: boolean) => void;
   onToggleAutoStep: (enabled: boolean) => void;
   onStartMatch: (setup: MatchSetupData) => void;
+  onRematch: () => void;
   onSaveMatch: () => SavedMatchEnvelope;
   onLoadMatch: (state: GameState) => void;
   onDiscardResume: () => void;
   onUpdateProfile: (next: UserProfile) => void;
   onUpdateHostSeat: (seatIdx: number, next: UserProfile) => void;
+  onApplyDebugState: (next: GameState) => void;
+  onDispatchAction: (action: GameAction) => void;
 }
 
 export interface AppModals {
@@ -50,6 +58,8 @@ export interface AppModals {
   avatarModal: AvatarModalController;
   howToPlayModal: HowToPlayModalController;
   storeInspectorModal: StoreInspectorController;
+  victoryModal: VictoryModalController;
+  debugDrawer: DebugDrawerController;
   openSetup: () => void;
   openLobby: (code?: string, inviteMode?: boolean) => void;
   syncTopbar: (hasSave?: boolean) => void;
@@ -80,14 +90,36 @@ export function createAppModals(options: AppModalsOptions): AppModals {
   const openSetup = () => {
     homeModal.close();
     lobbyModal.close();
+    victoryModal.close();
     setupModal.open(options.getSetup());
   };
 
   const openLobby = (code?: string, inviteMode = false) => {
     homeModal.close();
     setupModal.close();
+    victoryModal.close();
     lobbyModal.open(code, inviteMode);
   };
+
+  const victoryModal = createVictoryModal({
+    getState: options.getState,
+    getOnlineContext: () => ({
+      role: netSession.getRole(),
+      roster: netSession.getRoster(),
+      customAvatars: netSession.getCustomAvatars(),
+    }),
+    onRematch: options.onRematch,
+    onOpenSetup: openSetup,
+    onReplayFanfare: (reason) => soundFx.playVictoryFanfare(reason),
+  });
+
+  const debugDrawer = createDebugDrawer({
+    getState: options.getState,
+    getRole: () => netSession.getRole(),
+    onApplyDebugState: options.onApplyDebugState,
+    onDispatchAction: options.onDispatchAction,
+    onVisibilityChange: () => syncTopbar(),
+  });
 
   const setupModal = createSetupModal({
     initialSetup: options.getSetup(),
@@ -175,6 +207,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     onOpenHome: () => {
       setupModal.close();
       lobbyModal.close();
+      victoryModal.close();
       homeModal.open();
     },
     onOpenHowToPlay: () => howToPlayModal.open(),
@@ -185,16 +218,31 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       const slot = loadManualMatchSlot();
       if (slot) options.onLoadMatch(slot.state);
     },
+    onToggleDebug: () => {
+      if (netSession.getRole() === 'guest') return;
+      debugDrawer.toggle();
+      syncTopbar();
+    },
+    onUnlockDebug: () => {
+      if (netSession.getRole() === 'guest') return;
+      setDebugUnlocked(true);
+      debugDrawer.open();
+      syncTopbar();
+    },
   });
 
   const syncTopbar = (hasSave = Boolean(loadManualMatchSlot())) => {
+    const role = netSession.getRole();
+    if (role === 'guest' && debugDrawer.isOpen()) debugDrawer.close();
     const roster = netSession.getRoster();
     topbar.sync(options.getState().mapId as StageId, hasSave, {
-      role: netSession.getRole(),
+      role,
       roomCode: netSession.getRoomCode(),
       peerCount: roster?.peers.filter((p) => p.connected).length ?? 0,
       waitingCount: roster?.peers.filter((p) => p.connected && !roster.seatOwners.includes(p.id)).length ?? 0,
       reconnecting: netSession.isReconnecting(),
+      debugUnlocked: isDebugUnlocked(),
+      debugOpen: debugDrawer.isOpen(),
     });
   };
 
@@ -208,6 +256,8 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     avatarModal,
     howToPlayModal,
     storeInspectorModal,
+    victoryModal,
+    debugDrawer,
     openSetup,
     openLobby,
     syncTopbar,
@@ -215,6 +265,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       avatarModal.isOpen() ||
       howToPlayModal.isOpen() ||
       storeInspectorModal.isOpen() ||
+      victoryModal.isOpen() ||
       homeModal.isOpen() ||
       setupModal.isOpen() ||
       lobbyModal.isOpen(),
@@ -222,6 +273,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       if (avatarModal.isOpen()) return avatarModal.close();
       if (howToPlayModal.isOpen()) return howToPlayModal.close();
       if (storeInspectorModal.isOpen()) return storeInspectorModal.close();
+      if (victoryModal.isOpen()) return victoryModal.close();
       if (lobbyModal.isOpen() && lobbyModal.isDismissBlocked()) return;
       homeModal.close();
       setupModal.close();
@@ -232,6 +284,8 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       setupModal.refresh();
       homeModal.refresh();
       storeInspectorModal.refresh();
+      victoryModal.refresh();
+      debugDrawer.refresh();
     },
   };
 }

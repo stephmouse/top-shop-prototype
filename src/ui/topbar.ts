@@ -9,6 +9,8 @@ export interface TopbarNetInfo {
   peerCount: number;
   waitingCount?: number;
   reconnecting?: boolean;
+  debugUnlocked?: boolean;
+  debugOpen?: boolean;
 }
 
 export interface TopbarOptions {
@@ -26,6 +28,8 @@ export interface TopbarOptions {
   onOpenLobby: () => void;
   onSaveMatch: () => void;
   onLoadMatch: () => void;
+  onToggleDebug?: () => void;
+  onUnlockDebug?: () => void;
 }
 
 export interface TopbarController {
@@ -50,6 +54,22 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   const verTag = document.createElement('span');
   verTag.className = 'app-version-tag';
   verTag.textContent = `v${APP_VERSION}`;
+  let verClicks = 0;
+  let verClickTimer: number | null = null;
+  verTag.addEventListener('click', () => {
+    verClicks += 1;
+    if (verClickTimer !== null) window.clearTimeout(verClickTimer);
+    if (verClicks >= 3) {
+      verClicks = 0;
+      verClickTimer = null;
+      options.onUnlockDebug?.();
+      return;
+    }
+    verClickTimer = window.setTimeout(() => {
+      verClicks = 0;
+      verClickTimer = null;
+    }, 1200);
+  });
   title.append(
     document.createTextNode('TOP SHOP PROTOTYPE '),
     verTag,
@@ -103,9 +123,11 @@ export function createTopbar(options: TopbarOptions): TopbarController {
     }, 1500);
   });
   const loadBtn = makeButton('Load', options.onLoadMatch);
+  const debugBtn = makeButton('🛠 Debug', () => options.onToggleDebug?.());
+  debugBtn.hidden = true;
   if (homeBtn) controls.appendChild(homeBtn);
   if (howToBtn) controls.appendChild(howToBtn);
-  controls.append(setupBtn, onlineBtn, saveBtn, loadBtn);
+  controls.append(setupBtn, onlineBtn, saveBtn, loadBtn, debugBtn);
 
   topbar.append(title, controls);
   return {
@@ -118,6 +140,8 @@ export function createTopbar(options: TopbarOptions): TopbarController {
       setupBtn.disabled = isGuest;
       saveBtn.disabled = isGuest;
       loadBtn.disabled = isGuest || !hasSavedMatch;
+      debugBtn.hidden = !netInfo?.debugUnlocked || isGuest;
+      debugBtn.className = netInfo?.debugOpen ? 'primary' : '';
 
       if (netInfo?.role === 'host') {
         const waiting = netInfo.waitingCount ?? 0;

@@ -12,6 +12,7 @@ import {
   resolveTileLanding,
   updateActivePlayer,
 } from './movementLanding';
+import { bumpMatchStats } from './matchStats';
 import type {
   EscalatorLink,
   GameState,
@@ -21,7 +22,7 @@ import type {
 
 export { handleResolveElevator, handleRollPencil, resolveTileLanding } from './movementLanding';
 
-function captureSnapshot(state: GameState): MoveSnapshot {
+function captureSnapshot(state: GameState, stepCost = 1, rodeEscalator = false): MoveSnapshot {
   const active = getActivePlayer(state);
   return {
     tileId: active.tileId,
@@ -31,14 +32,20 @@ function captureSnapshot(state: GameState): MoveSnapshot {
     remainingSteps: state.remainingSteps,
     hadBranchChoice: state.hadBranchChoiceThisTurn,
     phase: state.phase === 'CHOOSE_DIRECTION' ? 'CHOOSE_DIRECTION' : 'STEPPING',
+    stepCost,
+    ...(rodeEscalator ? { rodeEscalator: true } : {}),
   };
 }
 
 function restoreSnapshot(
   state: GameState,
   snap: MoveSnapshot,
-  remainingHistory: MoveSnapshot[]
+  remainingHistory: MoveSnapshot[],
+  undoneSnapshots: MoveSnapshot[]
 ): GameState {
+  const active = getActivePlayer(state);
+  const undoSteps = undoneSnapshots.reduce((sum, u) => sum + (u.stepCost ?? 1), 0);
+  const undoEscalators = undoneSnapshots.reduce((sum, u) => sum + (u.rodeEscalator ? 1 : 0), 0);
   const restored = updateActivePlayer(state, {
     tileId: snap.tileId,
     horizontalDir: snap.horizontalDir,
@@ -52,6 +59,14 @@ function restoreSnapshot(
     phase: snap.phase,
     moveHistory: remainingHistory,
     pendingUndoSnapshot: null,
+    ...(undoSteps > 0 || undoEscalators > 0
+      ? {
+          matchStats: bumpMatchStats(restored, active.id, {
+            stepsTaken: -undoSteps,
+            escalatorsRidden: -undoEscalators,
+          }),
+        }
+      : {}),
   };
 }
 
@@ -70,7 +85,7 @@ export function handleUndoStep(state: GameState): GameState {
       pendingUndoSnapshot: snap,
     };
   }
-  return restoreSnapshot(state, snap, remaining);
+  return restoreSnapshot(state, snap, remaining, [snap]);
 }
 
 export function handleCancelMove(state: GameState): GameState {
@@ -80,7 +95,7 @@ export function handleCancelMove(state: GameState): GameState {
   }
   const firstSnap = state.moveHistory[0];
   if (!firstSnap) return state;
-  const next = restoreSnapshot(state, firstSnap, []);
+  const next = restoreSnapshot(state, firstSnap, [], state.moveHistory);
   return { ...next, log: appendLog(next, `${getActivePlayer(next).name} reset move.`) };
 }
 
@@ -95,7 +110,10 @@ function applyEscalatorSlide(
   let history = state.moveHistory;
   if (state.phase === 'ESCALATOR_RIDE' && history.length > 0) {
     const last = history[history.length - 1]!;
-    history = [...history.slice(0, -1), { ...last, viaEscalatorTileId: player.tileId }];
+    history = [
+      ...history.slice(0, -1),
+      { ...last, viaEscalatorTileId: player.tileId, rodeEscalator: true },
+    ];
   }
 
   const nextState = updateActivePlayer(
@@ -107,8 +125,9 @@ function applyEscalatorSlide(
     }
   );
   const dest = getTile(nextState, exit.targetTileId);
-  const logged = {
+  const logged: GameState = {
     ...nextState,
+    matchStats: bumpMatchStats(nextState, player.id, { escalatorsRidden: 1 }),
     log: appendLog(nextState, `${player.name} rode escalator to ${dest.floor}F.`),
   };
 
@@ -129,7 +148,11 @@ function executeHorizontalStep(state: GameState): GameState {
     tileId: nextTileId,
     stepsSincePayday: player.stepsSincePayday + 1,
   });
-  nextState = { ...nextState, remainingSteps };
+  nextState = {
+    ...nextState,
+    remainingSteps,
+    matchStats: bumpMatchStats(nextState, player.id, { stepsTaken: 1 }),
+  };
 
   const landedTile = getTile(nextState, nextTileId);
   if (landedTile.type === 'escalator') {
@@ -161,10 +184,14 @@ export function handleChooseDirection(state: GameState, direction: DirectionChoi
   const available = getAvailableDirections(state, player);
   if (!available.includes(direction)) return state;
 
-  const history = [...state.moveHistory, captureSnapshot(state)];
+  const isHorizontal = direction === 'left' || direction === 'right';
+  const history = [
+    ...state.moveHistory,
+    captureSnapshot(state, isHorizontal ? 1 : 0, !isHorizontal),
+  ];
   const branched = state.hadBranchChoiceThisTurn || available.length > 1;
 
-  if (direction === 'left' || direction === 'right') {
+  if (isHorizontal) {
     const nextState = updateActivePlayer(
       { ...state, moveHistory: history, hadBranchChoiceThisTurn: branched },
       { horizontalDir: direction }
@@ -184,7 +211,7 @@ export function handleChooseDirection(state: GameState, direction: DirectionChoi
 
 export function handleAdvanceStep(state: GameState): GameState {
   if (state.phase === 'ESCALATOR_UNDO' && state.pendingUndoSnapshot) {
-    return restoreSnapshot(state, state.pendingUndoSnapshot, state.moveHistory);
+    return restoreSnapshot(state, state.pendingUndoSnapshot, state.moveHistory, [state.pendingUndoSnapshot]);
   }
   if (state.phase === 'ESCALATOR_RIDE') {
     const player = getActivePlayer(state);
@@ -194,6 +221,6 @@ export function handleAdvanceStep(state: GameState): GameState {
   }
   if (state.phase !== 'STEPPING' || state.remainingSteps <= 0) return state;
 
-  const history = [...state.moveHistory, captureSnapshot(state)];
+  const history = [...state.moveHistory, captureSnapshot(state, 1)];
   return executeHorizontalStep({ ...state, moveHistory: history });
 }

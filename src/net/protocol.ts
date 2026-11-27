@@ -11,7 +11,7 @@ export const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 export const PEER_ID_PREFIX = 'topshop-v1-';
 export const HOST_TOKEN = 'HOST';
 export const CLIENT_TOKEN_STORAGE_KEY = 'top_shop_client_token_v1';
-export const MAX_ROOM_PEERS = 8;
+export const MAX_ROOM_PEERS = 10;
 export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export type NetRole = 'offline' | 'host' | 'guest';

@@ -123,7 +123,7 @@ export function createHomeModal(options: HomeModalOptions): HomeModalController 
 
     const localCard = addLobbySection('Play Local Match', 'home-action-card');
     localCard.append(
-      mk('p', 'setup-muted home-card-desc', 'Pass-and-play on this device for 2–6 players with custom map & rules.'),
+      mk('p', 'setup-muted home-card-desc', 'Pass-and-play on this device for 2–8 players with custom map & rules.'),
       mkBtn('Match Setup & Play', () => { close(); options.onPlayLocal(); }, 'primary', busy)
     );
 

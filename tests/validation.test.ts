@@ -151,6 +151,18 @@ describe('action validation, persistence sanitization, and engine purity', () =>
 
     const state = createInitialGameState([{ name: 'A' }, { name: 'B' }], {}, 1, 'stage_0');
     expect(isValidGameState(state)).toBe(true);
+
+    const p8 = createInitialGameState(
+      Array.from({ length: 8 }, (_, i) => ({ name: `P${i + 1}` })),
+      {},
+      1,
+      'stage_3'
+    );
+    expect(p8.players).toHaveLength(8);
+    expect(isValidGameState(p8)).toBe(true);
+    expect(sanitizeMatchSetup({ stageId: 'stage_3', players: Array.from({ length: 8 }, (_, i) => ({ name: `P${i + 1}` })) })?.players).toHaveLength(8);
+    expect(isValidGameState({ ...p8, players: [...p8.players, p8.players[0]!] })).toBe(false);
+
     expect(isValidGameState({ ...state, mapId: 'stage_999' })).toBe(false);
     expect(isValidGameState({ ...state, activePlayerIndex: 5 })).toBe(false);
     expect(
@@ -224,11 +236,12 @@ describe('action validation, persistence sanitization, and engine purity', () =>
 
   it('guards GameState, Player, and Shop schema keys against SAVE_SCHEMA_VERSION', () => {
     const schemaHint = 'GameState/Player/Shop keys changed — update src/ui/stateValidation.ts and bump SAVE_SCHEMA_VERSION.';
-    expect(SAVE_SCHEMA_VERSION).toBe(2);
+    expect(SAVE_SCHEMA_VERSION).toBe(3);
 
     const state = createInitialGameState([{ name: 'A' }, { name: 'B' }], {}, 1, 'stage_0');
     expect(Object.keys(state).sort(), schemaHint).toEqual([
       'activePlayerIndex',
+      'assetHistory',
       'config',
       'deliverMode',
       'deliverPreferredShopId',
@@ -242,6 +255,7 @@ describe('action validation, persistence sanitization, and engine purity', () =>
       'lastRoll',
       'log',
       'mapId',
+      'matchStats',
       'month',
       'moveHistory',
       'pendingBankRefundPts',
@@ -259,6 +273,7 @@ describe('action validation, persistence sanitization, and engine purity', () =>
       'tiles',
       'totalMonths',
       'turnNumber',
+      'winReason',
       'winnerId',
       'year',
     ]);

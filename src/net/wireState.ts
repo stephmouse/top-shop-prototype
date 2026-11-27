@@ -27,6 +27,17 @@ function isRecord(raw: unknown): raw is Record<string, unknown> {
 
 export function packWireGameState(state: GameState): WireGameState {
   const redacted = redactStateForClient(state);
+  if (redacted.phase !== 'GAME_OVER') {
+    const {
+      tiles: _tiles,
+      segmentPools: _segmentPools,
+      matchStats: _matchStats,
+      assetHistory: _assetHistory,
+      winReason: _winReason,
+      ...wire
+    } = redacted;
+    return wire;
+  }
   const { tiles: _tiles, segmentPools: _segmentPools, ...wire } = redacted;
   return wire;
 }

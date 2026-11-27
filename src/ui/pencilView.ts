@@ -226,11 +226,12 @@ export function renderPencilPanel(
     return;
   }
 
-  primaryBtn.addEventListener('click', () => {
+  const triggerSpinOrStop = () => {
     if (spinPhase === 'idle') {
       spinPhase = 'spinning';
       lastFrameTs = 0;
       stage.classList.add('is-spinning');
+      stage.title = isSlow ? 'Click or tap pencil for instant stop' : 'Click or tap pencil to stop';
       primaryBtn.textContent = isSlow ? 'Instant Stop (Space)' : 'Stop Pencil (Space)';
       quickBtn.disabled = true;
       options.onSpinChange?.(true);
@@ -244,10 +245,18 @@ export function renderPencilPanel(
       stopToAngle = snappedSlot * FACE_ANGLE;
       const faceIdx = ((snappedSlot % FACE_COUNT) + FACE_COUNT) % FACE_COUNT;
       chosenFace = faces[faceIdx] ?? faces[0]!;
-      stage.classList.remove('is-spinning');
+      stage.classList.remove('is-spinning', 'is-interactive');
+      stage.title = '';
       primaryBtn.disabled = true;
       primaryBtn.textContent = 'Stopping...';
       options.onSpinChange?.(false, chosenFace);
     }
-  });
+  };
+
+  stage.classList.add('is-interactive');
+  stage.setAttribute('role', 'button');
+  stage.setAttribute('aria-label', 'Spin or stop pencil');
+  stage.title = 'Click or tap pencil to spin';
+  stage.addEventListener('click', triggerSpinOrStop);
+  primaryBtn.addEventListener('click', triggerSpinOrStop);
 }

@@ -10,6 +10,7 @@ import {
   resolveEquippedWalkSound,
   reversePlayerDirections,
 } from './helpers';
+import { bumpMatchStats, bumpMultiPlayerMatchStats } from './matchStats';
 import { randomInt } from './rng';
 import {
   getAllowedStoreTypeIds,
@@ -43,6 +44,13 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
     ptsAwarded = ptsRoll.value;
   }
 
+  const actualPtsGained = Math.max(0, clampPoints(active.points + ptsAwarded) - active.points);
+  let matchStats = bumpMatchStats(state, active.id, {
+    eventsDrawn: 1,
+    pointsFromEvents: actualPtsGained,
+    ...(card.effect.kind === 'nothing' ? { eventMisses: 1 } : {}),
+  });
+
   let players = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, points: clampPoints(p.points + ptsAwarded) } : p
   );
@@ -57,6 +65,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
     shops,
     globalSale,
     elevatorLock,
+    matchStats,
     eventChoices: [],
     revealedEventSlot: null,
     hadBranchChoiceThisTurn: false,
@@ -142,6 +151,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
 
     case 'sell_empty_stores': {
       const touched = new Set<string>();
+      const soldByOwner = new Map<string, number>();
       for (const s of Object.values(shops)) {
         if (!s.ownerId || getShopTotalStock(s) > 0) continue;
         const match =
@@ -151,9 +161,16 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
         if (!match) continue;
         const payout = Math.floor(computeShopAssetValue(s) * eff.multiplier);
         const oid = s.ownerId;
+        soldByOwner.set(oid, (soldByOwner.get(oid) ?? 0) + 1);
         players = players.map((p) => (p.id === oid ? { ...p, cash: p.cash + payout } : p));
         shops[s.id] = resetShopSlot(s);
         touched.add(`${s.segmentId}|${oid}`);
+      }
+      if (soldByOwner.size > 0) {
+        matchStats = bumpMultiPlayerMatchStats(
+          { ...state, matchStats },
+          [...soldByOwner.entries()].map(([oid, count]) => [oid, { shopsSoldByEvent: count }])
+        );
       }
       for (const key of touched) {
         const [seg, oid] = key.split('|');
@@ -236,6 +253,7 @@ export function handlePickEventCard(state: GameState, cardId: string): GameState
             }
           : p
       );
+      matchStats = bumpMatchStats({ ...state, matchStats }, active.id, { shoesPutOn: 1 });
       return resumeAfterPostAction(nextBase(`Equipped ${WALK_SOUND_META[resolved.style].label}!`));
     }
 

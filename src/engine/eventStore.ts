@@ -7,6 +7,7 @@ import {
   formatShopRef,
   getActivePlayer,
 } from './helpers';
+import { bumpMatchStats } from './matchStats';
 import {
   buildStarterStock,
   computeOpenShopCost,
@@ -71,6 +72,7 @@ export function handleResolveEventStore(
       ...state,
       players,
       shops: nextShops,
+      matchStats: bumpMatchStats(state, active.id, { shopsSoldByEvent: 1 }),
       log: appendLog(state, `${active.name} sold ${formatShopRef(state, shop)} for +$${payout}.`),
     });
   }
@@ -112,6 +114,7 @@ export function handleResolveEventStore(
       ...state,
       players,
       shops: nextShops,
+      matchStats: bumpMatchStats(state, active.id, { storesOpened: 1 }),
       log: appendLog(state, `${active.name} opened ${formatShopRef(state, leveled)} L${leveled.level} (${payerNote}).`),
     });
   }
@@ -147,6 +150,7 @@ export function handleSkipEventStore(state: GameState): GameState {
       phase: 'BANK_MENU',
       pendingBankRefundPts: 0,
       eventStorePrompt: null,
+      matchStats: refund > 0 ? bumpMatchStats(state, active.id, { bankRewardsRedeemed: -1, pointsSpent: -refund }) : state.matchStats,
       log: appendLog(state, `${active.name} canceled Bank store opening (+${refund} pts refunded).`),
     };
   }
@@ -198,6 +202,10 @@ export function handleResolveShoes(
   return resumeAfterPostAction({
     ...state,
     players,
+    matchStats:
+      mode === 'stack' || mode === 'replace'
+        ? bumpMatchStats(state, active.id, { shoesPutOn: 1 })
+        : state.matchStats,
     log: appendLog(state, note),
   });
 }

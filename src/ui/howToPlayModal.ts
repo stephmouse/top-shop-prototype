@@ -84,7 +84,7 @@ export function createHowToPlayModal(): HowToPlayModalController {
   }
 
   const footer = mk('div', 'setup-footer');
-  footer.append(mk('span', 'setup-muted', 'Original PS1 ruleset with 2–6 players & online P2P.'), mkBtn('Back', close, 'primary'));
+  footer.append(mk('span', 'setup-muted', 'Original PS1 ruleset with 2–8 players (PS1 classic 2–6P) & online P2P.'), mkBtn('Back', close, 'primary'));
 
   modal.append(header, body, footer);
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });

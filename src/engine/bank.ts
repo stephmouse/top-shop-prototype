@@ -10,6 +10,7 @@ import {
   resolveEquippedWalkSound,
   reversePlayerDirections,
 } from './helpers';
+import { bumpMatchStats, recordAssetSnapshot } from './matchStats';
 import { randomInt } from './rng';
 import { resumeAfterPostAction } from './shops';
 import { createTimedWindow, extendTimedWindow } from './timedEffects';
@@ -31,6 +32,16 @@ export function handleRedeemBankReward(
   }
 
   const active = getActivePlayer(state);
+  const trackedState: GameState =
+    reward.pointCost > 0
+      ? {
+          ...state,
+          matchStats: bumpMatchStats(state, active.id, {
+            bankRewardsRedeemed: 1,
+            pointsSpent: reward.pointCost,
+          }),
+        }
+      : state;
   let seed = state.seed;
   let players: Player[] = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, points: p.points - reward.pointCost } : p
@@ -38,7 +49,7 @@ export function handleRedeemBankReward(
   const shops = { ...state.shops };
 
   const shopHandled = applyBankShopEffect({
-    state,
+    state: trackedState,
     reward,
     active,
     players,
@@ -50,14 +61,14 @@ export function handleRedeemBankReward(
   if (shopHandled) return shopHandled;
 
   const makeState = (note: string): GameState => ({
-    ...state,
+    ...trackedState,
     seed,
     players,
     shops,
     hadBranchChoiceThisTurn: false,
     moveHistory: [],
     pendingUndoSnapshot: null,
-    log: appendLog(state, `${active.name} [${reward.pointCost}p] ${reward.label}: ${note}`),
+    log: appendLog(trackedState, `${active.name} [${reward.pointCost}p] ${reward.label}: ${note}`),
   });
 
   const patchPlayer = (id: string, patch: Partial<Player>) => {
@@ -66,9 +77,17 @@ export function handleRedeemBankReward(
 
   const eff = reward.effect;
   switch (eff.kind) {
-    case 'gain_points':
-      patchPlayer(active.id, { points: clampPoints(active.points - reward.pointCost + eff.amount) });
-      return resumeAfterPostAction(makeState(`+${eff.amount} pt.`));
+    case 'gain_points': {
+      const basePts = active.points - reward.pointCost;
+      const nextPts = clampPoints(basePts + eff.amount);
+      const actualGain = Math.max(0, nextPts - basePts);
+      patchPlayer(active.id, { points: nextPts });
+      const res = makeState(`+${eff.amount} pt.`);
+      return resumeAfterPostAction({
+        ...res,
+        matchStats: bumpMatchStats(res, active.id, { pointsFromBank: actualGain }),
+      });
+    }
 
     case 'gain_cash':
       patchPlayer(active.id, { cash: active.cash + eff.amount });
@@ -222,7 +241,11 @@ export function handleRedeemBankReward(
         equippedWalkSound: resolved.style,
         equippedWalkSounds: [resolved.style],
       });
-      return resumeAfterPostAction(makeState(`Equipped ${WALK_SOUND_META[resolved.style].label}!`));
+      const res = makeState(`Equipped ${WALK_SOUND_META[resolved.style].label}!`);
+      return resumeAfterPostAction({
+        ...res,
+        matchStats: bumpMatchStats(res, active.id, { shoesPutOn: 1 }),
+      });
     }
 
     case 'double_own_store_prices':
@@ -231,12 +254,19 @@ export function handleRedeemBankReward(
       });
       return resumeAfterPostAction(makeState(`Store prices 2x for ${eff.rounds} rounds!`));
 
-    case 'claim_victory':
-      return {
+    case 'claim_victory': {
+      const won: GameState = {
         ...makeState('Claimed victory!'),
         phase: 'GAME_OVER',
         winnerId: active.id,
+        winnerIds: [active.id],
+        winReason: 'bank_99_points',
       };
+      return {
+        ...won,
+        assetHistory: recordAssetSnapshot(won, true),
+      };
+    }
 
     default:
       return state;

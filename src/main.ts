@@ -5,6 +5,7 @@ import { HOST_TOKEN } from './net/protocol';
 import { createMultiplayerSession } from './net/session';
 import { createAppModals } from './ui/appModals';
 import type { AppModals } from './ui/appModals';
+import { isDebugUnlocked } from './ui/debugDrawer';
 import { createGameRenderer } from './ui/gameRenderer';
 import type { GameRenderer } from './ui/gameRenderer';
 import { applyHostSeatEdit, applyUnifiedProfileChange } from './ui/hostProfileSync';
@@ -112,6 +113,7 @@ const moveDriver = createMovementDriver({
 function commitMatchState(nextState: GameState, nextSetup: MatchSetupData): void {
   moveDriver.cancel();
   moveDriver.clearAwaitingAck();
+  modals.victoryModal.close();
   renderer.resetVisualState();
   state = nextState;
   currentSetup = nextSetup;
@@ -179,6 +181,19 @@ function dispatch(action: GameAction): void {
   netSession.sendOrApplyAction(action);
 }
 
+function applyDebugState(nextState: GameState): void {
+  if (netSession.getRole() === 'guest' || nextState === state) return;
+  moveDriver.cancel();
+  moveDriver.clearAwaitingAck();
+  renderer.clearHoverState();
+  state = nextState;
+  saveAutoSavedMatch(state);
+  if (netSession.getRole() === 'host') broadcastSuppressed(state);
+  renderer.render();
+  modals.debugDrawer.refresh();
+  modals.syncTopbar();
+}
+
 renderer = createGameRenderer({
   getState: () => state,
   netSession,
@@ -186,6 +201,8 @@ renderer = createGameRenderer({
   soundFx,
   dispatch,
   onOpenSetup: () => modals.openSetup(),
+  onOpenVictory: () => modals.victoryModal.open(),
+  onMatchEnded: () => modals.victoryModal.open(),
   onInspectShop: (shopId) => modals.storeInspectorModal.open(shopId),
   syncTopbar: () => modals.syncTopbar(),
   onRefreshModals: () => modals.refreshAll(),
@@ -206,6 +223,7 @@ modals = createAppModals({
     moveDriver.scheduleTick();
   },
   onStartMatch: startMatchFromSetup,
+  onRematch: () => startMatchFromSetup(currentSetup),
   onSaveMatch: saveCurrentMatch,
   onLoadMatch: loadSavedState,
   onDiscardResume: () => {
@@ -218,6 +236,8 @@ modals = createAppModals({
   },
   onUpdateProfile: applyUnifiedProfile,
   onUpdateHostSeat: updateHostSeat,
+  onApplyDebugState: applyDebugState,
+  onDispatchAction: dispatch,
 });
 
 renderer.shell.append(
@@ -230,7 +250,9 @@ renderer.shell.append(
   modals.lobbyModal.el,
   modals.avatarModal.el,
   modals.howToPlayModal.el,
-  modals.storeInspectorModal.el
+  modals.storeInspectorModal.el,
+  modals.victoryModal.el,
+  modals.debugDrawer.el
 );
 root.appendChild(renderer.shell);
 
@@ -243,6 +265,18 @@ bindKeyboardControls({
   onCloseModal: () => modals.closeTopModal(),
   getHoldWaitMs: moveDriver.getHoldWaitMs,
   isAwaitingAck: moveDriver.isAwaitingAck,
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
+  const tag = (e.target as HTMLElement | null)?.tagName;
+  const inInput = tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA';
+  if (e.key === 'F9' || (e.key === '`' && !inInput)) {
+    if (!isDebugUnlocked() || netSession.getRole() === 'guest') return;
+    e.preventDefault();
+    modals.debugDrawer.toggle();
+    modals.syncTopbar();
+  }
 });
 
 window.addEventListener('beforeunload', (e) => {

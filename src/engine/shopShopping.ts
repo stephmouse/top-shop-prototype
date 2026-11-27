@@ -9,6 +9,7 @@ import {
   getEffectiveItemRetailPrice,
   getTile,
 } from './helpers';
+import { bumpMatchStats, bumpMultiPlayerMatchStats } from './matchStats';
 import { nextRandom, randomInt } from './rng';
 import {
   getShopTotalStock,
@@ -65,6 +66,7 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
     shops: nextShops,
     pendingBankRefundPts: 0,
     deliveredShopIdsThisTurn: deliveredIds,
+    matchStats: bumpMatchStats(state, active.id, { itemsDelivered: totalAdd, deliverySpent: totalCost }),
     log: appendLog(state, `${active.name} delivered ${totalAdd} item(s) to ${formatShopRef(state, shop)} (-$${totalCost}).`),
   };
 
@@ -98,6 +100,7 @@ export function handleSkipDeliver(state: GameState): GameState {
       deliverTargetPlayerId: null,
       deliverPreferredShopId: null,
       deliveredShopIdsThisTurn: [],
+      matchStats: refund > 0 ? bumpMatchStats(state, active.id, { bankRewardsRedeemed: -1, pointsSpent: -refund }) : state.matchStats,
       log: appendLog(state, `${active.name} canceled Bank delivery (+${refund} pts refunded).`),
     };
   }
@@ -166,6 +169,7 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
 
   const ownerId = shop.ownerId;
   const ownerName = state.players.find((p) => p.id === ownerId)?.name ?? 'Owner';
+  const actualPtsGained = Math.max(0, clampPoints(active.points + ptsAwarded) - active.points);
   const buyerDelta = cashbackRefund - grossPaid;
   const ownerDelta = grossPaid - cashbackRefund;
   const players: Player[] = state.players.map((p) => {
@@ -207,6 +211,25 @@ export function handleBuyRivalItems(state: GameState, itemIds: string[]): GameSt
     moveHistory: [],
     hadBranchChoiceThisTurn: false,
     rivalItemsBoughtThisTurn: nextBoughtCount,
+    matchStats: bumpMultiPlayerMatchStats(state, [
+      [
+        active.id,
+        {
+          shoppingSpent: grossPaid,
+          itemsBought: 1,
+          cashbackCount: refundedItemNames.length,
+          cashbackTotal: cashbackRefund,
+          pointsFromShopping: actualPtsGained,
+        },
+      ],
+      [
+        ownerId,
+        {
+          salesRevenue: grossPaid,
+          itemsSold: 1,
+        },
+      ],
+    ]),
     log: appendLog(state, logMsg),
   };
 
@@ -234,7 +257,9 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
   const shop = state.shops[shopId];
   if (!shop || shop.ownerId !== active.id) return state;
 
-  const payout = Math.floor(computeShopAssetValue(shop) * SHOP_RULES.sellLiquidationRate);
+  const assetValue = computeShopAssetValue(shop);
+  const payout = Math.floor(assetValue * SHOP_RULES.sellLiquidationRate);
+  const liquidationLoss = Math.max(0, assetValue - payout);
   const players = state.players.map((p, idx) =>
     idx === state.activePlayerIndex ? { ...p, cash: p.cash + payout } : p
   );
@@ -257,6 +282,10 @@ export function handleSellShopLiquidate(state: GameState, shopId: string): GameS
     ...state,
     players,
     shops: nextShops,
+    matchStats: bumpMatchStats(state, active.id, {
+      shopsLiquidated: 1,
+      liquidationValueLost: liquidationLoss,
+    }),
     log: appendLog(state, `${active.name} liquidated ${formatShopRef(state, shop)} for +$${payout}.`),
   });
 }

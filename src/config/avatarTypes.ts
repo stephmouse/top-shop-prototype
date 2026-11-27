@@ -138,6 +138,8 @@ export const DEFAULT_AVATAR_PRESETS: readonly AvatarSpec[] = [
   createSpeciesPreset('dragon'),
   createSpeciesPreset('wolf'),
   createSpeciesPreset('skunk'),
+  createSpeciesPreset('robin'),
+  createSpeciesPreset('dolphin'),
 ];
 
 export function getDefaultAvatarForSeat(index: number): AvatarSpec {

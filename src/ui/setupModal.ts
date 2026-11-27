@@ -57,7 +57,12 @@ const MODAL_TEMPLATE = `
         <button type="button" data-count="4">4P</button>
         <button type="button" data-count="5">5P</button>
         <button type="button" data-count="6">6P</button>
+        <button type="button" data-count="7">7P</button>
+        <button type="button" data-count="8">8P</button>
       </div>
+    </div>
+    <div class="setup-warning-note" data-role="extended-note" hidden>
+      ⚠️ Extended 7–8P mode (PS1 max was 6) — best on larger stages.
     </div>
     <div class="setup-players-list" data-role="players-list"></div>
   </section>
@@ -129,6 +134,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
   const onlineNote = q<HTMLElement>('online-note');
   const stageSelect = q<HTMLSelectElement>('stage');
   const stageDesc = q<HTMLElement>('stage-desc');
+  const extendedNote = q<HTMLElement>('extended-note');
   const playersList = q<HTMLElement>('players-list');
   const countBtns = Array.from(modal.querySelectorAll<HTMLButtonElement>('[data-count]'));
   const targetInput = q<HTMLInputElement>('target');
@@ -232,6 +238,22 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     );
   }
 
+  function syncExtendedNote(): void {
+    if (draft.players.length <= 6) {
+      extendedNote.hidden = true;
+      return;
+    }
+    const stg = getStageDef(draft.stageId);
+    if (stg.shopCount < 30) {
+      extendedNote.className = 'setup-warning-note';
+      extendedNote.textContent = `⚠️ Extended 7–8P mode (PS1 max was 6) — this stage only has ${stg.shopCount} shops and will be very crowded. Consider a 30+ shop stage.`;
+    } else {
+      extendedNote.className = 'setup-muted';
+      extendedNote.textContent = `Extended 7–8P mode (PS1 max was 6) — this stage has ${stg.shopCount} shops.`;
+    }
+    extendedNote.hidden = false;
+  }
+
   function syncForm(): void {
     const online = options.getOnlineContext?.();
     const isHostOnline = online?.role === 'host' && Boolean(online.roster);
@@ -248,6 +270,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     finishRoundCheckbox.checked = draft.config.finishRoundOnWin;
     monthPopupCheckbox.checked = draft.config.showMonthPopup !== false;
     for (const btn of countBtns) btn.className = Number(btn.dataset.count) === draft.players.length ? 'primary' : '';
+    syncExtendedNote();
     renderSetupPlayersList(playersList, draft, online, {
       onEditAvatar: options.onEditAvatar,
       onPlayersMutated: () => syncForm(),
@@ -284,6 +307,7 @@ export function createSetupModal(options: SetupModalOptions): SetupModalControll
     cashInput.value = String(stg.recommendedStartingCash);
     targetInput.value = String(stg.recommendedTargetAssets);
     stageDesc.textContent = formatStageDesc(draft.stageId);
+    syncExtendedNote();
   });
   for (const btn of countBtns) {
     btn.addEventListener('click', () => resizePlayers(Number(btn.dataset.count)));

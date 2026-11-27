@@ -4,6 +4,7 @@ import { createStageMap, DEFAULT_STAGE_ID, getStageDef } from '../config/maps';
 import type { StageId } from '../config/maps';
 import type { GameAction } from './actions';
 import { handleRedeemBankReward } from './bank';
+import { createInitialMatchStats, syncPeakNetWorth } from './matchStats';
 import { randomInt } from './rng';
 import {
   handlePickEventCard,
@@ -132,6 +133,14 @@ export function createInitialGameState(
     segmentPools,
     lastPurchaseReceipt: null,
     winnerId: null,
+    winReason: null,
+    assetHistory: [
+      {
+        totalMonths: 0,
+        netWorthByPlayer: Object.fromEntries(players.map((p) => [p.id, p.cash])),
+      },
+    ],
+    matchStats: createInitialMatchStats(players),
     log: [`Match started at 1F Bank (${stageDef.name} · Year 1, April).${starterNote}`],
   };
 }
@@ -189,8 +198,9 @@ export function applyAction(state: GameState, action: GameAction): GameState {
   if (state.phase === 'GAME_OVER') return state;
   const next = dispatchAction(state, action);
   if (next === state) return state;
-  if (action.type !== 'BUY_RIVAL_ITEMS' && next.lastPurchaseReceipt) {
-    return { ...next, lastPurchaseReceipt: null };
-  }
-  return next;
+  const finalized =
+    action.type !== 'BUY_RIVAL_ITEMS' && next.lastPurchaseReceipt
+      ? { ...next, lastPurchaseReceipt: null }
+      : next;
+  return syncPeakNetWorth(finalized);
 }

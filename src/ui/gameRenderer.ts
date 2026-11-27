@@ -17,6 +17,7 @@ import { renderRouteOverlay } from './routeOverlay';
 import type { SoundFxController } from './soundFx';
 import { diffGameStates } from './stateDiff';
 import { createTurnCueTracker } from './turnCue';
+import { resolveWinReason } from './victoryModal';
 
 const LANDING_LOCK_MS = 380;
 
@@ -27,6 +28,8 @@ export interface GameRendererOptions {
   soundFx: SoundFxController;
   dispatch: (action: GameAction) => void;
   onOpenSetup: () => void;
+  onOpenVictory?: () => void;
+  onMatchEnded?: () => void;
   onInspectShop?: (shopId: string) => void;
   syncTopbar: () => void;
   onRefreshModals: () => void;
@@ -112,6 +115,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
   function syncHeaderAndHud(): void {
     const state = options.getState();
     options.syncTopbar();
+    hudEl.classList.toggle('is-large-match', state.players.length >= 7);
     renderPlayersHud(hudEl, state, {
       role: netSession.getRole(),
       roster: netSession.getRoster(),
@@ -140,6 +144,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
     lastRenderedReconnecting = reconnecting;
     renderActionPanel(actionBox, state, options.dispatch, {
       onOpenSetup: netSession.getRole() === 'guest' ? undefined : options.onOpenSetup,
+      onOpenVictory: options.onOpenVictory,
       readOnly: !canAct,
       reconnecting,
       remotePencilSpinning: remoteSpin,
@@ -314,6 +319,11 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
       renderMatchLog(logBox, state);
       options.onRefreshSetupModal();
       moveDriver.scheduleTick();
+
+      if (prev && prev.phase !== 'GAME_OVER' && state.phase === 'GAME_OVER') {
+        soundFx.playVictoryFanfare(resolveWinReason(state));
+        options.onMatchEnded?.();
+      }
     },
   };
 }

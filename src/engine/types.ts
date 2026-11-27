@@ -14,7 +14,14 @@ import type {
   TimedEffectWindow,
 } from './effectTypes';
 
+import type {
+  AssetHistorySnapshot,
+  PlayerMatchStats,
+  WinReason,
+} from './matchStats';
+
 export type {
+  AssetHistorySnapshot,
   BankRewardDef,
   BankRewardEffect,
   BankTargetKind,
@@ -25,7 +32,9 @@ export type {
   EventScope,
   EventStorePrompt,
   GlobalSaleState,
+  PlayerMatchStats,
   TimedEffectWindow,
+  WinReason,
 };
 
 export type TileType = 'shop' | 'bank' | 'elevator' | 'escalator';
@@ -120,6 +129,7 @@ export interface Player {
   equippedWalkSound?: WalkSoundStyle;
   equippedWalkSounds?: WalkSoundStyle[];
   isBankrupt: boolean;
+  bankruptTurn?: number;
   isBot: boolean;
 }
 
@@ -174,6 +184,8 @@ export interface MoveSnapshot {
   hadBranchChoice: boolean;
   phase: 'CHOOSE_DIRECTION' | 'STEPPING';
   viaEscalatorTileId?: string;
+  stepCost?: number;
+  rodeEscalator?: boolean;
 }
 
 export interface GameState {
@@ -210,5 +222,9 @@ export interface GameState {
   segmentPools: Record<string, string[]>;
   lastPurchaseReceipt?: PurchaseReceipt | null;
   winnerId: string | null;
+  winnerIds?: string[];
+  winReason?: WinReason | null;
+  assetHistory?: AssetHistorySnapshot[];
+  matchStats?: Record<string, Partial<PlayerMatchStats>>;
   log: string[];
 }

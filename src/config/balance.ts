@@ -50,5 +50,5 @@ export const SHOP_RULES = {
 } as const;
 
 export const MIN_PLAYERS = 2;
-export const MAX_PLAYERS = 6;
-export const PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22'];
+export const MAX_PLAYERS = 8;
+export const PLAYER_COLORS = ['#e74c3c', '#3498db', '#2ecc71', '#f1c40f', '#9b59b6', '#e67e22', '#14b8a6', '#ec4899'];

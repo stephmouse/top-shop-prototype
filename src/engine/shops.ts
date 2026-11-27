@@ -6,6 +6,7 @@ import {
   getActivePlayer,
   getTile,
 } from './helpers';
+import { bumpMatchStats, bumpMultiPlayerMatchStats } from './matchStats';
 import {
   buildStarterStock,
   computeOpenShopCost,
@@ -64,6 +65,7 @@ export function handleOpenShop(state: GameState, storeTypeId: string): GameState
   return resumeAfterPostAction({
     ...interim,
     shops: leveledShops,
+    matchStats: bumpMatchStats(interim, active.id, { storesOpened: 1 }),
     log: appendLog(state, `${active.name} opened ${formatShopRef(interim, updatedNewShop)} L${updatedNewShop.level} (-$${openCost}, stocked).`),
   });
 }
@@ -114,6 +116,10 @@ export function handleBuyoutShop(state: GameState, storeTypeId: string): GameSta
     ...state,
     players,
     shops: nextShops,
+    matchStats: bumpMultiPlayerMatchStats(state, [
+      [active.id, { buyoutsMade: 1 }],
+      [prevOwnerId, { timesBoughtOut: 1 }],
+    ]),
     log: appendLog(
       state,
       `${active.name} bought out ${formatShopRef(state, shop)} as ${newDef.name} L${updatedNewShop.level} (-$${totalCost}, $${rivalPayout} to rival).`

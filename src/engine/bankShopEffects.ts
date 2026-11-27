@@ -14,6 +14,8 @@ import {
   vacateShopSlot,
 } from './bankHelpers';
 import { appendLog, formatShopRef } from './helpers';
+import { bumpMultiPlayerMatchStats } from './matchStats';
+import type { PlayerMatchStats } from './matchStats';
 import { pickRandom } from './rng';
 import {
   buildStarterStock,
@@ -37,12 +39,48 @@ export interface BankEffectContext {
   targetShopId?: string;
 }
 
+function countOwnedItems(shops: Record<string, Shop>, ownerId: string): number {
+  let total = 0;
+  for (const s of Object.values(shops)) {
+    if (s.ownerId === ownerId) total += getShopTotalStock(s);
+  }
+  return total;
+}
+
+function collectTransferDeltas(
+  before: Record<string, Shop>,
+  after: Record<string, Shop>,
+  activeId: string,
+  kind: 'closed' | 'stolen'
+): Array<[string, Partial<PlayerMatchStats>]> {
+  let activeCount = 0;
+  const byRival = new Map<string, number>();
+  for (const [id, oldShop] of Object.entries(before)) {
+    const prevOwner = oldShop.ownerId;
+    if (!prevOwner || prevOwner === activeId) continue;
+    const nextOwner = after[id]?.ownerId ?? null;
+    const matched = kind === 'closed' ? nextOwner === null : nextOwner === activeId;
+    if (!matched) continue;
+    activeCount += 1;
+    byRival.set(prevOwner, (byRival.get(prevOwner) ?? 0) + 1);
+  }
+  if (activeCount === 0) return [];
+  const updates: Array<[string, Partial<PlayerMatchStats>]> = [
+    [activeId, kind === 'closed' ? { rivalShopsClosed: activeCount } : { shopsStolen: activeCount }],
+  ];
+  for (const [rivalId, count] of byRival) {
+    updates.push([rivalId, kind === 'closed' ? { shopsClosedByRivals: count } : { shopsLostToTheft: count }]);
+  }
+  return updates;
+}
+
 function buildResultState(
   ctx: BankEffectContext,
   note: string,
   shops: Record<string, Shop> = ctx.shops,
   seed = ctx.seed,
-  players: Player[] = ctx.players
+  players: Player[] = ctx.players,
+  statUpdates: Array<[string, Partial<PlayerMatchStats>]> = []
 ): GameState {
   return {
     ...ctx.state,
@@ -52,6 +90,9 @@ function buildResultState(
     hadBranchChoiceThisTurn: false,
     moveHistory: [],
     pendingUndoSnapshot: null,
+    ...(statUpdates.length > 0
+      ? { matchStats: bumpMultiPlayerMatchStats(ctx.state, statUpdates) }
+      : {}),
     log: appendLog(
       ctx.state,
       `${ctx.active.name} [${ctx.reward.pointCost}p] ${ctx.reward.label}: ${note}`
@@ -85,8 +126,19 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
     }
 
     case 'auto_stock_own': {
+      const beforeItems = countOwnedItems(ctx.shops, active.id);
       const nextShops = autoStockOwnShops({ ...state, shops: ctx.shops }, active.id, eff.mode);
-      return resumeAfterPostAction(buildResultState(ctx, 'Own stores restocked.', nextShops));
+      const addedItems = Math.max(0, countOwnedItems(nextShops, active.id) - beforeItems);
+      return resumeAfterPostAction(
+        buildResultState(
+          ctx,
+          'Own stores restocked.',
+          nextShops,
+          ctx.seed,
+          ctx.players,
+          addedItems > 0 ? [[active.id, { itemsDelivered: addedItems }]] : []
+        )
+      );
     }
 
     case 'close_rival_store_level': {
@@ -106,7 +158,9 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
           ctx,
           `Closed ${rival.name}'s ${formatShopRef(state, picked.value)} chain (L${eff.level}).`,
           nextShops,
-          seed
+          seed,
+          ctx.players,
+          collectTransferDeltas(ctx.shops, nextShops, active.id, 'closed')
         )
       );
     }
@@ -118,7 +172,16 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
           cur = { ...cur, shops: vacateShopSlot(cur, s.id) };
         }
       }
-      return resumeAfterPostAction(buildResultState(ctx, "Closed rivals' empty stores.", cur.shops));
+      return resumeAfterPostAction(
+        buildResultState(
+          ctx,
+          "Closed rivals' empty stores.",
+          cur.shops,
+          ctx.seed,
+          ctx.players,
+          collectTransferDeltas(ctx.shops, cur.shops, active.id, 'closed')
+        )
+      );
     }
 
     case 'open_free_random_shop': {
@@ -139,7 +202,14 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       const leveled = nextShops[claimed.id]!;
       nextShops[claimed.id] = { ...leveled, stock: buildStarterStock(typeId, leveled.level) };
       return resumeAfterPostAction(
-        buildResultState(ctx, `Opened free ${formatShopRef(state, nextShops[claimed.id]!)}.`, nextShops, seed)
+        buildResultState(
+          ctx,
+          `Opened free ${formatShopRef(state, nextShops[claimed.id]!)}.`,
+          nextShops,
+          seed,
+          ctx.players,
+          [[active.id, { storesOpened: 1 }]]
+        )
       );
     }
 
@@ -175,7 +245,8 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
           `Opened ${formatShopRef(state, nextShops[claimed.id]!)} using ${rival.name}'s cash (-$${openCost}).`,
           nextShops,
           seed,
-          players
+          players,
+          [[active.id, { storesOpened: 1 }]]
         )
       );
     }
@@ -188,7 +259,16 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
             cur = { ...cur, shops: captureRivalShopForPlayer(cur, s.id, active.id) };
           }
         }
-        return resumeAfterPostAction(buildResultState(ctx, "Captured rivals' empty stores.", cur.shops));
+        return resumeAfterPostAction(
+          buildResultState(
+            ctx,
+            "Captured rivals' empty stores.",
+            cur.shops,
+            ctx.seed,
+            ctx.players,
+            collectTransferDeltas(ctx.shops, cur.shops, active.id, 'stolen')
+          )
+        );
       }
       let seed = ctx.seed;
       if (eff.mode === 'one_l4') {
@@ -203,7 +283,14 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
         seed = picked.nextSeed;
         const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
         return resumeAfterPostAction(
-          buildResultState(ctx, `Captured ${rival.name}'s L4 ${formatShopRef(state, picked.value)} chain.`, nextShops, seed)
+          buildResultState(
+            ctx,
+            `Captured ${rival.name}'s L4 ${formatShopRef(state, picked.value)} chain.`,
+            nextShops,
+            seed,
+            ctx.players,
+            collectTransferDeltas(ctx.shops, nextShops, active.id, 'stolen')
+          )
         );
       }
       const rival = resolveTargetRival(state, targetPlayerId, (p) =>
@@ -218,7 +305,14 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
       seed = picked.nextSeed;
       const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
       return resumeAfterPostAction(
-        buildResultState(ctx, `Captured ${rival.name}'s ${formatShopRef(state, picked.value)}.`, nextShops, seed)
+        buildResultState(
+          ctx,
+          `Captured ${rival.name}'s ${formatShopRef(state, picked.value)}.`,
+          nextShops,
+          seed,
+          ctx.players,
+          collectTransferDeltas(ctx.shops, nextShops, active.id, 'stolen')
+        )
       );
     }
 

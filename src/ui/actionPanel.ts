@@ -3,6 +3,7 @@ import type { GameAction } from '../engine/actions';
 import { formatCalendarDate } from '../engine/eventDraw';
 import { canCancelMove, getActivePlayer, getAvailableDirections } from '../engine/helpers';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
+import { getWinnerIds } from '../engine/turn';
 import type { GameState, PencilFace } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
 import { createChoiceButton } from './choiceUi';
@@ -132,6 +133,7 @@ function appendUndoControls(
 
 export interface ActionPanelViewOptions {
   onOpenSetup?: () => void;
+  onOpenVictory?: () => void;
   readOnly?: boolean;
   reconnecting?: boolean;
   remotePencilSpinning?: boolean;
@@ -323,12 +325,23 @@ function renderActionPanelBody(
   }
 
   if (state.phase === 'GAME_OVER') {
-    const winner = state.players.find((p) => p.id === state.winnerId);
+    const winnerIds = getWinnerIds(state);
+    const winners = winnerIds
+      .map((id) => state.players.find((p) => p.id === id)?.name)
+      .filter((n): n is string => Boolean(n));
     const msg = document.createElement('strong');
-    msg.textContent = `Winner: ${winner?.name ?? 'Unknown'}!`;
+    msg.textContent =
+      winners.length > 1
+        ? `Tied Winners: ${winners.join(' & ')}!`
+        : `Winner: ${winners[0] ?? 'Unknown'}!`;
     stack.appendChild(msg);
+    if (viewOptions.onOpenVictory) {
+      stack.appendChild(makeBtn('🏆 View Match Results', viewOptions.onOpenVictory, { primary: true }));
+    }
     if (viewOptions.onOpenSetup) {
-      stack.appendChild(makeBtn('Match Setup / New Match', viewOptions.onOpenSetup, { primary: true }));
+      stack.appendChild(
+        makeBtn('Match Setup / New Match', viewOptions.onOpenSetup, { primary: !viewOptions.onOpenVictory })
+      );
     }
   }
 }

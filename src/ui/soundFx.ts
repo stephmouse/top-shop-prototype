@@ -1,5 +1,6 @@
 import { WALK_SOUND_STYLES } from '../config/walkSounds';
 import type { WalkSoundChoice } from '../config/walkSounds';
+import type { WinReason } from '../engine/types';
 import type { VisualEvent } from './stateDiff';
 import { playWalkEquipSound, playWalkStepSound } from './walkSoundFx';
 
@@ -14,6 +15,7 @@ export interface SoundFxController {
   playCashbackFanfare: () => void;
   playMonthFlip: () => void;
   playTurnPing: () => void;
+  playVictoryFanfare: (reason?: WinReason | null) => void;
   playWalkSoundPreview: (choice: WalkSoundChoice) => void;
 }
 
@@ -192,6 +194,69 @@ export function createSoundFx(): SoundFxController {
     playTurnPing: () => {
       tone(880, 0.12, 'sine', 0, 880, 0.06);
       tone(1175, 0.2, 'triangle', 0.09, 1175, 0.06);
+    },
+    playVictoryFanfare: (reason = 'target_assets') => {
+      if (muted) return;
+
+      if (reason === 'bankruptcy') {
+        // Dramatic knockout brass stabs pivoting into a bold D-major triumph
+        const stabs: Array<[number, number, number]> = [
+          [294, 0, 0.14],
+          [262, 0.13, 0.14],
+          [233, 0.26, 0.2],
+        ];
+        for (const [f, d, dur] of stabs) {
+          tone(f, dur, 'sawtooth', d, f, 0.032);
+          tone(f / 2, dur, 'triangle', d, f / 2, 0.048);
+        }
+        const finish: Array<[number, number, number]> = [
+          [440, 0.5, 0.14],
+          [587, 0.62, 0.14],
+          [740, 0.74, 0.14],
+          [880, 0.86, 0.2],
+          [1175, 1.04, 0.58],
+        ];
+        for (const [f, d, dur] of finish) {
+          tone(f, dur, 'triangle', d, f, 0.062);
+        }
+        tone(147, 0.34, 'sine', 0.5, 147, 0.048);
+        tone(220, 0.26, 'sine', 0.78, 220, 0.048);
+        tone(294, 0.58, 'sine', 1.04, 294, 0.055);
+        return;
+      }
+
+      if (reason === 'bank_99_points') {
+        // Cash-register chime into rapid golden E-major jackpot sparkle chord
+        tone(988, 0.12, 'sine', 0, 988, 0.055);
+        tone(1319, 0.22, 'sine', 0.08, 1319, 0.06);
+        const harp: number[] = [659, 831, 988, 1319, 1661, 1976];
+        harp.forEach((f, idx) => tone(f, 0.28, 'sine', 0.24 + idx * 0.065, f, 0.05));
+        const chord: number[] = [659, 831, 988, 1319];
+        chord.forEach((f) => tone(f, 0.68, 'triangle', 0.72, f, 0.04));
+        tone(330, 0.68, 'sine', 0.72, 330, 0.048);
+        tone(1976, 0.52, 'sine', 0.78, 1976, 0.036);
+        return;
+      }
+
+      // Default ('target_assets'): bright retro C-major arcade victory fanfare
+      const lead: Array<[number, number, number]> = [
+        [523, 0, 0.14],
+        [659, 0.09, 0.14],
+        [784, 0.18, 0.16],
+        [1046, 0.28, 0.24],
+        [784, 0.52, 0.12],
+        [880, 0.63, 0.12],
+        [988, 0.74, 0.14],
+        [1046, 0.88, 0.52],
+      ];
+      for (const [freq, delay, dur] of lead) {
+        tone(freq, dur, 'triangle', delay, freq, 0.062);
+      }
+      tone(262, 0.28, 'sine', 0, 262, 0.045);
+      tone(392, 0.26, 'sine', 0.52, 392, 0.045);
+      tone(523, 0.54, 'sine', 0.88, 523, 0.05);
+      tone(1318, 0.42, 'sine', 0.9, 1568, 0.04);
+      tone(1568, 0.48, 'triangle', 0.96, 1568, 0.036);
     },
     playWalkSoundPreview: (choice) => {
       if (muted) return;

@@ -8,6 +8,7 @@ import {
   getActivePlayer,
   getTile,
 } from './helpers';
+import { bumpMatchStats } from './matchStats';
 import { pickRandom } from './rng';
 import { advanceToNextTurn } from './turn';
 import type { GameState, PencilFace, Player, TurnPhase } from './types';
@@ -42,7 +43,14 @@ export function applyBankPayday(
     skipNextPayday: false,
     ...(isExactLanding ? { horizontalDir: null, verticalDir: null } : {}),
   });
-  return { nextState, note };
+  const trackedState: GameState = {
+    ...nextState,
+    matchStats: bumpMatchStats(nextState, player.id, {
+      paydayTotal: payday,
+      ...(isExactLanding ? { exactBankLandings: 1 } : {}),
+    }),
+  };
+  return { nextState: trackedState, note };
 }
 
 export function handleRollPencil(state: GameState, chosenFace?: PencilFace): GameState {
@@ -82,6 +90,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
       phase: 'EVENT_PICK',
       eventChoices: drawn.ids,
       revealedEventSlot: null,
+      matchStats: bumpMatchStats(state, player.id, { pencilRolls: 1, eventRolls: 1 }),
       log: appendLog(state, `${player.name} rolled E (Event)!`),
     };
   }
@@ -95,6 +104,7 @@ export function handleRollPencil(state: GameState, chosenFace?: PencilFace): Gam
     moveHistory: [],
     pendingUndoSnapshot: null,
     phase: player.horizontalDir === null ? 'CHOOSE_DIRECTION' : 'STEPPING',
+    matchStats: bumpMatchStats(state, player.id, { pencilRolls: 1 }),
     log: appendLog(state, `${player.name} rolled ${face}.`),
   };
 }
@@ -178,6 +188,7 @@ export function handleResolveElevator(state: GameState, ride: boolean): GameStat
   return advanceToNextTurn({
     ...moved,
     seed: nextSeed,
+    matchStats: bumpMatchStats(moved, player.id, { elevatorsRidden: 1 }),
     log: appendLog(
       moved,
       stayedSameFloor

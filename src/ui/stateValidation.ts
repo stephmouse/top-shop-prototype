@@ -3,7 +3,13 @@ import { OFFICIAL_STAGES } from '../config/maps';
 import { isValidWalkSoundStyle, MAX_WALK_SOUND_LAYERS } from '../config/walkSounds';
 import type { GameState } from '../engine/types';
 
-export const SAVE_SCHEMA_VERSION = 2;
+export const SAVE_SCHEMA_VERSION = 3;
+
+const VALID_WIN_REASONS: ReadonlySet<string> = new Set([
+  'target_assets',
+  'bankruptcy',
+  'bank_99_points',
+]);
 
 export interface SavedMatchEnvelope {
   schemaVersion: number;
@@ -63,6 +69,7 @@ function isValidPlayer(p: unknown, tilesObj: Record<string, unknown>): boolean {
   if (!isFiniteNumber(p.cash) || !isFiniteNumber(p.points)) return false;
   if (typeof p.tileId !== 'string' || !Object.prototype.hasOwnProperty.call(tilesObj, p.tileId)) return false;
   if (typeof p.isBankrupt !== 'boolean' || typeof p.isBot !== 'boolean') return false;
+  if (p.bankruptTurn !== undefined && !isFiniteNumber(p.bankruptTurn)) return false;
   if (!isFiniteNumber(p.stepsSincePayday) || !isFiniteNumber(p.bankVisits)) return false;
   if (typeof p.pencilMode !== 'string') return false;
   if (typeof p.reverseDirNextTurn !== 'boolean' || typeof p.unlockDirNextTurn !== 'boolean') return false;
@@ -94,6 +101,13 @@ function isValidShop(s: unknown, tilesObj: Record<string, unknown>): boolean {
   if (!Object.values(s.stock).every((qty) => isFiniteNumber(qty) && qty >= 0)) return false;
   if (!isValidNullableTimedWindow(s.closedWindow)) return false;
   return true;
+}
+
+function isValidAssetSnapshot(entry: unknown): boolean {
+  if (!isRecord(entry) || !isFiniteNumber(entry.totalMonths) || !isRecord(entry.netWorthByPlayer)) {
+    return false;
+  }
+  return Object.values(entry.netWorthByPlayer).every(isFiniteNumber);
 }
 
 /** Validates persisted or imported GameState shape before trusting it in the UI. */
@@ -164,6 +178,32 @@ export function isValidGameState(raw: unknown): raw is GameState {
       !isValidTimedWindow(raw.elevatorLock.timer) ||
       (raw.elevatorLock.onlyPlayerId !== null && typeof raw.elevatorLock.onlyPlayerId !== 'string') ||
       (raw.elevatorLock.blockedPlayerId !== null && typeof raw.elevatorLock.blockedPlayerId !== 'string'))
+  ) {
+    return false;
+  }
+
+  if (
+    raw.winnerIds !== undefined &&
+    (!Array.isArray(raw.winnerIds) || !raw.winnerIds.every((id) => typeof id === 'string'))
+  ) {
+    return false;
+  }
+  if (
+    raw.winReason !== undefined &&
+    raw.winReason !== null &&
+    (typeof raw.winReason !== 'string' || !VALID_WIN_REASONS.has(raw.winReason))
+  ) {
+    return false;
+  }
+  if (
+    raw.assetHistory !== undefined &&
+    (!Array.isArray(raw.assetHistory) || !raw.assetHistory.every(isValidAssetSnapshot))
+  ) {
+    return false;
+  }
+  if (
+    raw.matchStats !== undefined &&
+    (!isRecord(raw.matchStats) || !Object.values(raw.matchStats).every(isRecord))
   ) {
     return false;
   }
