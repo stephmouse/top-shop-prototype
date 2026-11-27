@@ -5,6 +5,8 @@ import { formatTileCoord, getActivePlayer } from '../engine/helpers';
 import type { EndTarget, MoveOption, MovePreview } from '../engine/movePreview';
 import type { GameState, Tile } from '../engine/types';
 import type { BoardShopPickSpec } from './boardPickState';
+import { getContrastInk } from './hudView';
+import { setMoneyText } from './moneyText';
 import {
   computeChainAdjacency,
   computeEscalatorAdjacency,
@@ -13,6 +15,7 @@ import {
   formatTileContent,
   updateShopShelf,
 } from './storeTileView';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export { renderTokensOverlay } from './hudView';
 export { renderPlayersHud } from './playerCardView';
@@ -30,6 +33,7 @@ export interface BoardInteractionOptions {
 interface TileDomRef {
   cell: HTMLElement;
   awningEl: HTMLElement;
+  ownerTagEl: HTMLSpanElement;
   badgeEl: HTMLSpanElement;
   iconEl: HTMLElement;
   nameEl: HTMLElement;
@@ -103,10 +107,13 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
       header.className = 'tile-header';
       const coord = document.createElement('span');
       coord.textContent = formatTileCoord(tile);
+      const ownerTagEl = document.createElement('span');
+      ownerTagEl.className = 'tile-owner-tag';
+      ownerTagEl.hidden = true;
       const badgeEl = document.createElement('span');
       badgeEl.className = 'tile-badge';
       badgeEl.hidden = true;
-      header.append(coord, badgeEl);
+      header.append(coord, ownerTagEl, badgeEl);
 
       const body = document.createElement('div');
       body.className = 'tile-body';
@@ -185,7 +192,7 @@ function mountBoardTiles(container: HTMLElement, state: GameState, cols: number,
         nameEl.style.removeProperty('--marquee-dx');
       });
 
-      cache.tileRefs.set(tile.id, { cell, awningEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl });
+      cache.tileRefs.set(tile.id, { cell, awningEl, ownerTagEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl });
       container.appendChild(cell);
     }
   }
@@ -227,7 +234,7 @@ export function renderBoard(
     const ref = cache.tileRefs.get(tile.id);
     if (!ref) continue;
 
-    const { cell, awningEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl } = ref;
+    const { cell, awningEl, ownerTagEl, badgeEl, iconEl, nameEl, nameTextEl, statsEl, shelfEl, shutterEl } = ref;
     const isActiveTile = activePlayer.tileId === tile.id;
     const nextOpt = cache.nextByTile.get(tile.id);
     const endTarget = cache.endByTile.get(tile.id);
@@ -264,10 +271,24 @@ export function renderBoard(
         ? 'Separate escalator flight — does not connect to the floor above'
         : '';
 
-    const owner = content.shop?.ownerId ? state.players.find((p) => p.id === content.shop?.ownerId) : undefined;
-    cell.style.borderBottom = owner ? `4px solid ${owner.color}` : '';
-    if (owner) cell.style.setProperty?.('--owner-color', owner.color);
-    else cell.style.removeProperty?.('--owner-color');
+    const ownerIdx = content.shop?.ownerId
+      ? state.players.findIndex((p) => p.id === content.shop?.ownerId)
+      : -1;
+    const owner = ownerIdx >= 0 ? state.players[ownerIdx] : undefined;
+    const ownerColor = owner ? getDisplayPlayerColor(ownerIdx, owner.color) : '';
+    cell.style.borderBottom = owner ? `4px solid ${ownerColor}` : '';
+    if (owner) {
+      cell.style.setProperty?.('--owner-color', ownerColor);
+      awningEl.dataset.seatPattern = String(ownerIdx % 8);
+      ownerTagEl.hidden = false;
+      ownerTagEl.textContent = `P${ownerIdx + 1}`;
+      ownerTagEl.style.backgroundColor = ownerColor;
+      ownerTagEl.style.color = getContrastInk(ownerColor);
+    } else {
+      cell.style.removeProperty?.('--owner-color');
+      delete awningEl.dataset.seatPattern;
+      ownerTagEl.hidden = true;
+    }
     if (content.accent) cell.style.setProperty?.('--cat-accent', content.accent);
     else cell.style.removeProperty?.('--cat-accent');
 
@@ -300,7 +321,7 @@ export function renderBoard(
 
     nameTextEl.textContent = content.name;
     nameEl.title = content.name;
-    statsEl.textContent = content.stats ?? '';
+    setMoneyText(statsEl, content.stats ?? '');
     statsEl.title = content.statsTooltip ?? '';
     statsEl.hidden = !content.stats;
     updateShopShelf(shelfEl, content.shop);

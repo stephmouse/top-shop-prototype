@@ -14,6 +14,8 @@ import { getLiquidateConfirmShopId, handleLiquidatePickClick } from './boardPick
 import { createChoiceButton, decorateChoiceButton, makeChoiceHeaderRow } from './choiceUi';
 import { formatShopLocation, renderDeliverPanel } from './deliverPanel';
 import type { DispatchFn } from './deliverPanel';
+import { setMoneyText } from './moneyText';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export { renderDeliverPanel };
 
@@ -148,7 +150,7 @@ export function renderBuyRivalPanel(
         ? `+${receipt.pointsAwarded} pt${receipt.pointsAwarded === 1 ? '' : 's'}`
         : 'No points';
     const cbText = isCb ? ` · CASH BACK! +$${receipt.cashbackRefund}` : '';
-    banner.textContent = `Bought ${receipt.itemName ?? 'item'} (-$${receipt.grossPaid}) · ${ptsText}${cbText}`;
+    setMoneyText(banner, `Bought ${receipt.itemName ?? 'item'} (-$${receipt.grossPaid}) · ${ptsText}${cbText}`);
     list.appendChild(banner);
   }
 
@@ -181,7 +183,10 @@ export function renderBuyRivalPanel(
         : `Optional item ${boughtCount + 1} of ${SHOP_RULES.maxItemsPerVisit}`;
     const buyoutNote = slots.length === 1 ? ' · Clears store for buyout!' : '';
     summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | ${stepText}${buyoutNote}`;
-    buyLabelEl.textContent = chosen ? `Buy ${chosen.item.name} ($${chosen.price}) (Enter)` : 'Buy Selected (Enter)';
+    setMoneyText(
+      buyLabelEl,
+      chosen ? `Buy ${chosen.item.name} ($${chosen.price}) (Enter)` : 'Buy Selected (Enter)'
+    );
     buyBtn.disabled = !chosen;
   };
 
@@ -194,7 +199,7 @@ export function renderBuyRivalPanel(
     nameEl.textContent = slot.item.name;
     const metaEl = document.createElement('span');
     metaEl.className = 'rival-item-meta';
-    metaEl.textContent = `$${slot.price} · CB ${Math.round(slot.item.cashbackChance * 100)}%`;
+    setMoneyText(metaEl, `$${slot.price} · CB ${Math.round(slot.item.cashbackChance * 100)}%`);
     const statusEl = document.createElement('span');
     statusEl.className = 'rival-item-pick';
     btn.append(nameEl, metaEl, statusEl);
@@ -242,7 +247,10 @@ export function renderLiquidatePanel(
     list.innerHTML = '';
 
     const note = document.createElement('div');
-    note.textContent = `Negative cash ($${active.cash})! Sell stores until cash >= $0 (click twice or press 1–9 then Enter):`;
+    setMoneyText(
+      note,
+      `Negative cash ($${active.cash})! Sell stores until cash >= $0 (click twice or press 1–9 then Enter):`
+    );
     list.appendChild(note);
 
     const confirmId = getLiquidateConfirmShopId(state);
@@ -265,7 +273,7 @@ export function renderLiquidatePanel(
           primary: isConfirming,
           confirm: isConfirming,
           nav: true,
-          accentColor: active.color,
+          accentColor: getDisplayPlayerColor(state.players.indexOf(active), active.color),
         }
       );
       list.appendChild(btn);

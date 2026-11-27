@@ -25,6 +25,8 @@ import type { SetupModalController } from './setupModal';
 import type { SoundFxController } from './soundFx';
 import { createStoreInspectorModal } from './storeInspectorModal';
 import type { StoreInspectorController } from './storeInspectorModal';
+import { createThemeModal } from './themeModal';
+import type { ThemeModalController } from './themeModal';
 import { createTopbar } from './topbar';
 import type { TopbarController } from './topbar';
 import { createVictoryModal } from './victoryModal';
@@ -48,6 +50,7 @@ export interface AppModalsOptions {
   onUpdateHostSeat: (seatIdx: number, next: UserProfile) => void;
   onApplyDebugState: (next: GameState) => void;
   onDispatchAction: (action: GameAction) => void;
+  onThemeChange: () => void;
 }
 
 export interface AppModals {
@@ -59,6 +62,7 @@ export interface AppModals {
   howToPlayModal: HowToPlayModalController;
   storeInspectorModal: StoreInspectorController;
   victoryModal: VictoryModalController;
+  themeModal: ThemeModalController;
   debugDrawer: DebugDrawerController;
   openSetup: () => void;
   openLobby: (code?: string, inviteMode?: boolean) => void;
@@ -86,6 +90,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
   });
   const howToPlayModal = createHowToPlayModal();
   const storeInspectorModal = createStoreInspectorModal({ getState: options.getState });
+  const themeModal = createThemeModal({ onThemeChange: options.onThemeChange });
 
   const openSetup = () => {
     homeModal.close();
@@ -167,6 +172,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     onUpdateProfile: options.onUpdateProfile,
     onEditAvatar: (cur, col, onSave, title = 'Customize Your Standee') => avatarModal.open(cur, col, title, onSave),
     onOpenHowToPlay: () => howToPlayModal.open(),
+    onOpenAppearance: () => themeModal.open(),
     onPlayLocal: () => setupModal.open(options.getSetup()),
     onHostOnline: async (customCode) => {
       const code = await netSession.hostRoom(customCode);
@@ -211,6 +217,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       homeModal.open();
     },
     onOpenHowToPlay: () => howToPlayModal.open(),
+    onOpenAppearance: () => themeModal.open(),
     onOpenSetup: openSetup,
     onOpenLobby: () => openLobby(),
     onSaveMatch: options.onSaveMatch,
@@ -257,6 +264,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
     howToPlayModal,
     storeInspectorModal,
     victoryModal,
+    themeModal,
     debugDrawer,
     openSetup,
     openLobby,
@@ -266,6 +274,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       howToPlayModal.isOpen() ||
       storeInspectorModal.isOpen() ||
       victoryModal.isOpen() ||
+      themeModal.isOpen() ||
       homeModal.isOpen() ||
       setupModal.isOpen() ||
       lobbyModal.isOpen(),
@@ -274,6 +283,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       if (howToPlayModal.isOpen()) return howToPlayModal.close();
       if (storeInspectorModal.isOpen()) return storeInspectorModal.close();
       if (victoryModal.isOpen()) return victoryModal.close();
+      if (themeModal.isOpen()) return themeModal.close();
       if (lobbyModal.isOpen() && lobbyModal.isDismissBlocked()) return;
       homeModal.close();
       setupModal.close();
@@ -285,6 +295,7 @@ export function createAppModals(options: AppModalsOptions): AppModals {
       homeModal.refresh();
       storeInspectorModal.refresh();
       victoryModal.refresh();
+      themeModal.refresh();
       debugDrawer.refresh();
     },
   };

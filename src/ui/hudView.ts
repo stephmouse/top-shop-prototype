@@ -4,6 +4,7 @@ import type { GameState } from '../engine/types';
 import { HOST_TOKEN } from '../net/protocol';
 import type { NetRole, RoomRoster } from '../net/protocol';
 import { createAvatarElement, getAvatarRenderKey } from './avatarSvg';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export function getContrastInk(hex: string): '#ffffff' | '#0b0e14' {
   const m = /^#?([0-9a-fA-F]{6})$/.exec(hex.trim());
@@ -135,18 +136,19 @@ export function renderTokensOverlay(
     token.className = `token-floating${idx === state.activePlayerIndex ? ' is-turn' : ''}${crowded ? ' is-crowded' : ''}${moveCls}`;
     token.style.transform = `translate(${x}px, ${y}px)`;
 
-    bodyEl.style.borderColor = player.color;
-    bodyEl.style.backgroundColor = '#141b29';
+    const displayColor = getDisplayPlayerColor(idx, player.color);
+    bodyEl.style.borderColor = displayColor;
+    bodyEl.style.backgroundColor = 'var(--surface-card)';
     const avSpec = resolvePlayerAvatar(state, idx, roster, customAvatars);
-    const avKey = `${getAvatarRenderKey(avSpec, player.color)}|${idx}`;
+    const avKey = `${getAvatarRenderKey(avSpec, displayColor)}|${idx}`;
     if (bodyEl.dataset?.avatarKey !== avKey) {
       if (bodyEl.dataset) bodyEl.dataset.avatarKey = avKey;
       bodyEl.innerHTML = '';
-      bodyEl.appendChild(createAvatarElement(avSpec, player.color));
+      bodyEl.appendChild(createAvatarElement(avSpec, displayColor));
       const pip = document.createElement('span');
       pip.className = 'token-pip';
-      pip.style.backgroundColor = player.color;
-      pip.style.color = getContrastInk(player.color);
+      pip.style.backgroundColor = displayColor;
+      pip.style.color = getContrastInk(displayColor);
       pip.textContent = String(idx + 1);
       bodyEl.appendChild(pip);
     }

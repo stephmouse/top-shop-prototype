@@ -1,6 +1,7 @@
 import { MONTH_NAMES } from '../config/balance';
 import type { GameState } from '../engine/types';
 import { getMonthTheme } from './fxBanners';
+import { setMoneyText } from './moneyText';
 
 const CALENDAR_RE = /^(?:\[T(\d+)\]\s*)?Calendar:\s*(.+?)\.?$/;
 const TURN_RE = /^\[T(\d+)\]\s*(.+)$/;
@@ -85,7 +86,9 @@ export function renderMatchLog(container: HTMLElement, state: GameState): void {
       const body = turnMatch?.[2] ?? raw;
       const cat = classifyLogEntry(body);
       li.className = cat ? `calendar-log-entry ${cat}` : 'calendar-log-entry';
-      li.append(makeSpan('calendar-log-turn', turnTag), makeSpan('calendar-log-text', body));
+      const bodySpan = makeSpan('calendar-log-text', '');
+      setMoneyText(bodySpan, body);
+      li.append(makeSpan('calendar-log-turn', turnTag), bodySpan);
     }
     list.appendChild(li);
   }

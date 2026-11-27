@@ -9,7 +9,9 @@ import { getShopTotalStock } from '../engine/shops';
 import { formatTimedWindowEndpoint, getTimedWindowRoundsLeft } from '../engine/timedEffects';
 import type { GameState } from '../engine/types';
 import { addLobbySection, mk, mkBtn } from './lobbyRoomView';
+import { setMoneyText } from './moneyText';
 import { createStoreIconSvg } from './storeTileView';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export interface StoreInspectorOptions {
   getState: () => GameState;
@@ -65,6 +67,8 @@ export function createStoreInspectorModal(options: StoreInspectorOptions): Store
 
     const def = STORE_TYPES[shop.storeTypeId];
     const owner = state.players.find((p) => p.id === shop.ownerId);
+    const ownerIdx = owner ? state.players.findIndex((p) => p.id === owner.id) : -1;
+    const ownerColor = owner && ownerIdx >= 0 ? getDisplayPlayerColor(ownerIdx, owner.color) : '';
     const vis = getStoreVisual(shop.storeTypeId);
     iconWrap.appendChild(createStoreIconSvg(vis.iconId));
     iconWrap.style.color = vis.accent;
@@ -73,14 +77,16 @@ export function createStoreInspectorModal(options: StoreInspectorOptions): Store
     const metaSec = addLobbySection('Store Overview');
     const pills = mk('div', 'inspector-pills');
     const ownerPill = mk('span', 'player-meta-chip is-stores', `Owner: ${owner?.name ?? '?'}`);
-    if (owner) ownerPill.style.borderColor = owner.color;
+    if (ownerColor) ownerPill.style.borderColor = ownerColor;
     const total = getShopTotalStock(shop);
     const cap = STORE_CAPACITY_BY_LEVEL[shop.level];
+    const assetPill = mk('span', 'player-meta-chip is-buff', '');
+    setMoneyText(assetPill, `Asset Value: $${computeShopAssetValue(shop)}`, 'asset');
     pills.append(
       ownerPill,
       mk('span', 'player-meta-chip is-dir', `Chain Level ${shop.level}`),
       mk('span', 'player-meta-chip is-info', `Stock: ${total}/${cap}`),
-      mk('span', 'player-meta-chip is-buff', `Asset Value: $${computeShopAssetValue(shop)}`)
+      assetPill
     );
     if (shop.closedWindow) {
       const rd = getTimedWindowRoundsLeft(state, shop.closedWindow);
@@ -114,13 +120,17 @@ export function createStoreInspectorModal(options: StoreInspectorOptions): Store
         `inspector-item${qty > 0 ? ' is-stocked' : !unlocked ? ' is-locked' : ' is-empty'}`
       );
       const left = mk('div', 'inspector-item-main');
+      const subSpan = mk('span', 'inspector-item-sub', '');
+      setMoneyText(subSpan, `L${item.tier} · Wholesale $${item.wholesaleCost} · Cash Back ${cbPct}%`);
       left.append(
         mk('span', 'inspector-item-name', item.name),
-        mk('span', 'inspector-item-sub', `L${item.tier} · Wholesale $${item.wholesaleCost} · Cash Back ${cbPct}%`)
+        subSpan
       );
       const right = mk('div', 'inspector-item-right');
+      const priceSpan = mk('span', 'inspector-item-price', '');
+      setMoneyText(priceSpan, `$${effectivePrice}`);
       right.append(
-        mk('span', 'inspector-item-price', `$${effectivePrice}`),
+        priceSpan,
         mk(
           'span',
           'inspector-item-qty',

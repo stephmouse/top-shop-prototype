@@ -11,6 +11,7 @@ import type { RollingStatHandle } from './cashCounter';
 import { resolvePlayerAvatar } from './hudView';
 import type { HudNetInfo } from './hudView';
 import { collectStatusChips, makeMetaChip, resolveNetBadge } from './playerCardMeta';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export const CASHBACK_BEAT2_MS = 820;
 
@@ -178,23 +179,24 @@ function patchCard(
   immediate: boolean,
   netInfo?: HudNetInfo
 ): void {
+  const displayColor = getDisplayPlayerColor(idx, player.color);
   const isActive = idx === state.activePlayerIndex;
   const cls = ['player-card'];
   if (isActive) cls.push('is-active');
   if (player.isBankrupt) cls.push('is-bankrupt');
   ref.card.className = cls.join(' ');
-  ref.card.style.borderColor = isActive ? player.color : '';
+  ref.card.style.borderColor = isActive ? displayColor : '';
 
   const resolvedAvatar = resolvePlayerAvatar(state, idx, netInfo?.roster, netInfo?.customAvatars);
-  const avatarKey = getAvatarRenderKey(resolvedAvatar, player.color);
+  const avatarKey = getAvatarRenderKey(resolvedAvatar, displayColor);
   if (avatarKey !== ref.lastAvatarKey) {
-    ref.hudAv.style.borderColor = player.color;
+    ref.hudAv.style.borderColor = displayColor;
     ref.hudAv.innerHTML = '';
-    ref.hudAv.appendChild(createAvatarElement(resolvedAvatar, player.color));
+    ref.hudAv.appendChild(createAvatarElement(resolvedAvatar, displayColor));
     ref.lastAvatarKey = avatarKey;
   }
 
-  ref.nameSpan.style.color = player.color;
+  ref.nameSpan.style.color = displayColor;
   ref.nameSpan.textContent = `P${idx + 1} ${player.name}`;
 
   const badge = resolveNetBadge(idx, netInfo);
@@ -225,7 +227,7 @@ function patchCard(
   const pct = Math.max(0, Math.round((displayNetWorth / targetAssets) * 100));
   ref.progress.title = `${formatDollars(displayNetWorth)} / ${formatDollars(targetAssets)} target (${pct}%)`;
   ref.progressFill.style.width = `${Math.min(100, pct)}%`;
-  ref.progressFill.style.backgroundColor = player.color;
+  ref.progressFill.style.backgroundColor = displayColor;
 
   const chips = collectStatusChips(state, player, ownedCount);
   const metaKey = chips.map((c) => `${c.variant}:${c.text}:${c.title ?? ''}`).join('|');

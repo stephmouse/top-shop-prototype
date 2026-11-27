@@ -10,6 +10,8 @@ import {
   setDeliverSelectedShopId,
 } from './boardPickState';
 import { createChoiceButton, makeChoiceHeaderRow } from './choiceUi';
+import { setMoneyText } from './moneyText';
+import { getDisplayPlayerColor } from './themeConfig';
 
 export type DispatchFn = (action: GameAction) => void;
 
@@ -96,7 +98,8 @@ function appendStorePickerStep(
     const selectable = isSelectable(s);
     const suffix = delivered ? ' — Delivered' : full ? ' — Full' : ' → Restock';
     const label = `${formatShopLabel(state, s, mode === 'rival_paid', landedShopId)}${suffix}`;
-    const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
+    const ownerIndex = s.ownerId ? state.players.findIndex((p) => p.id === s.ownerId) : -1;
+    const owner = ownerIndex >= 0 ? state.players[ownerIndex] : undefined;
     const assignedKey = selectable && hotkey <= 9 ? hotkey++ : undefined;
     const btn = createChoiceButton(
       label,
@@ -110,7 +113,7 @@ function appendStorePickerStep(
         onHoverShop: selectable ? onHoverShop : undefined,
         nav: true,
         disabled: delivered || full,
-        accentColor: owner?.color,
+        accentColor: owner ? getDisplayPlayerColor(ownerIndex, owner.color) : undefined,
       }
     );
     storesWrap.appendChild(btn);
@@ -191,7 +194,10 @@ function appendRestockStep(
       if (it && q > 0) { addQty += q; cost += isFree ? 0 : it.wholesaleCost * q; }
     }
     const spaceLeft = Math.max(0, maxCap - currentTotal - addQty);
-    summaryEl.textContent = `Adding ${addQty} (Space left: ${spaceLeft}) | Cost: $${cost}${isFree ? ' (FREE)' : ''} | Cash: $${active.cash}`;
+    setMoneyText(
+      summaryEl,
+      `Adding ${addQty} (Space left: ${spaceLeft}) | Cost: $${cost}${isFree ? ' (FREE)' : ''} | Cash: $${active.cash}`
+    );
     submitBtn.disabled = addQty === 0 || currentTotal + addQty > maxCap || cost > active.cash;
     undoBtn.disabled = addedStack.length === 0;
     clearBtn.disabled = addedStack.length === 0;
@@ -210,7 +216,7 @@ function appendRestockStep(
     nameEl.textContent = item.name;
     const metaEl = document.createElement('span');
     metaEl.className = 'restock-item-meta';
-    metaEl.textContent = `$${unitCost} → $${item.retailPrice} · Shelf: ${shop.stock[item.id] ?? 0}`;
+    setMoneyText(metaEl, `$${unitCost} → $${item.retailPrice} · Shelf: ${shop.stock[item.id] ?? 0}`);
     infoEl.append(nameEl, metaEl);
 
     const controlsEl = document.createElement('div');

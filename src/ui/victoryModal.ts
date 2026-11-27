@@ -11,6 +11,9 @@ import { createAvatarElement } from './avatarSvg';
 import { formatDollars } from './cashCounter';
 import { resolvePlayerAvatar } from './hudView';
 import { addLobbySection, mk, mkBtn } from './lobbyRoomView';
+import { setMoneyText } from './moneyText';
+import type { MoneyTextKind } from './moneyText';
+import { getDisplayPlayerColor } from './themeConfig';
 import { computeMatchAwards } from './victoryAwards';
 import { createVictoryChart } from './victoryChart';
 
@@ -90,10 +93,10 @@ function resolveWinHeadline(state: GameState): string {
   return `Target Assets Reached (${formatDollars(state.config.targetAssets)})`;
 }
 
-function makeTextCell(text: string, className = ''): HTMLTableCellElement {
+function makeMoneyCell(text: string, className = '', kind: MoneyTextKind = 'cash'): HTMLTableCellElement {
   const td = document.createElement('td');
   if (className) td.className = className;
-  td.textContent = text;
+  setMoneyText(td, text, kind);
   return td;
 }
 
@@ -126,6 +129,7 @@ function buildStatsTable(
   const tbody = document.createElement('tbody');
   for (const row of rows) {
     const { player, stats } = row;
+    const displayColor = getDisplayPlayerColor(row.playerIdx, player.color);
     const isWinner = winnerIdSet.has(player.id);
     const tr = document.createElement('tr');
     if (isWinner) tr.className = 'is-winner-row';
@@ -134,9 +138,9 @@ function buildStatsTable(
     const playerCell = document.createElement('td');
     playerCell.className = 'victory-player-cell';
     const avWrap = mk('span', 'victory-mini-avatar');
-    avWrap.style.borderColor = player.color;
+    avWrap.style.borderColor = displayColor;
     avWrap.appendChild(
-      createAvatarElement(resolvePlayerAvatar(state, row.playerIdx, online.roster, online.customAvatars), player.color)
+      createAvatarElement(resolvePlayerAvatar(state, row.playerIdx, online.roster, online.customAvatars), displayColor)
     );
     const nameEl = mk('span', 'victory-player-name', player.name);
     playerCell.append(avWrap, nameEl);
@@ -148,30 +152,30 @@ function buildStatsTable(
 
     if (tab === 'overview') {
       tr.append(
-        makeTextCell(`#${row.rank}`, 'victory-rank-cell'),
+        makeMoneyCell(`#${row.rank}`, 'victory-rank-cell'),
         playerCell,
-        makeTextCell(formatDollars(row.netWorth), 'victory-num victory-strong'),
-        makeTextCell(formatDollars(player.cash), 'victory-num'),
-        makeTextCell(formatDollars(row.storeValue), 'victory-num'),
-        makeTextCell(String(row.storeCount), 'victory-num'),
-        makeTextCell(formatDollars(stats.peakNetWorth), 'victory-num'),
-        makeTextCell(formatDollars(stats.salesRevenue), 'victory-num'),
-        makeTextCell(`${stats.cashbackCount} (${formatDollars(stats.cashbackTotal)})`, 'victory-num'),
-        makeTextCell(String(stats.stepsTaken), 'victory-num')
+        makeMoneyCell(formatDollars(row.netWorth), 'victory-num victory-strong', 'asset'),
+        makeMoneyCell(formatDollars(player.cash), 'victory-num'),
+        makeMoneyCell(formatDollars(row.storeValue), 'victory-num', 'asset'),
+        makeMoneyCell(String(row.storeCount), 'victory-num'),
+        makeMoneyCell(formatDollars(stats.peakNetWorth), 'victory-num', 'asset'),
+        makeMoneyCell(formatDollars(stats.salesRevenue), 'victory-num'),
+        makeMoneyCell(`${stats.cashbackCount} (${formatDollars(stats.cashbackTotal)})`, 'victory-num'),
+        makeMoneyCell(String(stats.stepsTaken), 'victory-num')
       );
     } else if (tab === 'retail') {
       tr.append(
         playerCell,
-        makeTextCell(`${formatDollars(stats.salesRevenue)} (${stats.itemsSold})`, 'victory-num'),
-        makeTextCell(`${formatDollars(stats.shoppingSpent)} (${stats.itemsBought})`, 'victory-num'),
-        makeTextCell(`${stats.cashbackCount} (${formatDollars(stats.cashbackTotal)})`, 'victory-num'),
-        makeTextCell(`${stats.itemsDelivered} (${formatDollars(stats.deliverySpent)})`, 'victory-num'),
-        makeTextCell(String(stats.storesOpened), 'victory-num'),
-        makeTextCell(`${stats.buyoutsMade} / ${stats.timesBoughtOut}`, 'victory-num'),
-        makeTextCell(`${stats.rivalShopsClosed} / ${stats.shopsClosedByRivals}`, 'victory-num'),
-        makeTextCell(`${stats.shopsStolen} / ${stats.shopsLostToTheft}`, 'victory-num'),
-        makeTextCell(String(stats.shopsSoldByEvent), 'victory-num'),
-        makeTextCell(
+        makeMoneyCell(`${formatDollars(stats.salesRevenue)} (${stats.itemsSold})`, 'victory-num'),
+        makeMoneyCell(`${formatDollars(stats.shoppingSpent)} (${stats.itemsBought})`, 'victory-num'),
+        makeMoneyCell(`${stats.cashbackCount} (${formatDollars(stats.cashbackTotal)})`, 'victory-num'),
+        makeMoneyCell(`${stats.itemsDelivered} (${formatDollars(stats.deliverySpent)})`, 'victory-num'),
+        makeMoneyCell(String(stats.storesOpened), 'victory-num'),
+        makeMoneyCell(`${stats.buyoutsMade} / ${stats.timesBoughtOut}`, 'victory-num'),
+        makeMoneyCell(`${stats.rivalShopsClosed} / ${stats.shopsClosedByRivals}`, 'victory-num'),
+        makeMoneyCell(`${stats.shopsStolen} / ${stats.shopsLostToTheft}`, 'victory-num'),
+        makeMoneyCell(String(stats.shopsSoldByEvent), 'victory-num'),
+        makeMoneyCell(
           stats.shopsLiquidated > 0
             ? `${stats.shopsLiquidated} (-${formatDollars(stats.liquidationValueLost)})`
             : '0',
@@ -181,16 +185,16 @@ function buildStatsTable(
     } else {
       tr.append(
         playerCell,
-        makeTextCell(String(stats.stepsTaken), 'victory-num'),
-        makeTextCell(String(stats.elevatorsRidden), 'victory-num'),
-        makeTextCell(String(stats.escalatorsRidden), 'victory-num'),
-        makeTextCell(`${stats.pencilRolls} (${stats.eventRolls} E)`, 'victory-num'),
-        makeTextCell(`${player.bankVisits} (${stats.exactBankLandings})`, 'victory-num'),
-        makeTextCell(formatDollars(stats.paydayTotal), 'victory-num'),
-        makeTextCell(`${stats.bankRewardsRedeemed} (${stats.pointsSpent}p)`, 'victory-num'),
-        makeTextCell(`${stats.pointsFromBank} / ${stats.pointsFromShopping} / ${stats.pointsFromEvents}`, 'victory-num'),
-        makeTextCell(`${stats.eventsDrawn} (${stats.eventMisses})`, 'victory-num'),
-        makeTextCell(String(stats.shoesPutOn), 'victory-num')
+        makeMoneyCell(String(stats.stepsTaken), 'victory-num'),
+        makeMoneyCell(String(stats.elevatorsRidden), 'victory-num'),
+        makeMoneyCell(String(stats.escalatorsRidden), 'victory-num'),
+        makeMoneyCell(`${stats.pencilRolls} (${stats.eventRolls} E)`, 'victory-num'),
+        makeMoneyCell(`${player.bankVisits} (${stats.exactBankLandings})`, 'victory-num'),
+        makeMoneyCell(formatDollars(stats.paydayTotal), 'victory-num'),
+        makeMoneyCell(`${stats.bankRewardsRedeemed} (${stats.pointsSpent}p)`, 'victory-num'),
+        makeMoneyCell(`${stats.pointsFromBank} / ${stats.pointsFromShopping} / ${stats.pointsFromEvents}`, 'victory-num'),
+        makeMoneyCell(`${stats.eventsDrawn} (${stats.eventMisses})`, 'victory-num'),
+        makeMoneyCell(String(stats.shoesPutOn), 'victory-num')
       );
     }
 
@@ -234,6 +238,8 @@ export function createVictoryModal(options: VictoryModalOptions): VictoryModalCo
       winners.push(rankedRows[0]?.player ?? state.players[0]!);
     }
     const leadWinner = winners[0]!;
+    const leadIdx = Math.max(0, state.players.findIndex((p) => p.id === leadWinner.id));
+    const leadDisplayColor = getDisplayPlayerColor(leadIdx, leadWinner.color);
     const isTie = winners.length > 1;
     const stageName = getStageDef(state.mapId as StageId).name;
     const dateLabel = formatCalendarDate(state.month, state.year);
@@ -254,7 +260,7 @@ export function createVictoryModal(options: VictoryModalOptions): VictoryModalCo
 
     // Celebration Hero Banner
     const hero = mk('div', 'victory-hero');
-    hero.style.setProperty('--winner-color', leadWinner.color);
+    hero.style.setProperty('--winner-color', leadDisplayColor);
     const confetti = mk('div', 'victory-confetti-layer');
     confetti.setAttribute('aria-hidden', 'true');
     for (let i = 0; i < 18; i++) {
@@ -268,12 +274,13 @@ export function createVictoryModal(options: VictoryModalOptions): VictoryModalCo
 
     const avatarsRow = mk('div', 'victory-avatars-row');
     for (const w of winners) {
-      const avatarFrame = mk('div', `victory-avatar-frame${isTie ? ' is-compact' : ''}`);
-      avatarFrame.style.borderColor = w.color;
-      avatarFrame.appendChild(mk('span', 'victory-crown-badge', '👑'));
       const wIdx = Math.max(0, state.players.findIndex((p) => p.id === w.id));
+      const wColor = getDisplayPlayerColor(wIdx, w.color);
+      const avatarFrame = mk('div', `victory-avatar-frame${isTie ? ' is-compact' : ''}`);
+      avatarFrame.style.borderColor = wColor;
+      avatarFrame.appendChild(mk('span', 'victory-crown-badge', '👑'));
       avatarFrame.appendChild(
-        createAvatarElement(resolvePlayerAvatar(state, wIdx, online.roster, online.customAvatars), w.color)
+        createAvatarElement(resolvePlayerAvatar(state, wIdx, online.roster, online.customAvatars), wColor)
       );
       avatarsRow.appendChild(avatarFrame);
     }
@@ -284,13 +291,15 @@ export function createVictoryModal(options: VictoryModalOptions): VictoryModalCo
       'victory-winner-name',
       isTie ? `${formatWinnerNames(winners)} Tie for 1st!` : `${leadWinner.name} Wins!`
     );
-    if (!isTie) winTitle.style.color = leadWinner.color;
-    const reasonPill = mk('span', 'victory-reason-pill', resolveWinHeadline(state));
+    if (!isTie) winTitle.style.color = leadDisplayColor;
+    const reasonPill = mk('span', 'victory-reason-pill', '');
+    setMoneyText(reasonPill, resolveWinHeadline(state), 'asset');
     const assetsLabel = isTie ? 'Tied Final Assets' : 'Final Assets';
-    const meta = mk(
-      'div',
-      'victory-hero-meta',
-      `${stageName} · ${dateLabel} · ${state.turnNumber} turns · ${assetsLabel}: ${formatDollars(computePlayerNetWorth(state, leadWinner.id))}`
+    const meta = mk('div', 'victory-hero-meta', '');
+    setMoneyText(
+      meta,
+      `${stageName} · ${dateLabel} · ${state.turnNumber} turns · ${assetsLabel}: ${formatDollars(computePlayerNetWorth(state, leadWinner.id))}`,
+      'asset'
     );
     heroInfo.append(winTitle, reasonPill, meta);
     hero.append(confetti, avatarsRow, heroInfo);
@@ -311,18 +320,21 @@ export function createVictoryModal(options: VictoryModalOptions): VictoryModalCo
         const card = mk('div', 'victory-award-card');
         card.title = award.subtitle;
         const top = mk('div', 'victory-award-top');
+        const valSpan = mk('span', 'victory-award-val', '');
+        setMoneyText(valSpan, award.valueLabel);
         top.append(
           mk('span', 'victory-award-icon', award.icon),
           mk('strong', 'victory-award-title', award.title),
-          mk('span', 'victory-award-val', award.valueLabel)
+          valSpan
         );
         const winnersLine = mk('div', 'victory-award-winners');
         award.winnerIds.forEach((id, idx) => {
-          const p = state.players.find((pl) => pl.id === id);
+          const pIdx = state.players.findIndex((pl) => pl.id === id);
+          const p = pIdx >= 0 ? state.players[pIdx] : undefined;
           if (!p) return;
           if (idx > 0) winnersLine.appendChild(mk('span', 'victory-award-sep', ', '));
           const span = mk('span', 'victory-award-player', p.name);
-          span.style.color = p.color;
+          span.style.color = getDisplayPlayerColor(pIdx, p.color);
           winnersLine.appendChild(span);
         });
         card.append(top, winnersLine, mk('div', 'victory-award-sub', award.subtitle));

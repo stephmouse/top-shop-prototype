@@ -24,6 +24,7 @@ export interface TopbarOptions {
   onSelectStage: (stageId: StageId) => void;
   onOpenHome?: () => void;
   onOpenHowToPlay?: () => void;
+  onOpenAppearance?: () => void;
   onOpenSetup: () => void;
   onOpenLobby: () => void;
   onSaveMatch: () => void;
@@ -110,6 +111,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   let saveTimer: number | null = null;
   const homeBtn = options.onOpenHome ? makeButton('Home', options.onOpenHome) : null;
   const howToBtn = options.onOpenHowToPlay ? makeButton('How to Play', options.onOpenHowToPlay) : null;
+  const appearanceBtn = options.onOpenAppearance ? makeButton('🎨 Appearance', options.onOpenAppearance) : null;
   const setupBtn = makeButton('Match Setup', options.onOpenSetup, true);
   const onlineBtn = makeButton('Online Lobby', options.onOpenLobby);
   onlineBtn.className = 'topbar-online-btn';
@@ -127,6 +129,7 @@ export function createTopbar(options: TopbarOptions): TopbarController {
   debugBtn.hidden = true;
   if (homeBtn) controls.appendChild(homeBtn);
   if (howToBtn) controls.appendChild(howToBtn);
+  if (appearanceBtn) controls.appendChild(appearanceBtn);
   controls.append(setupBtn, onlineBtn, saveBtn, loadBtn, debugBtn);
 
   topbar.append(title, controls);

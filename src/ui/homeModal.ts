@@ -15,6 +15,7 @@ export interface HomeModalOptions {
   onUpdateProfile: (next: UserProfile) => void;
   onEditAvatar?: (current: AvatarSpec, color: string, onSave: (next: AvatarSpec) => void, title?: string) => void;
   onOpenHowToPlay?: () => void;
+  onOpenAppearance?: () => void;
   onPlayLocal: () => void;
   onHostOnline: (customCode: string) => Promise<string>;
   onJoinOnline: (roomCode: string, profile: UserProfile) => Promise<void>;
@@ -67,6 +68,7 @@ export function createHomeModal(options: HomeModalOptions): HomeModalController 
     mk('span', 'setup-muted', 'Mall Tycoon · Local Couch & Online P2P')
   );
   const headerBtns = mk('div', 'setup-btn-row');
+  if (options.onOpenAppearance) headerBtns.appendChild(mkBtn('🎨 Appearance', () => options.onOpenAppearance?.()));
   if (options.onOpenHowToPlay) headerBtns.appendChild(mkBtn('How to Play', () => options.onOpenHowToPlay?.()));
   headerBtns.appendChild(mkBtn('View Board', close));
   header.append(titleWrap, headerBtns);

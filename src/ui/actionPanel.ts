@@ -8,7 +8,9 @@ import type { GameState, PencilFace } from '../engine/types';
 import { renderBankPanel } from './bankPanel';
 import { createChoiceButton } from './choiceUi';
 import { renderEventPickPanel, renderEventStorePanel } from './eventPanel';
+import { setMoneyText } from './moneyText';
 import { cancelPencilAnimation, renderPencilPanel } from './pencilView';
+import { getDisplayPlayerColor } from './themeConfig';
 import { renderShoesChoicePanel } from './shoesPanel';
 import {
   renderBuyRivalPanel,
@@ -139,6 +141,7 @@ export interface ActionPanelViewOptions {
   remotePencilSpinning?: boolean;
   remotePencilStopFace?: PencilFace | null;
   onPencilSpinChange?: (spinning: boolean, stopFace?: PencilFace) => void;
+  onPencilTick?: (isSlow: boolean, speedNorm: number) => void;
   onPencilLanded?: (face: PencilFace) => void;
   onUiChange?: () => void;
   onHoverShop?: (shopId: string | null) => void;
@@ -173,15 +176,18 @@ export function renderActionPanel(
       ? ` · Waiting for ${active.name}...`
       : '';
   const headingText = `${dateTag} · Turn ${state.turnNumber} · Goal: $${state.config.targetAssets} — ${active.name} (${state.phase})${saleTag}${waitTag}`;
+  const activeColor = getDisplayPlayerColor(state.activePlayerIndex, active.color);
   if (!viewOptions.readOnly && state.phase !== 'GAME_OVER') {
     const turnBadge = document.createElement('span');
     turnBadge.className = 'turn-cue-badge';
-    turnBadge.style.borderColor = active.color;
-    turnBadge.style.color = active.color;
+    turnBadge.style.borderColor = activeColor;
+    turnBadge.style.color = activeColor;
     turnBadge.textContent = 'YOUR TURN';
-    heading.append(turnBadge, headingText);
+    const textSpan = document.createElement('span');
+    setMoneyText(textSpan, headingText, 'asset');
+    heading.append(turnBadge, textSpan);
   } else {
-    heading.textContent = headingText;
+    setMoneyText(heading, headingText, 'asset');
   }
   container.appendChild(heading);
 
@@ -245,6 +251,7 @@ function renderActionPanelBody(
       remoteSpinning: viewOptions.remotePencilSpinning,
       remoteStopFace: viewOptions.remotePencilStopFace,
       onSpinChange: viewOptions.onPencilSpinChange,
+      onTick: viewOptions.onPencilTick,
       onLanded: viewOptions.onPencilLanded,
     });
     return;

@@ -80,10 +80,15 @@ export function renderRouteOverlay(
   svg.setAttribute('height', String(h));
   svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
 
+  const rootStyle = typeof document !== 'undefined' ? getComputedStyle(document.documentElement) : null;
+  const routeUpColor = rootStyle?.getPropertyValue('--route-up-color').trim() || '#58a6ff';
+  const routeDownColor = rootStyle?.getPropertyValue('--route-down-color').trim() || '#d29922';
+  const routePreviewColor = rootStyle?.getPropertyValue('--tile-land-color').trim() || '#f2cc60';
+
   const defs = document.createElementNS(SVG_NS, 'defs');
-  defs.appendChild(createMarker('arrow-up', 'rgba(88, 166, 255, 0.78)'));
-  defs.appendChild(createMarker('arrow-down', 'rgba(210, 153, 34, 0.78)'));
-  defs.appendChild(createMarker('arrow-preview', '#f2cc60'));
+  defs.appendChild(createMarker('arrow-up', routeUpColor));
+  defs.appendChild(createMarker('arrow-down', routeDownColor));
+  defs.appendChild(createMarker('arrow-preview', routePreviewColor));
   svg.appendChild(defs);
 
   const centers = getTileCenters(boardGrid);
@@ -136,7 +141,8 @@ export function renderRouteOverlay(
 
         svg.appendChild(
           createSvgPath(`M ${p1.x} ${p1.y} Q ${midX} ${midY} ${p2.x} ${p2.y}`, {
-            stroke: dir === 'up' ? 'rgba(88, 166, 255, 0.55)' : 'rgba(210, 153, 34, 0.55)',
+            stroke: dir === 'up' ? routeUpColor : routeDownColor,
+            'stroke-opacity': '0.68',
             'stroke-width': '2.2',
             'marker-end': dir === 'up' ? 'url(#arrow-up)' : 'url(#arrow-down)',
           })
@@ -164,7 +170,7 @@ export function renderRouteOverlay(
     svg.appendChild(
       createSvgPath(cmds.join(' '), {
         class: 'route-preview-path',
-        stroke: '#f2cc60',
+        stroke: routePreviewColor,
         'stroke-width': isFocused ? '3.5' : '2',
         'stroke-linecap': 'round',
         'stroke-linejoin': 'round',

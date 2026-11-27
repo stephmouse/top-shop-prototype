@@ -24,7 +24,10 @@ import {
 import type { MatchSetupData } from './ui/persistence';
 import type { UserProfile } from './ui/playerProfile';
 import { createSoundFx } from './ui/soundFx';
+import { applyThemePreferences, loadThemePreferences } from './ui/themeConfig';
 import { shouldWarnBeforeUnload } from './ui/turnCue';
+
+applyThemePreferences(loadThemePreferences());
 
 const root = document.getElementById('app');
 if (!root) throw new Error('Missing #app root element');
@@ -238,6 +241,10 @@ modals = createAppModals({
   onUpdateHostSeat: updateHostSeat,
   onApplyDebugState: applyDebugState,
   onDispatchAction: dispatch,
+  onThemeChange: () => {
+    renderer.render();
+    modals.refreshAll();
+  },
 });
 
 renderer.shell.append(
@@ -252,6 +259,7 @@ renderer.shell.append(
   modals.howToPlayModal.el,
   modals.storeInspectorModal.el,
   modals.victoryModal.el,
+  modals.themeModal.el,
   modals.debugDrawer.el
 );
 root.appendChild(renderer.shell);

@@ -4,6 +4,8 @@ import { getWinnerIds } from '../engine/turn';
 import type { AssetHistorySnapshot, GameState } from '../engine/types';
 import { formatDollars } from './cashCounter';
 import { mk } from './lobbyRoomView';
+import { setMoneyText } from './moneyText';
+import { getDisplayPlayerColor, getSeatDashArray } from './themeConfig';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const VIEW_W = 640;
@@ -153,20 +155,23 @@ export function createVictoryChart(state: GameState): HTMLElement {
   const lineEls = new Map<string, SVGPolylineElement>();
   const markerDots = new Map<string, SVGCircleElement>();
 
-  for (const player of state.players) {
+  state.players.forEach((player, playerIdx) => {
     const isWinner = winnerIdSet.has(player.id);
+    const displayColor = getDisplayPlayerColor(playerIdx, player.color);
+    const dash = getSeatDashArray(playerIdx);
     const points = snapshots
       .map((snap, i) => `${xAt(i).toFixed(1)},${yAt(snap.netWorthByPlayer[player.id] ?? player.cash).toFixed(1)}`)
       .join(' ');
     const poly = svgEl('polyline', {
       points,
       fill: 'none',
-      stroke: player.color,
+      stroke: displayColor,
+      ...(dash ? { 'stroke-dasharray': dash } : {}),
       class: `victory-chart-line${isWinner ? ' is-winner' : ''}`,
     });
     linesGroup.appendChild(poly);
     lineEls.set(player.id, poly);
-  }
+  });
   svg.appendChild(linesGroup);
 
   const hoverLine = svgEl('line', {
@@ -178,15 +183,16 @@ export function createVictoryChart(state: GameState): HTMLElement {
   });
   svg.appendChild(hoverLine);
 
-  for (const player of state.players) {
+  state.players.forEach((player, playerIdx) => {
+    const displayColor = getDisplayPlayerColor(playerIdx, player.color);
     const dot = svgEl('circle', {
       r: winnerIdSet.has(player.id) ? 4.5 : 3.5,
-      fill: player.color,
+      fill: displayColor,
       class: 'victory-chart-dot',
     });
     svg.appendChild(dot);
     markerDots.set(player.id, dot);
-  }
+  });
 
   const hitRect = svgEl('rect', {
     x: PAD_L,
@@ -220,12 +226,13 @@ export function createVictoryChart(state: GameState): HTMLElement {
     }
   };
 
-  for (const player of state.players) {
+  state.players.forEach((player, playerIdx) => {
+    const displayColor = getDisplayPlayerColor(playerIdx, player.color);
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'victory-legend-chip';
     const swatch = mk('span', 'victory-legend-swatch');
-    swatch.style.backgroundColor = player.color;
+    swatch.style.backgroundColor = displayColor;
     const text = mk(
       'span',
       '',
@@ -246,7 +253,7 @@ export function createVictoryChart(state: GameState): HTMLElement {
     });
     legend.appendChild(btn);
     legendBtns.set(player.id, btn);
-  }
+  });
   wrap.appendChild(legend);
 
   let activeSnapIdx = snapshots.length - 1;
@@ -260,6 +267,7 @@ export function createVictoryChart(state: GameState): HTMLElement {
     readout.innerHTML = '';
     readout.appendChild(mk('strong', 'victory-readout-date', formatSnapLabel(snap, activeSnapIdx)));
 
+    const idxById = new Map(state.players.map((p, i) => [p.id, i]));
     const sortedPlayers = [...state.players].sort(
       (a, b) => (snap.netWorthByPlayer[b.id] ?? 0) - (snap.netWorthByPlayer[a.id] ?? 0)
     );
@@ -270,10 +278,13 @@ export function createVictoryChart(state: GameState): HTMLElement {
         dot.setAttribute('cx', x);
         dot.setAttribute('cy', yAt(val).toFixed(1));
       }
+      const pIdx = idxById.get(player.id) ?? 0;
       const item = mk('span', 'victory-readout-item');
       const pip = mk('span', 'victory-legend-swatch');
-      pip.style.backgroundColor = player.color;
-      item.append(pip, mk('span', '', `${player.name}: ${formatDollars(val)}`));
+      pip.style.backgroundColor = getDisplayPlayerColor(pIdx, player.color);
+      const valText = mk('span', '', '');
+      setMoneyText(valText, `${player.name}: ${formatDollars(val)}`, 'asset');
+      item.append(pip, valText);
       readout.appendChild(item);
     }
   };

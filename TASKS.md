@@ -19,7 +19,7 @@ A consolidated, scannable task list of remaining future/optional work pulled fro
 
 ## 2. Gameplay Features *(from `ROADMAP.md`)*
 
-- [ ] **AI Bot Players** (`src/engine/bot.ts`)
+- [ ] **AI Bot Players -BIG BIG MAYBE-** (`src/engine/bot.ts`)
   - Build a heuristic bot controller that chooses routes toward unowned/own stores, opens and restocks shops, buys/buys out rival stores, and redeems Bank points for solo play or filling empty seats.
 
 ---

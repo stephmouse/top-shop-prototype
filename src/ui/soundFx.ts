@@ -10,6 +10,7 @@ export interface SoundFxController {
   toggleMuted: () => boolean;
   playVisualEvents: (events: VisualEvent[]) => void;
   playCardFlip: () => void;
+  playPencilTick: (isSlow?: boolean, speedNorm?: number) => void;
   playPencilStop: (isEvent?: boolean, fromStateDiff?: boolean) => void;
   playYourTurn: () => void;
   playCashbackFanfare: () => void;
@@ -34,6 +35,7 @@ export function createSoundFx(): SoundFxController {
   let ctx: AudioContext | null = null;
   let chirpAlt = false;
   let lastPencilStopAt = 0;
+  let lastPencilTickAt = 0;
 
   function ensureContext(): AudioContext | null {
     if (muted || typeof window === 'undefined') return null;
@@ -167,6 +169,16 @@ export function createSoundFx(): SoundFxController {
     toggleMuted: () => { setMuted(!muted); return muted; },
     playVisualEvents,
     playCardFlip: () => tone(520, 0.065, 'triangle', 0, 780, 0.05),
+    playPencilTick: (isSlow = false, speedNorm = 1) => {
+      if (muted) return;
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      if (nowMs - lastPencilTickAt < 38) return;
+      lastPencilTickAt = nowMs;
+      const norm = Math.max(0, Math.min(1, speedNorm));
+      const baseFreq = isSlow ? 520 : 540 + norm * 240;
+      tone(baseFreq, 0.022, 'triangle', 0, baseFreq * 0.52, isSlow ? 0.024 : 0.018 + norm * 0.012);
+      tone(210 + norm * 70, 0.018, 'sine', 0, 130, 0.014);
+    },
     playPencilStop: (isEvent = false, fromStateDiff = false) => {
       const nowMs = Date.now();
       if (fromStateDiff && nowMs - lastPencilStopAt < 1100) return;

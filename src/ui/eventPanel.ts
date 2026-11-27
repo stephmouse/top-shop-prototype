@@ -14,6 +14,7 @@ import {
 } from './boardPickState';
 import { createChoiceButton, decorateChoiceButton, makeChoiceHeaderRow } from './choiceUi';
 import { formatLotLabel, groupEmptyLotsBySection } from './lotLabels';
+import { getDisplayPlayerColor } from './themeConfig';
 
 type DispatchFn = (action: GameAction) => void;
 
@@ -173,7 +174,7 @@ export function renderEventStorePanel(
             primary: isConfirming,
             confirm: isConfirming,
             nav: true,
-            accentColor: active.color,
+            accentColor: getDisplayPlayerColor(state.players.indexOf(active), active.color),
           }
         );
         list.appendChild(btn);

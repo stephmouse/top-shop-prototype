@@ -15,6 +15,8 @@ import {
   setBankPendingRewardId,
 } from './boardPickState';
 import { createChoiceButton, makeChoiceHeaderRow } from './choiceUi';
+import { setMoneyText } from './moneyText';
+import { getDisplayPlayerColor } from './themeConfig';
 
 type DispatchFn = (action: GameAction) => void;
 
@@ -54,7 +56,7 @@ function appendTargetStep(
 
   const summary = document.createElement('div');
   const noteText = reward.note ? ` — ${reward.note}` : '';
-  summary.textContent = `[${reward.pointCost} pts] ${reward.label}${noteText}`;
+  setMoneyText(summary, `[${reward.pointCost} pts] ${reward.label}${noteText}`);
   list.appendChild(summary);
 
   const promptEl = document.createElement('div');
@@ -70,20 +72,26 @@ function appendTargetStep(
   if (targets.kind === 'player') {
     targets.players.forEach((p, idx) => {
       const pShops = Object.values(state.shops).filter((s) => s.ownerId === p.id).length;
+      const pIndex = state.players.indexOf(p);
       const btn = createChoiceButton(
         `${p.name} ($${p.cash} | ${p.points}p | ${pShops} stores)`,
         () => {
           setBankPendingRewardId(state, null);
           dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetPlayerId: p.id });
         },
-        { hotkey: idx < 9 ? idx + 1 : undefined, nav: true, accentColor: p.color }
+        {
+          hotkey: idx < 9 ? idx + 1 : undefined,
+          nav: true,
+          accentColor: getDisplayPlayerColor(pIndex >= 0 ? pIndex : idx, p.color),
+        }
       );
       targetsWrap.appendChild(btn);
     });
   } else {
     const confirmId = getBankConfirmShopId(state);
     targets.shops.forEach((s, idx) => {
-      const owner = s.ownerId ? state.players.find((p) => p.id === s.ownerId) : undefined;
+      const ownerIndex = s.ownerId ? state.players.findIndex((p) => p.id === s.ownerId) : -1;
+      const owner = ownerIndex >= 0 ? state.players[ownerIndex] : undefined;
       const isConfirming = confirmId === s.id;
       const shopLabel = formatShopOption(state, s, targets.includeOwner);
       const btn = createChoiceButton(
@@ -99,7 +107,7 @@ function appendTargetStep(
           primary: isConfirming,
           confirm: isConfirming,
           nav: true,
-          accentColor: owner?.color,
+          accentColor: owner ? getDisplayPlayerColor(ownerIndex, owner.color) : undefined,
         }
       );
       targetsWrap.appendChild(btn);

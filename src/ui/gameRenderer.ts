@@ -150,6 +150,7 @@ export function createGameRenderer(options: GameRendererOptions): GameRenderer {
       remotePencilSpinning: remoteSpin,
       remotePencilStopFace: remoteStop,
       onPencilSpinChange: (spinning, stopFace) => netSession.notifyPencilSpin(spinning, stopFace),
+      onPencilTick: (isSlow, speedNorm) => soundFx.playPencilTick(isSlow, speedNorm),
       onPencilLanded: (face) => soundFx.playPencilStop(face === 'E'),
       onUiChange: refreshPickUi,
       onHoverShop: (shopId) => {

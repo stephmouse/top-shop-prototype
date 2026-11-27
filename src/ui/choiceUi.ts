@@ -1,3 +1,5 @@
+import { setMoneyText } from './moneyText';
+
 export interface ChoiceButtonOptions {
   hotkey?: number;
   shopId?: string;
@@ -75,7 +77,7 @@ export function createChoiceButton(
 
   const labelEl = document.createElement('span');
   labelEl.className = 'choice-btn-label';
-  labelEl.textContent = label;
+  setMoneyText(labelEl, label);
   btn.appendChild(labelEl);
 
   decorateChoiceButton(btn, options);
@@ -95,7 +97,7 @@ export function makeChoiceHeaderRow(
   if (!promptText) return { headerRow };
   const promptEl = document.createElement('div');
   promptEl.className = 'choice-prompt';
-  promptEl.textContent = promptText;
+  setMoneyText(promptEl, promptText);
   return { headerRow, promptEl };
 }
 

@@ -152,7 +152,12 @@ export function updateShopShelf(shelfEl: HTMLElement, shop: Shop | undefined): v
   shelfEl.innerHTML = '';
   for (let i = 0; i < cap; i++) {
     const pip = document.createElement('span');
-    pip.className = i < tiers.length ? `shelf-pip tier-${tiers[i]}` : 'shelf-pip is-empty';
+    if (i < tiers.length) {
+      pip.className = `shelf-pip tier-${tiers[i]}`;
+      pip.textContent = String(tiers[i]);
+    } else {
+      pip.className = 'shelf-pip is-empty';
+    }
     shelfEl.appendChild(pip);
   }
 }
