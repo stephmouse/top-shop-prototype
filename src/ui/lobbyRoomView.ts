@@ -6,6 +6,7 @@ import { canClientAct, HOST_TOKEN } from '../net/protocol';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
 import type { MultiplayerSession } from '../net/session';
 import { createAvatarElement } from './avatarSvg';
+import { createColorPickerButton, PLAYER_COLOR_SWATCHES } from './colorPickerButton';
 import { resolvePlayerAvatar } from './hudView';
 import { createProfileEditorRow } from './playerProfile';
 import type { UserProfile } from './playerProfile';
@@ -186,6 +187,7 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
     const left = mk('div', 'lobby-seat-info');
     left.appendChild(mk('span', 'setup-player-tag', `P${idx + 1}`));
 
+    let seatAvatarEl: HTMLElement;
     if (canHostEditSeat && ctx.onEditAvatar) {
       const avBtn = Object.assign(mk('button', 'lobby-seat-avatar'), { type: 'button' as const, title: `Customize P${idx + 1} Standee` });
       avBtn.style.borderColor = player.color;
@@ -200,11 +202,13 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
           });
         }, `Customize P${idx + 1} Standee`);
       });
+      seatAvatarEl = avBtn;
       left.appendChild(avBtn);
     } else {
       const avWrap = mk('span', 'lobby-seat-avatar is-static');
       avWrap.style.borderColor = player.color;
       avWrap.appendChild(createAvatarElement(resolvedAv, player.color));
+      seatAvatarEl = avWrap;
       left.append(avWrap, mk('span', '', player.name));
     }
 
@@ -216,25 +220,35 @@ export function renderActiveRoomView(container: HTMLElement, ctx: ActiveRoomView
         maxLength: 18,
         placeholder: `Player ${idx + 1}`,
       });
-      const colIn = Object.assign(mk('input', 'setup-color-picker'), {
-        type: 'color',
-        value: player.color,
-      });
+      let selectedColor = player.color;
       const commitSeat = () =>
         ctx.onUpdateHostSeat!(idx, {
           name: nameIn.value.trim() || `Player ${idx + 1}`,
-          color: colIn.value,
+          color: selectedColor,
           avatar: resolvedAv,
           ...(player.signatureStore ? { signatureStore: player.signatureStore } : {}),
         });
+      const colBtn = createColorPickerButton({
+        initialColor: player.color,
+        swatches: PLAYER_COLOR_SWATCHES,
+        label: `P${idx + 1} Color`,
+        title: `Pick ${player.name} color`,
+        onChange: (hex) => {
+          selectedColor = hex;
+          seatAvatarEl.style.borderColor = hex;
+        },
+        onCommit: (hex) => {
+          selectedColor = hex;
+          commitSeat();
+        },
+      });
       nameIn.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
           commitSeat();
         }
       });
-      colIn.addEventListener('change', commitSeat);
-      inlineEdit.append(nameIn, colIn, mkBtn('Apply', commitSeat));
+      inlineEdit.append(nameIn, colBtn.el, mkBtn('Apply', commitSeat));
       if (ctx.onEditSignatureStore) {
         const sigBtn = mkBtn(
           player.signatureStore ? `★ ${player.signatureStore.name}` : '★ Store',

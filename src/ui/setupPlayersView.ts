@@ -5,6 +5,7 @@ import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { ConnectedPeerInfo, NetRole, RoomRoster } from '../net/protocol';
 import { HOST_TOKEN } from '../net/protocol';
 import { createAvatarElement } from './avatarSvg';
+import { createColorPickerButton, PLAYER_COLOR_SWATCHES } from './colorPickerButton';
 import type { MatchSetupData } from './persistence';
 
 export interface SetupOnlineContext {
@@ -75,11 +76,10 @@ export function renderSetupPlayersList(
         value: guestPeer.name,
         disabled: true,
       });
-      const colorInput = Object.assign(document.createElement('input'), {
-        className: 'setup-color-picker',
-        type: 'color',
-        value: gColor,
+      const colorBtn = createColorPickerButton({
+        initialColor: gColor,
         disabled: true,
+        title: `Controlled by ${guestPeer.name}`,
       });
       const badge = Object.assign(document.createElement('span'), {
         className: `net-seat-badge ${guestPeer.connected ? 'is-online' : 'is-offline'}`,
@@ -89,7 +89,7 @@ export function renderSetupPlayersList(
         className: 'setup-muted',
         textContent: 'Controlled by connected guest',
       });
-      row.append(tag, badge, avatarBtn, nameInput, colorInput, lockNote);
+      row.append(tag, badge, avatarBtn, nameInput, colorBtn.el, lockNote);
       container.appendChild(row);
       return;
     }
@@ -121,26 +121,31 @@ export function renderSetupPlayersList(
       callbacks.onNameInput?.();
     });
 
-    const colorInput = Object.assign(document.createElement('input'), {
-      className: 'setup-color-picker',
-      type: 'color',
-      value: pColor,
-    });
-    colorInput.addEventListener('input', () => {
-      draft.players[idx] = { ...draft.players[idx]!, color: colorInput.value };
-      avatarBtn.style.borderColor = colorInput.value;
-    });
-    colorInput.addEventListener('change', () => callbacks.onPlayersMutated());
-
     const swatches = Object.assign(document.createElement('div'), { className: 'setup-swatches' });
+    const colorBtn = createColorPickerButton({
+      initialColor: pColor,
+      swatches: PLAYER_COLOR_SWATCHES,
+      label: `P${idx + 1} Color`,
+      title: `Pick Player ${idx + 1} color`,
+      onChange: (hex) => {
+        draft.players[idx] = { ...draft.players[idx]!, color: hex };
+        avatarBtn.style.borderColor = hex;
+        for (const sw of Array.from(swatches.children) as HTMLElement[]) {
+          sw.classList.toggle('is-selected', sw.title.toLowerCase() === hex);
+        }
+      },
+      onCommit: () => callbacks.onPlayersMutated(),
+    });
+
     for (const hex of PLAYER_COLORS) {
       const sw = Object.assign(document.createElement('button'), {
         type: 'button' as const,
         title: hex,
-        className: `color-swatch${colorInput.value.toLowerCase() === hex ? ' is-selected' : ''}`,
+        className: `color-swatch${pColor.toLowerCase() === hex ? ' is-selected' : ''}`,
       });
       sw.style.backgroundColor = hex;
       sw.addEventListener('click', () => {
+        colorBtn.close();
         draft.players[idx] = { ...draft.players[idx]!, color: hex };
         callbacks.onPlayersMutated();
       });
@@ -167,9 +172,9 @@ export function renderSetupPlayersList(
         className: 'net-seat-badge is-host',
         textContent: 'HOST',
       });
-      row.append(tag, hostBadge, avatarBtn, nameInput, colorInput, swatches, sigBtn);
+      row.append(tag, hostBadge, avatarBtn, nameInput, colorBtn.el, swatches, sigBtn);
     } else {
-      row.append(tag, avatarBtn, nameInput, colorInput, swatches, sigBtn);
+      row.append(tag, avatarBtn, nameInput, colorBtn.el, swatches, sigBtn);
     }
     container.appendChild(row);
   });

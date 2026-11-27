@@ -5,6 +5,7 @@ import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { GameState } from '../engine/types';
 import { HEX_COLOR_RE } from '../net/protocol';
 import { createAvatarElement } from './avatarSvg';
+import { createColorPickerButton, PLAYER_COLOR_SWATCHES } from './colorPickerButton';
 
 export const GUEST_PROFILE_STORAGE_KEY = 'top_shop_guest_profile_v1';
 
@@ -134,21 +135,22 @@ export function createProfileEditorRow(opts: ProfileEditorOptions): HTMLElement 
     }
   });
 
-  const colorInput = Object.assign(document.createElement('input'), {
-    className: 'setup-color-picker',
-    type: 'color',
-    value: current.color,
-  });
-  colorInput.addEventListener('input', () => {
-    current = { ...current, color: colorInput.value };
-    avatarBtn.style.borderColor = colorInput.value;
-    opts.onChange(current);
-  });
-  colorInput.addEventListener('change', () => {
-    current = { ...current, color: colorInput.value };
-    paintAvatar();
-    opts.onChange(current);
-    opts.onCommit?.(current);
+  const colorBtn = createColorPickerButton({
+    initialColor: current.color,
+    swatches: PLAYER_COLOR_SWATCHES,
+    label: 'Player Color',
+    title: 'Pick player color',
+    onChange: (hex) => {
+      current = { ...current, color: hex };
+      avatarBtn.style.borderColor = hex;
+      opts.onChange(current);
+    },
+    onCommit: (hex) => {
+      current = { ...current, color: hex };
+      paintAvatar();
+      opts.onChange(current);
+      opts.onCommit?.(current);
+    },
   });
 
   const customBtn = Object.assign(document.createElement('button'), {
@@ -157,7 +159,7 @@ export function createProfileEditorRow(opts: ProfileEditorOptions): HTMLElement 
   });
   customBtn.addEventListener('click', openCustomize);
 
-  row.append(avatarBtn, nameInput, colorInput, customBtn);
+  row.append(avatarBtn, nameInput, colorBtn.el, customBtn);
   if (opts.onEditSignatureStore) {
     const storeBtn = document.createElement('button');
     storeBtn.type = 'button';

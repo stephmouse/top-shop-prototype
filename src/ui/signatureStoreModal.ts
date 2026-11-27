@@ -8,6 +8,7 @@ import {
 } from '../config/signatureStore';
 import type { SignatureStoreSpec } from '../config/signatureStore';
 import type { StoreIconId } from '../config/storeVisuals';
+import { closeActiveColorPickerPopover, createColorPickerButton } from './colorPickerButton';
 import { addLobbySection, mk, mkBtn } from './lobbyRoomView';
 import { createStoreIconSvg } from './storeTileView';
 
@@ -54,6 +55,7 @@ export function createSignatureStoreModal(): SignatureStoreModalController {
   backdrop.appendChild(modal);
 
   const close = () => {
+    closeActiveColorPickerPopover();
     visible = false;
     backdrop.hidden = true;
     saveCb = null;
@@ -113,6 +115,7 @@ export function createSignatureStoreModal(): SignatureStoreModalController {
     });
 
     const randomBtn = mkBtn('🎲 Random Idea', () => {
+      closeActiveColorPickerPopover();
       const idea = SIGNATURE_PRESET_IDEAS[ideaIndex % SIGNATURE_PRESET_IDEAS.length]!;
       ideaIndex++;
       draftName = idea.name;
@@ -141,21 +144,24 @@ export function createSignatureStoreModal(): SignatureStoreModalController {
 
     const accentRow = mk('div', 'signature-accent-row');
     accentRow.appendChild(mk('span', 'setup-field-label', 'Emblem Accent:'));
-    const colorInput = Object.assign(mk('input', 'setup-color-picker'), {
-      type: 'color',
-      value: draftAccent,
-    });
     const swatchesWrap = mk('div', 'setup-swatches');
+    let colorBtn!: ReturnType<typeof createColorPickerButton>;
     const syncSwatches = () => {
-      colorInput.value = draftAccent;
+      colorBtn.setColor(draftAccent);
       for (const btn of Array.from(swatchesWrap.children) as HTMLElement[]) {
         btn.classList.toggle('is-selected', btn.title.toLowerCase() === draftAccent.toLowerCase());
       }
       syncPreview();
     };
-    colorInput.addEventListener('input', () => {
-      draftAccent = colorInput.value;
-      syncSwatches();
+    colorBtn = createColorPickerButton({
+      initialColor: draftAccent,
+      swatches: ACCENT_SWATCHES,
+      label: 'Emblem Accent',
+      title: 'Pick emblem accent color',
+      onChange: (hex) => {
+        draftAccent = hex;
+        syncSwatches();
+      },
     });
     for (const hex of ACCENT_SWATCHES) {
       const sw = Object.assign(mk('button', 'color-swatch'), { type: 'button' as const, title: hex });
@@ -166,7 +172,7 @@ export function createSignatureStoreModal(): SignatureStoreModalController {
       });
       swatchesWrap.appendChild(sw);
     }
-    accentRow.append(colorInput, swatchesWrap);
+    accentRow.append(colorBtn.el, swatchesWrap);
     identitySec.append(topRow, iconGrid, accentRow);
 
     // 6 Item Names

@@ -1661,14 +1661,36 @@ html[data-cash-colors="false"] .player-stat.is-cash .player-stat-value {
   color: var(--muted);
 }
 
-.setup-color-picker {
+.color-picker-trigger {
   width: 34px;
   height: 30px;
-  padding: 2px;
+  padding: 3px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface-deep);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.color-picker-trigger:hover:not(:disabled),
+.color-picker-trigger[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+
+.color-picker-trigger.is-disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.color-picker-trigger-chip {
+  width: 100%;
+  height: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  display: block;
 }
 
 .setup-swatches {
@@ -2394,6 +2416,32 @@ html[data-cash-colors="false"] .player-stat.is-cash .player-stat-value {
 .color-picker-swatch.is-active {
   border-color: #ffffff;
   box-shadow: 0 0 0 2px #58a6ff;
+}
+
+.color-picker-popover {
+  position: fixed;
+  z-index: 120;
+  width: 276px;
+  padding: 8px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  display: grid;
+  gap: 8px;
+}
+
+.color-picker-popover .color-picker-panel {
+  padding: 8px;
+}
+
+.color-picker-popover .color-picker-swatches {
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.color-picker-popover-footer {
+  display: flex;
+  justify-content: flex-end;
 }
 
 @media (max-width: 580px) {
