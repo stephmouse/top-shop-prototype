@@ -350,10 +350,92 @@ describe('bank rewards, paydays, events, rubber-banding, and calendar', () => {
     const closed = applyAction(bankState, {
       type: 'REDEEM_BANK_REWARD',
       rewardId: 'bank_09_close_rival_l1',
-      targetShopId: 'shop_1_2',
+      targetPlayerId: 'p_2',
     });
-    expect(closed.log[0]).toContain('Closed Bakery (1F:3) chain (L1).');
+    expect(closed.log[0]).toContain("Closed Bob's Bakery (1F:3) chain (L1).");
     expect(closed.log[0]).not.toContain('shop_1_2');
+  });
+
+  it('matches PS1 SLUS_013.33 targeting and randomization across Bank rewards (Item 40)', () => {
+    const base = createInitialGameState(
+      [{ name: 'Alice' }, { name: 'Bob' }, { name: 'Carol' }],
+      { startingCash: 3000 },
+      77,
+      'stage_0'
+    );
+    const allShopIds = Object.keys(base.shops);
+    const stockedItem = (typeId: string) => STORE_TYPES[typeId]!.items[0]!.id;
+
+    // Build rival stores for Bob (p_2) and Carol (p_3), plus 2 own stores for Alice (p_1)
+    const shops = { ...base.shops };
+    const ownSegShop = Object.values(shops).find((s) => s.segmentId === Object.values(shops)[0]!.segmentId && s.id !== Object.values(shops)[0]!.id);
+    const bob1 = shops.shop_1_1!;
+    const bob2 = shops.shop_1_2!;
+    const carol1 = Object.values(shops).find((s) => s.segmentId !== bob1.segmentId && s.segmentId !== (ownSegShop?.segmentId ?? ''))!;
+    const carol2 = Object.values(shops).find((s) => s.segmentId !== bob1.segmentId && s.segmentId !== carol1.segmentId)!;
+    const carol3 = Object.values(shops).find((s) => ![bob1.segmentId, carol1.segmentId, carol2.segmentId].includes(s.segmentId))!;
+    const alice1 = allShopIds
+      .map((id) => shops[id]!)
+      .find((s) => ![bob1.segmentId, carol1.segmentId, carol2.segmentId, carol3.segmentId].includes(s.segmentId))!;
+
+    shops[bob1.id] = { ...bob1, ownerId: 'p_2', storeTypeId: 'pancake_house', level: 1, stock: { [stockedItem('pancake_house')]: 1 } };
+    shops[bob2.id] = { ...bob2, ownerId: 'p_2', storeTypeId: 'bakery', level: 1, stock: {} };
+    shops[carol1.id] = { ...carol1, ownerId: 'p_3', storeTypeId: 'flower_heart', level: 1, stock: { [stockedItem('flower_heart')]: 1 } };
+    shops[carol2.id] = { ...carol2, ownerId: 'p_3', storeTypeId: 'candy_store', level: 1, stock: { [stockedItem('candy_store')]: 1 } };
+    shops[carol3.id] = { ...carol3, ownerId: 'p_3', storeTypeId: 'kiss', level: 1, stock: { [stockedItem('kiss')]: 1 } };
+    shops[alice1.id] = { ...alice1, ownerId: 'p_1', storeTypeId: 'burger_shop', level: 1, stock: { [stockedItem('burger_shop')]: 1 } };
+
+    const bankBase: GameState = {
+      ...base,
+      phase: 'BANK_MENU',
+      players: base.players.map((p, i) => (i === 0 ? { ...p, points: 90 } : p)),
+      shops,
+    };
+
+    // bank_07_deliver_rival targets a rival player and restricts SHOP_DELIVER to that rival's stores
+    const r07 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_07_deliver_rival', targetPlayerId: 'p_3' });
+    expect(r07.phase).toBe('SHOP_DELIVER');
+    expect(r07.deliverTargetPlayerId).toBe('p_3');
+    const rejectedOtherRival = applyAction(r07, {
+      type: 'DELIVER_ITEMS',
+      shopId: bob1.id,
+      order: { [stockedItem('pancake_house')]: 1 },
+    });
+    expect(rejectedOtherRival).toBe(r07);
+
+    // bank_15_capture_empty targets a rival player and captures 1 random empty store of theirs
+    const r15 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_15_capture_empty', targetPlayerId: 'p_2' });
+    expect(r15.shops[bob2.id]!.ownerId).toBe('p_1');
+
+    // bank_18_empty_rival_1 targets a rival player and empties 1 random stocked store of theirs
+    const r18 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_18_empty_rival_1', targetPlayerId: 'p_2' });
+    const totalStock = (id: string) => Object.values(r18.shops[id]!.stock).reduce((a, b) => a + b, 0);
+    expect(totalStock(bob1.id)).toBe(0);
+    expect(totalStock(carol1.id)).toBe(1);
+
+    // bank_33_empty_rival_4 has no target pick and randomly empties up to 4 stocked rival stores across all rivals
+    const r33Def = BANK_REWARDS.find((r) => r.id === 'bank_33_empty_rival_4')!;
+    expect(r33Def.target).toBe('none');
+    const r33 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_33_empty_rival_4' });
+    const stockedRivalIds = [bob1.id, carol1.id, carol2.id, carol3.id];
+    const emptiedCount = stockedRivalIds.filter(
+      (id) => Object.values(r33.shops[id]!.stock).reduce((a, b) => a + b, 0) === 0
+    ).length;
+    expect(emptiedCount).toBe(4);
+
+    // bank_26_open_with_rival_cash immediately opens 1 random empty slot in an unowned segment using rival's cash
+    const r26 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_26_open_with_rival_cash', targetPlayerId: 'p_2' });
+    expect(r26.phase).toBe('ROLL_PENCIL');
+    expect(r26.players[1]!.cash).toBeLessThan(3000);
+    const aliceCountAfterR26 = Object.values(r26.shops).filter((s) => s.ownerId === 'p_1').length;
+    expect(aliceCountAfterR26).toBe(2);
+
+    // bank_48_upgrade_own_l4 has no target pick and upgrades 1 random eligible own store segment
+    const r48Def = BANK_REWARDS.find((r) => r.id === 'bank_48_upgrade_own_l4')!;
+    expect(r48Def.target).toBe('none');
+    const r48 = applyAction(bankBase, { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_48_upgrade_own_l4' });
+    const aliceUpgradedSeg = Object.values(r48.shops).filter((s) => s.ownerId === 'p_1' && s.segmentId === alice1.segmentId);
+    expect(aliceUpgradedSeg.every((s) => s.level >= 2)).toBe(true);
   });
 
   it('restores Chrip-Chrip Bank label and supports Novelty Shoes stacking, swapping, keeping, and removal (Items 12 & 25)', () => {

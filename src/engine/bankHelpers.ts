@@ -45,14 +45,47 @@ export function canCaptureShop(state: GameState, playerId: string, shop: Shop): 
   return getAllowedStoreTypeIds(state, playerId, shop.segmentId, shop.id).length > 0;
 }
 
-export function canPlayerOpenWithCash(state: GameState, ownerId: string, cashBudget: number): boolean {
-  return Object.values(state.shops).some(
+/** Returns empty lots eligible to open for `ownerId` within `cashBudget`. */
+export function getOpenableEmptyLots(
+  state: GameState,
+  ownerId: string,
+  cashBudget: number,
+  allowOwnedSegment = false
+): Shop[] {
+  return Object.values(state.shops).filter(
     (s) =>
       s.ownerId === null &&
+      (allowOwnedSegment ||
+        !Object.values(state.shops).some(
+          (own) => own.ownerId === ownerId && own.segmentId === s.segmentId
+        )) &&
       getAllowedStoreTypeIds(state, ownerId, s.segmentId).some(
         (id) => computeOpenShopCost(state, s.id, ownerId, id).openCost <= cashBudget
       )
   );
+}
+
+export function canPlayerOpenWithCash(
+  state: GameState,
+  ownerId: string,
+  cashBudget: number,
+  allowOwnedSegment = false
+): boolean {
+  return getOpenableEmptyLots(state, ownerId, cashBudget, allowOwnedSegment).length > 0;
+}
+
+/** Deduplicates connected shop chains so random selection weights each chain equally. */
+export function getDistinctChains(state: GameState, shops: Shop[]): Shop[] {
+  const seenRoots = new Set<string>();
+  const distinct: Shop[] = [];
+  for (const s of shops) {
+    const chain = getConnectedChainShops(state, s.id);
+    const rootId = chain[0]?.id ?? s.id;
+    if (seenRoots.has(rootId)) continue;
+    seenRoots.add(rootId);
+    distinct.push(chain[0] ?? s);
+  }
+  return distinct;
 }
 
 function makeVacantShop(shop: Shop): Shop {

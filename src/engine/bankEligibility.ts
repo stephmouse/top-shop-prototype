@@ -18,7 +18,7 @@ export type BankRewardTargetList =
  * or `{ kind: 'none' }` for immediate rewards and delivery rewards (`SHOP_DELIVER` has its own picker).
  */
 export function getBankRewardTargets(state: GameState, reward: BankRewardDef): BankRewardTargetList {
-  if (reward.target === 'none' || reward.effect.kind === 'open_delivery') {
+  if (reward.target === 'none') {
     return { kind: 'none' };
   }
 
@@ -27,10 +27,23 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
   const rivalShops = Object.values(state.shops).filter(
     (s) => s.ownerId !== null && s.ownerId !== active.id
   );
-  const ownShops = Object.values(state.shops).filter((s) => s.ownerId === active.id);
   const eff = reward.effect;
 
   switch (eff.kind) {
+    case 'open_delivery':
+      if (eff.mode !== 'rival_paid') return { kind: 'none' };
+      return {
+        kind: 'player',
+        players: active.blockDeliveryWindow
+          ? []
+          : rivals.filter((p) =>
+              rivalShops.some(
+                (s) =>
+                  s.ownerId === p.id && getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level]
+              )
+            ),
+        prompt: 'Pick Rival Whose Store to Deliver To:',
+      };
     case 'block_rival_delivery':
     case 'block_rival_new_stores':
     case 'swap_position_with_rival':
@@ -54,11 +67,10 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
     case 'open_shop_rival_cash':
       return {
         kind: 'player',
-        players:
-          !active.blockNewStoreWindow
-            ? rivals.filter((p) => canPlayerOpenWithCash(state, active.id, p.cash))
-            : [],
-        prompt: "Pick Rival Whose Cash You'll Use:",
+        players: !active.blockNewStoreWindow
+          ? rivals.filter((p) => canPlayerOpenWithCash(state, active.id, p.cash, false))
+          : [],
+        prompt: "Pick Rival Whose Cash Opens 1 Random Store:",
       };
     case 'set_rival_cash_fraction':
       return eff.scope === 'one'
@@ -90,45 +102,41 @@ export function getBankRewardTargets(state: GameState, reward: BankRewardDef): B
       };
     case 'close_rival_store_level':
       return {
-        kind: 'shop',
-        shops: rivalShops.filter((s) => s.level === eff.level),
-        includeOwner: true,
-        prompt: `Pick Rival L${eff.level} Store to Close:`,
+        kind: 'player',
+        players: rivals.filter((p) =>
+          rivalShops.some((s) => s.ownerId === p.id && s.level === eff.level)
+        ),
+        prompt: `Pick Rival to Close 1 Random L${eff.level} Store:`,
       };
     case 'capture_rival_store':
       if (eff.mode === 'all_empty') return { kind: 'none' };
       if (eff.mode === 'one_l4') {
         return {
-          kind: 'shop',
-          shops: rivalShops.filter((s) => s.level === 4),
-          includeOwner: true,
-          prompt: 'Pick Rival L4 Store to Take Over:',
+          kind: 'player',
+          players: rivals.filter((p) => rivalShops.some((s) => s.ownerId === p.id && s.level === 4)),
+          prompt: 'Pick Rival to Take 1 Random L4 Store:',
         };
       }
       return {
-        kind: 'shop',
-        shops: rivalShops.filter(
-          (s) => getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
+        kind: 'player',
+        players: rivals.filter((p) =>
+          rivalShops.some(
+            (s) =>
+              s.ownerId === p.id &&
+              getShopTotalStock(s) === 0 &&
+              canCaptureShop(state, active.id, s)
+          )
         ),
-        includeOwner: true,
-        prompt: 'Pick Empty Rival Store to Take Over:',
+        prompt: 'Pick Rival to Take 1 Random Empty Store:',
       };
     case 'empty_rival_stores':
+      if (eff.count > 1) return { kind: 'none' };
       return {
-        kind: 'shop',
-        shops: rivalShops.filter((s) => getShopTotalStock(s) > 0),
-        includeOwner: true,
-        prompt:
-          eff.count > 1
-            ? `Pick First Rival Store to Empty (+ up to ${eff.count - 1} random others):`
-            : 'Pick Rival Store to Empty:',
-      };
-    case 'upgrade_own_store_l4':
-      return {
-        kind: 'shop',
-        shops: ownShops.filter((s) => s.level < getSegmentSlotCount(state, s.segmentId)),
-        includeOwner: false,
-        prompt: 'Pick Your Store to Upgrade to L4:',
+        kind: 'player',
+        players: rivals.filter((p) =>
+          rivalShops.some((s) => s.ownerId === p.id && getShopTotalStock(s) > 0)
+        ),
+        prompt: 'Pick Rival to Empty 1 Random Store:',
       };
     default:
       return { kind: 'none' };
@@ -177,20 +185,19 @@ export function canRedeemBankReward(
       return true;
     case 'open_delivery':
       if (active.blockDeliveryWindow) return false;
-      if (eff.mode === 'rival_paid') {
-        return Boolean(
-          resolveTargetRivalShop(state, targetShopId, (s) => getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level])
-        );
-      }
       return ownShops.some((s) => getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level]);
     case 'auto_stock_own':
       return eff.mode === 'cheap_fill'
         ? ownShops.some((s) => getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level])
         : ownShops.length > 0;
+    case 'empty_rival_stores':
+      return Boolean(resolveTargetRivalShop(state, undefined, (s) => getShopTotalStock(s) > 0));
+    case 'upgrade_own_store_l4':
+      return ownShops.some((s) => s.level < getSegmentSlotCount(state, s.segmentId));
     case 'close_all_empty_rival_stores':
       return Boolean(resolveTargetRivalShop(state, undefined, (s) => getShopTotalStock(s) === 0));
     case 'open_free_random_shop':
-      return !active.blockNewStoreWindow && canPlayerOpenWithCash(state, active.id, Infinity);
+      return !active.blockNewStoreWindow && canPlayerOpenWithCash(state, active.id, Infinity, false);
     case 'capture_rival_store':
       return Boolean(
         resolveTargetRivalShop(

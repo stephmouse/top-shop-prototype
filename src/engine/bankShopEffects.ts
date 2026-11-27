@@ -1,13 +1,14 @@
 import { STORE_TYPES } from '../config/balance';
+import { STORE_CAPACITY_BY_LEVEL } from '../config/balance';
 import {
   autoStockOwnShops,
   canCaptureShop,
   canPlayerOpenWithCash,
   captureRivalChainForPlayer,
   captureRivalShopForPlayer,
-  resolveTargetOwnShop,
+  getDistinctChains,
+  getOpenableEmptyLots,
   resolveTargetRival,
-  resolveTargetRivalShop,
   upgradeOwnSegmentToChain,
   vacateShopChain,
   vacateShopSlot,
@@ -16,6 +17,7 @@ import { appendLog, formatShopRef } from './helpers';
 import { pickRandom } from './rng';
 import {
   buildStarterStock,
+  computeOpenShopCost,
   getAllowedStoreTypeIds,
   getSegmentSlotCount,
   getShopTotalStock,
@@ -39,12 +41,13 @@ function buildResultState(
   ctx: BankEffectContext,
   note: string,
   shops: Record<string, Shop> = ctx.shops,
-  seed = ctx.seed
+  seed = ctx.seed,
+  players: Player[] = ctx.players
 ): GameState {
   return {
     ...ctx.state,
     seed,
-    players: ctx.players,
+    players,
     shops,
     hadBranchChoiceThisTurn: false,
     moveHistory: [],
@@ -61,15 +64,25 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
   const eff = reward.effect;
 
   switch (eff.kind) {
-    case 'open_delivery':
+    case 'open_delivery': {
+      const rival =
+        eff.mode === 'rival_paid'
+          ? resolveTargetRival(state, targetPlayerId, (p) =>
+              Object.values(ctx.shops).some(
+                (s) => s.ownerId === p.id && getShopTotalStock(s) < STORE_CAPACITY_BY_LEVEL[s.level]
+              )
+            )
+          : undefined;
       return {
-        ...buildResultState(ctx, 'Select items to deliver.'),
+        ...buildResultState(ctx, rival ? `Select items to deliver to ${rival.name}.` : 'Select items to deliver.'),
         phase: 'SHOP_DELIVER',
         pendingBankRefundPts: reward.pointCost,
         deliverMode: eff.mode,
+        deliverTargetPlayerId: rival?.id ?? null,
         deliverPreferredShopId: targetShopId ?? null,
         deliveredShopIdsThisTurn: [],
       };
+    }
 
     case 'auto_stock_own': {
       const nextShops = autoStockOwnShops({ ...state, shops: ctx.shops }, active.id, eff.mode);
@@ -77,10 +90,24 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
     }
 
     case 'close_rival_store_level': {
-      const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === eff.level)!;
-      const nextShops = vacateShopChain({ ...state, shops: ctx.shops }, target.id);
+      let seed = ctx.seed;
+      const rival = resolveTargetRival(state, targetPlayerId, (p) =>
+        Object.values(ctx.shops).some((s) => s.ownerId === p.id && s.level === eff.level)
+      )!;
+      const rivalMatches = Object.values(ctx.shops).filter(
+        (s) => s.ownerId === rival.id && s.level === eff.level
+      );
+      const chains = getDistinctChains(state, rivalMatches);
+      const picked = pickRandom(seed, chains);
+      seed = picked.nextSeed;
+      const nextShops = vacateShopChain({ ...state, shops: ctx.shops }, picked.value.id);
       return resumeAfterPostAction(
-        buildResultState(ctx, `Closed ${formatShopRef(state, target)} chain (L${eff.level}).`, nextShops)
+        buildResultState(
+          ctx,
+          `Closed ${rival.name}'s ${formatShopRef(state, picked.value)} chain (L${eff.level}).`,
+          nextShops,
+          seed
+        )
       );
     }
 
@@ -96,9 +123,7 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
 
     case 'open_free_random_shop': {
       let seed = ctx.seed;
-      const candidates = Object.values(ctx.shops).filter(
-        (s) => s.ownerId === null && getAllowedStoreTypeIds(state, active.id, s.segmentId).length > 0
-      );
+      const candidates = getOpenableEmptyLots(state, active.id, Infinity, false);
       const pickedSlot = pickRandom(seed, candidates);
       seed = pickedSlot.nextSeed;
       const allowed = getAllowedStoreTypeIds(state, active.id, pickedSlot.value.segmentId);
@@ -119,22 +144,40 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
     }
 
     case 'open_shop_rival_cash': {
+      let seed = ctx.seed;
       const rival = resolveTargetRival(state, targetPlayerId, (p) =>
-        canPlayerOpenWithCash(state, active.id, p.cash)
+        canPlayerOpenWithCash(state, active.id, p.cash, false)
       )!;
-      return {
-        ...buildResultState(ctx, `Using ${rival.name}'s cash ($${rival.cash}).`),
-        phase: 'EVENT_PICK_STORE',
-        pendingBankRefundPts: reward.pointCost,
-        eventStorePrompt: {
-          mode: 'buy_empty',
-          multiplier: 1,
-          forced: false,
-          payerId: rival.id,
-          allowOwnedSegment: true,
-          fromBank: true,
-        },
-      };
+      const candidates = getOpenableEmptyLots(state, active.id, rival.cash, false);
+      const pickedSlot = pickRandom(seed, candidates);
+      seed = pickedSlot.nextSeed;
+      const affordableTypes = getAllowedStoreTypeIds(state, active.id, pickedSlot.value.segmentId).filter(
+        (id) => computeOpenShopCost(state, pickedSlot.value.id, active.id, id).openCost <= rival.cash
+      );
+      const pickedType = pickRandom(seed, affordableTypes);
+      seed = pickedType.nextSeed;
+      const typeId = pickedType.value;
+      const { openCost } = computeOpenShopCost(state, pickedSlot.value.id, active.id, typeId);
+      const players = ctx.players.map((p) =>
+        p.id === rival.id ? { ...p, cash: p.cash - openCost } : p
+      );
+      const claimed: Shop = { ...pickedSlot.value, ownerId: active.id, storeTypeId: typeId, stock: {} };
+      const nextShops = recomputeSegmentChainLevels(
+        { ...state, players, shops: { ...ctx.shops, [claimed.id]: claimed } },
+        claimed.segmentId,
+        active.id
+      );
+      const leveled = nextShops[claimed.id]!;
+      nextShops[claimed.id] = { ...leveled, stock: buildStarterStock(typeId, leveled.level) };
+      return resumeAfterPostAction(
+        buildResultState(
+          ctx,
+          `Opened ${formatShopRef(state, nextShops[claimed.id]!)} using ${rival.name}'s cash (-$${openCost}).`,
+          nextShops,
+          seed,
+          players
+        )
+      );
     }
 
     case 'capture_rival_store': {
@@ -147,55 +190,93 @@ export function applyBankShopEffect(ctx: BankEffectContext): GameState | null {
         }
         return resumeAfterPostAction(buildResultState(ctx, "Captured rivals' empty stores.", cur.shops));
       }
+      let seed = ctx.seed;
       if (eff.mode === 'one_l4') {
-        const target = resolveTargetRivalShop(state, targetShopId, (s) => s.level === 4)!;
-        const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
+        const rival = resolveTargetRival(state, targetPlayerId, (p) =>
+          Object.values(ctx.shops).some((s) => s.ownerId === p.id && s.level === 4)
+        )!;
+        const l4Chains = getDistinctChains(
+          state,
+          Object.values(ctx.shops).filter((s) => s.ownerId === rival.id && s.level === 4)
+        );
+        const picked = pickRandom(seed, l4Chains);
+        seed = picked.nextSeed;
+        const nextShops = captureRivalChainForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
         return resumeAfterPostAction(
-          buildResultState(ctx, `Captured L4 ${formatShopRef(state, target)} chain.`, nextShops)
+          buildResultState(ctx, `Captured ${rival.name}'s L4 ${formatShopRef(state, picked.value)} chain.`, nextShops, seed)
         );
       }
-      const target = resolveTargetRivalShop(
-        state,
-        targetShopId,
-        (s) => getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
+      const rival = resolveTargetRival(state, targetPlayerId, (p) =>
+        Object.values(ctx.shops).some(
+          (s) => s.ownerId === p.id && getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
+        )
       )!;
-      const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, target.id, active.id);
+      const eligible = Object.values(ctx.shops).filter(
+        (s) => s.ownerId === rival.id && getShopTotalStock(s) === 0 && canCaptureShop(state, active.id, s)
+      );
+      const picked = pickRandom(seed, eligible);
+      seed = picked.nextSeed;
+      const nextShops = captureRivalShopForPlayer({ ...state, shops: ctx.shops }, picked.value.id, active.id);
       return resumeAfterPostAction(
-        buildResultState(ctx, `Captured ${formatShopRef(state, target)}.`, nextShops)
+        buildResultState(ctx, `Captured ${rival.name}'s ${formatShopRef(state, picked.value)}.`, nextShops, seed)
       );
     }
 
     case 'empty_rival_stores': {
       let seed = ctx.seed;
-      const stocked = Object.values(ctx.shops).filter(
+      const nextShops = { ...ctx.shops };
+      if (eff.count === 1) {
+        const rival = resolveTargetRival(state, targetPlayerId, (p) =>
+          Object.values(ctx.shops).some((s) => s.ownerId === p.id && getShopTotalStock(s) > 0)
+        )!;
+        const pool = Object.values(ctx.shops).filter(
+          (s) => s.ownerId === rival.id && getShopTotalStock(s) > 0
+        );
+        const picked = pickRandom(seed, pool);
+        seed = picked.nextSeed;
+        nextShops[picked.value.id] = { ...picked.value, stock: {} };
+        return resumeAfterPostAction(
+          buildResultState(ctx, `Emptied ${rival.name}'s ${formatShopRef(state, picked.value)}.`, nextShops, seed)
+        );
+      }
+      const pool = Object.values(ctx.shops).filter(
         (s) => s.ownerId && s.ownerId !== active.id && getShopTotalStock(s) > 0
       );
-      const first = resolveTargetRivalShop(state, targetShopId, (s) => getShopTotalStock(s) > 0);
-      const chosen: Shop[] = first ? [first] : [];
-      const pool = stocked.filter((s) => s.id !== first?.id);
+      const chosen: Shop[] = [];
       while (chosen.length < eff.count && pool.length > 0) {
         const pick = pickRandom(seed, pool);
         seed = pick.nextSeed;
         chosen.push(pick.value);
         pool.splice(pool.findIndex((s) => s.id === pick.value.id), 1);
       }
-      const nextShops = { ...ctx.shops };
       for (const s of chosen) nextShops[s.id] = { ...s, stock: {} };
+      const refs = chosen.map((s) => formatShopRef(state, s)).join(', ');
       return resumeAfterPostAction(
-        buildResultState(ctx, `Emptied ${chosen.length} rival store(s).`, nextShops, seed)
+        buildResultState(ctx, `Emptied ${chosen.length} rival store(s): ${refs}.`, nextShops, seed)
       );
     }
 
     case 'upgrade_own_store_l4': {
-      const target = resolveTargetOwnShop(
-        state,
-        targetShopId,
-        (s) => s.level < getSegmentSlotCount(state, s.segmentId)
-      )!;
-      const nextShops = upgradeOwnSegmentToChain({ ...state, shops: ctx.shops }, target.id, active.id);
-      const nextLevel = nextShops[target.id]?.level ?? 4;
+      let seed = ctx.seed;
+      const seenSegs = new Set<string>();
+      const segments: Shop[] = [];
+      for (const s of Object.values(ctx.shops)) {
+        if (s.ownerId !== active.id || s.level >= getSegmentSlotCount(state, s.segmentId)) continue;
+        if (seenSegs.has(s.segmentId)) continue;
+        seenSegs.add(s.segmentId);
+        segments.push(s);
+      }
+      const picked = pickRandom(seed, segments);
+      seed = picked.nextSeed;
+      const nextShops = upgradeOwnSegmentToChain({ ...state, shops: ctx.shops }, picked.value.id, active.id);
+      const nextLevel = nextShops[picked.value.id]?.level ?? 4;
       return resumeAfterPostAction(
-        buildResultState(ctx, `Upgraded ${formatShopRef(state, target)} segment to L${nextLevel} chain!`, nextShops)
+        buildResultState(
+          ctx,
+          `Upgraded ${formatShopRef(state, picked.value)} segment to L${nextLevel} chain!`,
+          nextShops,
+          seed
+        )
       );
     }
 

@@ -49,6 +49,7 @@ export function resumeAfterPostAction(state: GameState): GameState {
     eventStorePrompt: null,
     pendingBankRefundPts: 0,
     deliverMode: null,
+    deliverTargetPlayerId: null,
     deliverPreferredShopId: null,
     deliveredShopIdsThisTurn: [],
     rivalItemsBoughtThisTurn: 0,

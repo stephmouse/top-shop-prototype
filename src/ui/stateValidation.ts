@@ -106,6 +106,13 @@ export function isValidGameState(raw: unknown): raw is GameState {
   if (typeof raw.phase !== 'string' || !VALID_TURN_PHASES.has(raw.phase)) return false;
   if (!isFiniteNumber(raw.remainingSteps) || raw.remainingSteps < 0) return false;
   if (!isFiniteNumber(raw.pendingBankRefundPts) || raw.pendingBankRefundPts < 0) return false;
+  if (
+    raw.deliverTargetPlayerId !== undefined &&
+    raw.deliverTargetPlayerId !== null &&
+    typeof raw.deliverTargetPlayerId !== 'string'
+  ) {
+    return false;
+  }
 
   if (!Array.isArray(raw.players) || raw.players.length < MIN_PLAYERS || raw.players.length > MAX_PLAYERS) {
     return false;

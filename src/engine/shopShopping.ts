@@ -25,7 +25,13 @@ export function handleDeliverItems(state: GameState, shopId: string, order: Reco
   const mode = state.deliverMode ?? 'own_paid';
   const shop = state.shops[shopId];
   if (!shop || !shop.storeTypeId) return state;
-  if (mode === 'rival_paid' ? !shop.ownerId || shop.ownerId === active.id : shop.ownerId !== active.id) {
+  if (
+    mode === 'rival_paid'
+      ? !shop.ownerId ||
+        shop.ownerId === active.id ||
+        (state.deliverTargetPlayerId && shop.ownerId !== state.deliverTargetPlayerId)
+      : shop.ownerId !== active.id
+  ) {
     return state;
   }
   const def = STORE_TYPES[shop.storeTypeId];
@@ -89,6 +95,7 @@ export function handleSkipDeliver(state: GameState): GameState {
       phase: 'BANK_MENU',
       pendingBankRefundPts: 0,
       deliverMode: null,
+      deliverTargetPlayerId: null,
       deliverPreferredShopId: null,
       deliveredShopIdsThisTurn: [],
       log: appendLog(state, `${active.name} canceled Bank delivery (+${refund} pts refunded).`),

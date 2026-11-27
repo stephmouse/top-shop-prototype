@@ -194,6 +194,7 @@ export interface GameState {
   pendingPostBankPhase: TurnPhase | null;
   pendingBankRefundPts: number;
   deliverMode: DeliverMode | null;
+  deliverTargetPlayerId?: string | null;
   deliverPreferredShopId: string | null;
   deliveredShopIdsThisTurn: string[];
   rivalItemsBoughtThisTurn?: number;

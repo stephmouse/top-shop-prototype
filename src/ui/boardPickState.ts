@@ -36,7 +36,7 @@ function getContextKey(state: GameState, kind: SlotKind): string {
   const head = `${state.phase}|${state.turnNumber}|${state.activePlayerIndex}`;
   if (kind === 'bank') return `${head}|${active.points}`;
   if (kind === 'deliver') {
-    return `${head}|${state.deliverMode ?? 'land'}|${state.deliveredShopIdsThisTurn.join(',')}|${active.tileId}`;
+    return `${head}|${state.deliverMode ?? 'land'}|${state.deliverTargetPlayerId ?? ''}|${state.deliveredShopIdsThisTurn.join(',')}|${active.tileId}`;
   }
   if (kind === 'event') {
     const p = state.eventStorePrompt;
@@ -88,7 +88,11 @@ export function getDeliverShopSelectionInfo(state: GameState): {
   const active = getActivePlayer(state);
   const mode = state.deliverMode ?? 'own_paid';
   const candidateShops = Object.values(state.shops).filter((s) =>
-    mode === 'rival_paid' ? s.ownerId !== null && s.ownerId !== active.id : s.ownerId === active.id
+    mode === 'rival_paid'
+      ? s.ownerId !== null &&
+        s.ownerId !== active.id &&
+        (!state.deliverTargetPlayerId || s.ownerId === state.deliverTargetPlayerId)
+      : s.ownerId === active.id
   );
   const isSelectable = (s: Shop) =>
     !(mode === 'all_own_paid' && state.deliveredShopIdsThisTurn.includes(s.id)) &&
