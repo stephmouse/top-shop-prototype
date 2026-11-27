@@ -291,6 +291,9 @@ export function renderBoard(
       cell.style.removeProperty?.('--owner-color');
       delete awningEl.dataset.seatPattern;
       ownerTagEl.hidden = true;
+      ownerTagEl.textContent = '';
+      ownerTagEl.style.backgroundColor = '';
+      ownerTagEl.style.color = '';
     }
     if (content.accent) cell.style.setProperty?.('--cat-accent', content.accent);
     else cell.style.removeProperty?.('--cat-accent');

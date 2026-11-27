@@ -493,5 +493,35 @@ describe('bank rewards, paydays, events, rubber-banding, and calendar', () => {
     const cleared = applyAction(openAtCap, { type: 'RESOLVE_SHOES', mode: 'clear' });
     expect(cleared.players[0]!.chirpSandals).toBe(false);
     expect(cleared.players[0]!.equippedWalkSounds).toEqual([]);
+
+    // Bank repeat redemption while wearing shoes opens EVENT_SHOES_CHOICE and resumes STEPPING when passing Bank
+    const repeatViaBank = applyAction(
+      {
+        ...first,
+        activePlayerIndex: 0,
+        phase: 'BANK_MENU' as const,
+        pendingPostBankPhase: 'STEPPING' as const,
+        remainingSteps: 2,
+        players: first.players.map((p, i) => (i === 0 ? { ...p, points: 12 } : p)),
+      },
+      { type: 'REDEEM_BANK_REWARD', rewardId: 'bank_24_chirp_shoes' }
+    );
+    expect(repeatViaBank.phase).toBe('EVENT_SHOES_CHOICE');
+    expect(repeatViaBank.players[0]!.points).toBe(3);
+    expect(repeatViaBank.pendingPostBankPhase).toBe('STEPPING');
+
+    const stackedViaBank = applyAction(repeatViaBank, { type: 'RESOLVE_SHOES', mode: 'stack', style: 'jingle' });
+    expect(stackedViaBank.players[0]!.equippedWalkSounds).toEqual(['poot', 'jingle']);
+    expect(stackedViaBank.phase).toBe('STEPPING');
+    expect(stackedViaBank.pendingPostBankPhase).toBeNull();
+
+    const swappedViaBank = applyAction(repeatViaBank, {
+      type: 'RESOLVE_SHOES',
+      mode: 'replace',
+      slotIndex: 0,
+      style: 'chirp',
+    });
+    expect(swappedViaBank.players[0]!.equippedWalkSounds).toEqual(['chirp']);
+    expect(swappedViaBank.phase).toBe('STEPPING');
   });
 });
