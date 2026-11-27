@@ -133,7 +133,12 @@ export function createSoundFx(): SoundFxController {
     if (equipped && equipped.type === 'chirp_equipped') playWalkEquipSound(equipped.walkSound ?? 'chirp', tone, ensureContext());
 
     if (payday) {
-      playArp([523, 659, 784, 1046], 'triangle', 0.06, 0.16);
+      if (payday.isExact) {
+        playArp([523, 659, 784, 1046, 1318, 1568], 'triangle', 0.055, 0.18);
+        tone(1046, 0.24, 'sine', 0.22, 1568, 0.045);
+      } else {
+        playArp([523, 659, 784, 1046], 'triangle', 0.06, 0.16);
+      }
     } else if (liquidate) {
       playLiquidateAlert();
     } else if (cash) {

@@ -128,7 +128,8 @@ export function renderPencilPanel(
   const controls = Object.assign(document.createElement('div'), { className: 'action-stack' });
   const primaryBtn = Object.assign(document.createElement('button'), { className: 'primary', textContent: 'Spin Pencil (Space)' });
   primaryBtn.dataset.pencilPrimary = 'true';
-  const quickBtn = Object.assign(document.createElement('button'), { textContent: 'Quick Roll' });
+  const quickBtn = Object.assign(document.createElement('button'), { textContent: 'Quick Roll (Q)' });
+  quickBtn.dataset.hotkey = 'q';
   quickBtn.addEventListener('click', () => {
     cancelPencilAnimation();
     dispatch({ type: 'ROLL_PENCIL' });

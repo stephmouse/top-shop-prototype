@@ -66,7 +66,7 @@ export function renderBuySlotPanel(
         confirmStoreTypeId = null;
         dispatch({ type: 'SKIP_SHOP_SLOT' });
       },
-      { primary: Boolean(active.blockNewStoreWindow) || sortedDefs.length === 0 }
+      { primary: Boolean(active.blockNewStoreWindow) || sortedDefs.length === 0, skip: true }
     );
     const { headerRow, promptEl } = makeChoiceHeaderRow([skipBtn], promptText);
     list.appendChild(headerRow);
@@ -96,6 +96,7 @@ export function renderBuySlotPanel(
             hotkey: idx < 9 ? idx + 1 : undefined,
             primary: isConfirming,
             confirm: isConfirming,
+            nav: true,
             disabled: active.cash < cost,
           }
         )
@@ -126,7 +127,7 @@ export function renderBuyRivalPanel(
     price: number;
   }
 
-  const sortedItems = [...def.items].sort((a, b) => b.retailPrice - a.retailPrice);
+  const sortedItems = [...def.items].sort((a, b) => a.retailPrice - b.retailPrice);
   const slots: ShelfSlot[] = [];
   for (const item of sortedItems) {
     const qty = shop.stock[item.id] ?? 0;
@@ -156,7 +157,7 @@ export function renderBuyRivalPanel(
   const grid = document.createElement('div');
   grid.className = 'rival-shelf-grid';
   const buyBtn = createChoiceButton(
-    'Buy Selected',
+    'Buy Selected (Enter)',
     () => {
       if (selectedSlotIdx === null) return;
       dispatch({ type: 'BUY_RIVAL_ITEMS', itemIds: [slots[selectedSlotIdx]!.item.id] });
@@ -172,7 +173,7 @@ export function renderBuyRivalPanel(
     for (const { btn, slot, statusEl } of slotButtons) {
       const picked = slot.slotIdx === selectedSlotIdx;
       btn.className = `rival-item-card${picked ? ' is-selected' : ''}`;
-      statusEl.textContent = picked ? '✓ Selected' : 'Click to select';
+      statusEl.textContent = picked ? 'Click/Press again to Buy' : 'Click to select';
     }
     const stepText =
       boughtCount === 0
@@ -180,7 +181,7 @@ export function renderBuyRivalPanel(
         : `Optional item ${boughtCount + 1} of ${SHOP_RULES.maxItemsPerVisit}`;
     const buyoutNote = slots.length === 1 ? ' · Clears store for buyout!' : '';
     summary.textContent = `Shelf: ${slots.length} item${slots.length === 1 ? '' : 's'} | ${stepText}${buyoutNote}`;
-    buyLabelEl.textContent = chosen ? `Buy ${chosen.item.name} ($${chosen.price})` : 'Buy Selected';
+    buyLabelEl.textContent = chosen ? `Buy ${chosen.item.name} ($${chosen.price}) (Enter)` : 'Buy Selected (Enter)';
     buyBtn.disabled = !chosen;
   };
 
@@ -197,9 +198,13 @@ export function renderBuyRivalPanel(
     const statusEl = document.createElement('span');
     statusEl.className = 'rival-item-pick';
     btn.append(nameEl, metaEl, statusEl);
-    decorateChoiceButton(btn, { hotkey: slot.slotIdx < 9 ? slot.slotIdx + 1 : undefined });
+    decorateChoiceButton(btn, { hotkey: slot.slotIdx < 9 ? slot.slotIdx + 1 : undefined, nav: true });
     btn.addEventListener('click', () => {
-      selectedSlotIdx = selectedSlotIdx === slot.slotIdx ? null : slot.slotIdx;
+      if (selectedSlotIdx === slot.slotIdx) {
+        dispatch({ type: 'BUY_RIVAL_ITEMS', itemIds: [slot.item.id] });
+        return;
+      }
+      selectedSlotIdx = slot.slotIdx;
       refresh();
     });
     slotButtons.push({ btn, slot, statusEl });
@@ -212,7 +217,7 @@ export function renderBuyRivalPanel(
   actionsRow.appendChild(buyBtn);
   if (boughtCount >= 1) {
     actionsRow.appendChild(
-      createChoiceButton('Leave Shop', () => dispatch({ type: 'FINISH_RIVAL_SHOP' }), { back: true })
+      createChoiceButton('Leave Shop', () => dispatch({ type: 'FINISH_RIVAL_SHOP' }), { back: true, skip: true })
     );
   }
   list.append(summary, grid, actionsRow);
@@ -259,6 +264,7 @@ export function renderLiquidatePanel(
           onHoverShop,
           primary: isConfirming,
           confirm: isConfirming,
+          nav: true,
           accentColor: active.color,
         }
       );

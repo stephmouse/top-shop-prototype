@@ -76,7 +76,7 @@ function appendTargetStep(
           setBankPendingRewardId(state, null);
           dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: reward.id, targetPlayerId: p.id });
         },
-        { hotkey: idx < 9 ? idx + 1 : undefined, accentColor: p.color }
+        { hotkey: idx < 9 ? idx + 1 : undefined, nav: true, accentColor: p.color }
       );
       targetsWrap.appendChild(btn);
     });
@@ -98,6 +98,7 @@ function appendTargetStep(
           onHoverShop,
           primary: isConfirming,
           confirm: isConfirming,
+          nav: true,
           accentColor: owner?.color,
         }
       );
@@ -161,24 +162,31 @@ export function renderBankPanel(
 
     setBankPendingRewardId(state, null);
 
-    const leaveLabel =
-      state.pendingPostBankPhase === 'STEPPING' ? 'Skip & Continue Moving' : 'Leave Bank';
+    const isMaxPts = active.points >= 99;
+    const leaveLabel = isMaxPts
+      ? state.pendingPostBankPhase === 'STEPPING'
+        ? 'Continue Moving (99 pts max)'
+        : 'Leave Bank (99 pts max)'
+      : state.pendingPostBankPhase === 'STEPPING'
+        ? 'Earn +1 Point & Continue Moving'
+        : 'Earn +1 Point & Leave Bank';
     const leaveTopBtn = createChoiceButton(
       leaveLabel,
       () => {
         onHoverShop?.(null);
         setBankPendingRewardId(state, null);
-        dispatch({ type: 'CLOSE_BANK_MENU' });
+        dispatch({ type: 'REDEEM_BANK_REWARD', rewardId: 'bank_01_earn_1pt' });
       },
-      { primary: true }
+      { primary: true, skip: true }
     );
 
     const filterLabel = document.createElement('label');
     const filterCheck = document.createElement('input');
     filterCheck.type = 'checkbox';
     filterCheck.checked = filterUsableOnly;
+    filterCheck.dataset.bankUsableToggle = 'true';
     filterLabel.appendChild(filterCheck);
-    filterLabel.append(` Usable Only (${active.points} pts available)`);
+    filterLabel.append(` Usable Only (U) (${active.points} pts available)`);
     const { headerRow } = makeChoiceHeaderRow([leaveTopBtn, filterLabel]);
     list.appendChild(headerRow);
 
@@ -192,6 +200,7 @@ export function renderBankPanel(
       let visibleIdx = 0;
 
       for (const reward of BANK_REWARDS) {
+        if (reward.id === 'bank_01_earn_1pt') continue;
         const usable = canRedeemBankReward(state, reward);
         if (filterUsableOnly && !usable) continue;
 
@@ -215,7 +224,7 @@ export function renderBankPanel(
               notify();
             }
           },
-          { hotkey: visibleIdx < 9 ? visibleIdx + 1 : undefined, disabled: !usable }
+          { hotkey: visibleIdx < 9 ? visibleIdx + 1 : undefined, nav: true, disabled: !usable }
         );
         visibleIdx++;
         rewardsWrap.appendChild(btn);

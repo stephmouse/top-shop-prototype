@@ -306,9 +306,16 @@ button.primary:hover:not(:disabled) {
   opacity: 0.45;
 }
 
+.tile--pick-target .tile-header > span:first-child {
+  display: none;
+}
+
 .tile--pick-target .tile-badge {
   position: relative;
   z-index: 3;
+  flex: 1 1 auto;
+  text-align: center;
+  padding: 2px 3px;
 }
 
 .tile-awning {
@@ -1630,6 +1637,12 @@ button.primary:hover:not(:disabled) {
 .fx-float-badge.is-gain { background: #2ea043; color: #ffffff; }
 .fx-float-badge.is-loss { background: #e74c3c; color: #ffffff; }
 .fx-float-badge.is-payday { background: #f2cc60; color: #12161f; }
+.fx-float-badge.is-exact-payday {
+  background: linear-gradient(135deg, #fde047 0%, #f59e0b 100%);
+  color: #111827;
+  border: 1px solid #fffbeb;
+  box-shadow: 0 0 12px rgba(250, 204, 21, 0.75), 0 4px 10px rgba(0, 0, 0, 0.5);
+}
 .fx-float-badge.is-pts { background: #1f6feb; color: #ffffff; }
 .fx-float-badge.is-restock { background: #0ea5e9; color: #08121f; }
 
@@ -2725,10 +2738,82 @@ button.primary .choice-keycap,
 }
 
 .choice-btn.is-board-hovered,
-[data-shop-id].is-board-hovered {
+[data-shop-id].is-board-hovered,
+button[data-choice-nav='true'].is-kbd-active {
   border-color: #38bdf8;
   background: rgba(56, 189, 248, 0.22);
   box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.65);
+}
+
+.choice-keycap--wide {
+  width: auto;
+  min-width: 28px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.restock-item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: #101622;
+}
+
+.restock-item-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.restock-item-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.restock-item-meta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.restock-item-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.restock-item-controls > button {
+  min-height: 30px;
+  padding: 4px 8px;
+}
+
+.restock-qty-pill {
+  min-width: 26px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--muted);
+}
+
+.restock-qty-pill.has-qty {
+  color: #58a6ff;
+}
+
+.restock-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 

@@ -57,7 +57,7 @@ export function renderEventPickPanel(
         mkSpan('event-card-emblem', '?'),
         mkSpan('event-card-desc', 'Click to Flip')
       );
-      decorateChoiceButton(btn, { hotkey: idx + 1 });
+      decorateChoiceButton(btn, { hotkey: idx + 1, nav: true });
       btn.addEventListener('click', () => dispatch({ type: 'REVEAL_EVENT_CARD', slotIndex: idx }));
       grid.appendChild(btn);
     });
@@ -140,7 +140,8 @@ export function renderEventStorePanel(
             onHoverShop?.(null);
             setEventSelectedShopId(state, null);
             dispatch({ type: 'SKIP_EVENT_STORE' });
-          }
+          },
+          { skip: true }
         )
       : null;
 
@@ -171,6 +172,7 @@ export function renderEventStorePanel(
             onHoverShop,
             primary: isConfirming,
             confirm: isConfirming,
+            nav: true,
             accentColor: active.color,
           }
         );
@@ -233,6 +235,7 @@ export function renderEventStorePanel(
               hotkey: idx < 9 ? idx + 1 : undefined,
               primary: isConfirming,
               confirm: isConfirming,
+              nav: true,
               disabled: payer.cash < openCost,
             }
           );
@@ -270,6 +273,7 @@ export function renderEventStorePanel(
                 hotkey: lotHotkey <= 9 ? lotHotkey++ : undefined,
                 shopId: item.shop.id,
                 onHoverShop,
+                nav: true,
               }
             );
             slotsRow.appendChild(btn);

@@ -4,6 +4,8 @@ export interface ChoiceButtonOptions {
   onHoverShop?: (shopId: string | null) => void;
   confirm?: boolean;
   back?: boolean;
+  skip?: boolean;
+  nav?: boolean;
   accentColor?: string;
   primary?: boolean;
   disabled?: boolean;
@@ -11,7 +13,7 @@ export interface ChoiceButtonOptions {
 }
 
 /**
- * Applies choice UI metadata (keycap hotkey badge, hover-to-board wiring, confirm/back tags)
+ * Applies choice UI metadata (keycap hotkey badge, hover-to-board wiring, confirm/back/skip/nav tags)
  * to an existing button element.
  */
 export function decorateChoiceButton(
@@ -24,6 +26,11 @@ export function decorateChoiceButton(
     keycap.className = 'choice-keycap';
     keycap.textContent = String(options.hotkey);
     btn.prepend(keycap);
+  } else if (options.skip) {
+    const keycap = document.createElement('span');
+    keycap.className = 'choice-keycap choice-keycap--wide';
+    keycap.textContent = '0/S';
+    btn.prepend(keycap);
   }
   if (options.shopId) {
     btn.dataset.shopId = options.shopId;
@@ -33,6 +40,12 @@ export function decorateChoiceButton(
   }
   if (options.back) {
     btn.dataset.choiceBack = 'true';
+  }
+  if (options.skip) {
+    btn.dataset.choiceSkip = 'true';
+  }
+  if (options.nav) {
+    btn.dataset.choiceNav = 'true';
   }
   if (options.accentColor) {
     btn.style.borderLeft = `4px solid ${options.accentColor}`;

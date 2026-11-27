@@ -31,3 +31,7 @@
   - Newly opened/bought-out tiles auto-stock with the cheapest `capacity` items; existing chain tiles keep their current stock.
   - Only 1 player may own a given store type per segment.
 - **Bank:** 1 action per Bank visit (`BANK_MENU` exits immediately after redeeming a reward).
+
+## Code Comments & Collaboration
+- **Never delete or overwrite existing human-written comments** unless the underlying logic they describe has been completely removed or replaced.
+- Preserve all inline notes, PS1 mechanical references (`SLUS_013.33`), and edge-case explanations added by collaborators during refactors or PR reviews.

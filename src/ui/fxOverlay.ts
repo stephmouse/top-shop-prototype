@@ -125,6 +125,9 @@ export function createFxOverlay(
     soundFx?.playVisualEvents(events);
 
     const hasCashback = events.some((e) => e.type === 'cashback_triggered');
+    const exactPaydayPlayers = new Set(
+      events.filter((e): e is Extract<VisualEvent, { type: 'bank_payday' }> => e.type === 'bank_payday' && e.isExact).map((e) => e.playerId)
+    );
     const tileStacks = new Map<string, number>();
     const bumpStack = (tileId: string) => {
       const idx = tileStacks.get(tileId) ?? 0;
@@ -154,9 +157,17 @@ export function createFxOverlay(
         triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-celebrate', 520);
         triggerFxClass(getBoardTileElement(boardEl, ev.tileId), 'fx-bank-pulse', 650);
       } else if (ev.type === 'cash_delta') {
+        const isExactPayday = ev.reason === 'payday' && exactPaydayPlayers.has(ev.playerId);
         const sign = ev.amount > 0 ? '+' : '-';
-        const variant = ev.reason === 'payday' ? 'is-payday' : ev.amount > 0 ? 'is-gain' : 'is-loss';
-        spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), `${sign}$${Math.abs(ev.amount)}`, variant, bumpStack(ev.tileId));
+        const label = isExactPayday ? `1.5× +$${Math.abs(ev.amount)}` : `${sign}$${Math.abs(ev.amount)}`;
+        const variant = isExactPayday
+          ? 'is-payday is-exact-payday'
+          : ev.reason === 'payday'
+            ? 'is-payday'
+            : ev.amount > 0
+              ? 'is-gain'
+              : 'is-loss';
+        spawnFloatBadge(getBoardTileElement(boardEl, ev.tileId), label, variant, bumpStack(ev.tileId));
         if (ev.isHurt) {
           triggerFxClass(getTokenBodyElement(tokensLayerEl, ev.playerId), 'fx-shake', 420);
         }

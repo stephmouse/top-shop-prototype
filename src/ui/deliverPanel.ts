@@ -74,6 +74,7 @@ function appendStorePickerStep(
     {
       primary: !candidateShops.some(isSelectable),
       back: state.deliverMode !== null,
+      skip: true,
     }
   );
   const { headerRow, promptEl } = makeChoiceHeaderRow(
@@ -107,6 +108,7 @@ function appendStorePickerStep(
         hotkey: assignedKey,
         shopId: s.id,
         onHoverShop: selectable ? onHoverShop : undefined,
+        nav: true,
         disabled: delivered || full,
         accentColor: owner?.color,
       }
@@ -150,11 +152,12 @@ function appendRestockStep(
   itemsWrap.className = 'card-list';
   const summaryEl = document.createElement('div');
   const order: Record<string, number> = {};
+  const addedStack: string[] = [];
   const maxCap = STORE_CAPACITY_BY_LEVEL[shop.level];
   const currentTotal = getShopTotalStock(shop);
 
   const submitBtn = createChoiceButton(
-    'Confirm Delivery',
+    'Confirm Delivery (Enter)',
     () => {
       onHoverShop?.(null);
       setDeliverSelectedShopId(state, null);
@@ -162,6 +165,22 @@ function appendRestockStep(
     },
     { primary: true, confirm: true }
   );
+  const undoBtn = makePanelButton('Undo Last (- / Z)', () => {
+    const lastId = addedStack.pop();
+    if (!lastId) return;
+    order[lastId] = Math.max(0, (order[lastId] ?? 0) - 1);
+    refreshAll();
+  });
+  undoBtn.type = 'button';
+  undoBtn.dataset.restockUndo = 'true';
+
+  const clearBtn = makePanelButton('Clear (C)', () => {
+    for (const k of Object.keys(order)) order[k] = 0;
+    addedStack.length = 0;
+    refreshAll();
+  });
+  clearBtn.type = 'button';
+  clearBtn.dataset.restockClear = 'true';
 
   const rowUpdaters: Array<(addQty: number, cost: number) => void> = [];
   const refreshAll = () => {
@@ -174,19 +193,46 @@ function appendRestockStep(
     const spaceLeft = Math.max(0, maxCap - currentTotal - addQty);
     summaryEl.textContent = `Adding ${addQty} (Space left: ${spaceLeft}) | Cost: $${cost}${isFree ? ' (FREE)' : ''} | Cash: $${active.cash}`;
     submitBtn.disabled = addQty === 0 || currentTotal + addQty > maxCap || cost > active.cash;
+    undoBtn.disabled = addedStack.length === 0;
+    clearBtn.disabled = addedStack.length === 0;
     for (const update of rowUpdaters) update(addQty, cost);
   };
 
   const sortedItems = [...def.items].filter((i) => i.tier <= shop.level).sort((a, b) => b.wholesaleCost - a.wholesaleCost);
   sortedItems.forEach((item, idx) => {
     const row = document.createElement('div');
-    row.className = 'action-stack';
+    row.className = 'restock-item-row';
     const unitCost = isFree ? 0 : item.wholesaleCost;
-    const qtySpan = document.createElement('span');
-    const minusBtn = makePanelButton('-', () => { order[item.id] = Math.max(0, (order[item.id] ?? 0) - 1); refreshAll(); });
+    const infoEl = document.createElement('div');
+    infoEl.className = 'restock-item-info';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'restock-item-name';
+    nameEl.textContent = item.name;
+    const metaEl = document.createElement('span');
+    metaEl.className = 'restock-item-meta';
+    metaEl.textContent = `$${unitCost} → $${item.retailPrice} · Shelf: ${shop.stock[item.id] ?? 0}`;
+    infoEl.append(nameEl, metaEl);
+
+    const controlsEl = document.createElement('div');
+    controlsEl.className = 'restock-item-controls';
+    const qtyPill = document.createElement('span');
+    qtyPill.className = 'restock-qty-pill';
+    const minusBtn = makePanelButton('-', () => {
+      const cur = order[item.id] ?? 0;
+      if (cur <= 0) return;
+      order[item.id] = cur - 1;
+      const lastPos = addedStack.lastIndexOf(item.id);
+      if (lastPos >= 0) addedStack.splice(lastPos, 1);
+      refreshAll();
+    });
+    minusBtn.type = 'button';
     const plusBtn = createChoiceButton(
       '+',
-      () => { order[item.id] = (order[item.id] ?? 0) + 1; refreshAll(); },
+      () => {
+        order[item.id] = (order[item.id] ?? 0) + 1;
+        addedStack.push(item.id);
+        refreshAll();
+      },
       { hotkey: idx < 9 ? idx + 1 : undefined }
     );
 
@@ -194,14 +240,20 @@ function appendRestockStep(
       const q = order[item.id] ?? 0;
       minusBtn.disabled = q === 0;
       plusBtn.disabled = maxCap - currentTotal - addQty <= 0 || (!isFree && cost + item.wholesaleCost > active.cash);
-      qtySpan.textContent = `${item.name} ($${unitCost} -> $${item.retailPrice}) [Shelf: ${shop.stock[item.id] ?? 0}] +${q}`;
+      qtyPill.textContent = `+${q}`;
+      qtyPill.classList.toggle('has-qty', q > 0);
     });
-    row.append(minusBtn, plusBtn, qtySpan);
+    controlsEl.append(minusBtn, qtyPill, plusBtn);
+    row.append(infoEl, controlsEl);
     itemsWrap.appendChild(row);
   });
 
+  const actionsRow = document.createElement('div');
+  actionsRow.className = 'restock-actions-row';
+  actionsRow.append(submitBtn, undoBtn, clearBtn);
+
   refreshAll();
-  root.append(itemsWrap, summaryEl, submitBtn);
+  root.append(itemsWrap, summaryEl, actionsRow);
 }
 
 export function renderDeliverPanel(
@@ -234,7 +286,7 @@ export function renderDeliverPanel(
           setDeliverSelectedShopId(state, null);
           dispatch({ type: 'SKIP_DELIVER' });
         },
-        { primary: true, confirm: true }
+        { primary: true, confirm: true, skip: true }
       );
       root.append(msg, skipBtn);
       return;

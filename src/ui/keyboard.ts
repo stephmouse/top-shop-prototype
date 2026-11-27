@@ -111,6 +111,13 @@ export function bindKeyboardControls({
 
     const state = getState();
     const actionBox = getActionBox();
+    if (state.phase === 'ROLL_PENCIL' && (e.key === 'q' || e.key === 'Q') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      stopHold();
+      const quickBtn = actionBox.querySelector<HTMLButtonElement>('button[data-hotkey="q"]');
+      if (quickBtn && !quickBtn.disabled) { e.preventDefault(); quickBtn.click(); }
+      return;
+    }
+
     if ((state.phase === 'ROLL_PENCIL' || state.phase === 'EVENT_PICK') && (e.key === ' ' || e.key === 'Enter')) {
       stopHold();
       const pencilBtn = actionBox.querySelector<HTMLButtonElement>('[data-pencil-primary="true"]');
@@ -126,8 +133,15 @@ export function bindKeyboardControls({
     }
 
     if (!isMovingPhase(state.phase) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const clearNavHighlight = () => {
+        for (const el of Array.from(actionBox.querySelectorAll<HTMLElement>('.is-kbd-active'))) {
+          el.classList.remove('is-kbd-active');
+        }
+      };
+
       if (!actionBox.classList.contains('is-landing-guard')) {
         if (e.key >= '1' && e.key <= '9') {
+          clearNavHighlight();
           const btn = actionBox.querySelector<HTMLButtonElement>(`button[data-hotkey="${e.key}"]`);
           if (btn && !btn.disabled) {
             e.preventDefault();
@@ -135,7 +149,62 @@ export function bindKeyboardControls({
           }
           return;
         }
+        if (e.key === '0' || e.key === 's' || e.key === 'S') {
+          const btn = actionBox.querySelector<HTMLButtonElement>('button[data-choice-skip="true"]');
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            btn.click();
+          }
+          return;
+        }
+        if (e.key === '-' || e.key === 'z' || e.key === 'Z') {
+          const btn = actionBox.querySelector<HTMLButtonElement>('button[data-restock-undo="true"]');
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            btn.click();
+          }
+          return;
+        }
+        if (e.key === 'c' || e.key === 'C') {
+          const btn = actionBox.querySelector<HTMLButtonElement>('button[data-restock-clear="true"]');
+          if (btn && !btn.disabled) {
+            e.preventDefault();
+            btn.click();
+          }
+          return;
+        }
+        if (e.key === 'u' || e.key === 'U') {
+          const toggle = actionBox.querySelector<HTMLInputElement>('input[data-bank-usable-toggle="true"]');
+          if (toggle && !toggle.disabled) {
+            e.preventDefault();
+            toggle.click();
+          }
+          return;
+        }
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          const navBtns = Array.from(
+            actionBox.querySelectorAll<HTMLButtonElement>('button[data-choice-nav="true"]')
+          ).filter((b) => !b.disabled);
+          if (navBtns.length > 0) {
+            e.preventDefault();
+            const delta = e.key === 'ArrowDown' || e.key === 'ArrowRight' ? 1 : -1;
+            const curIdx = navBtns.findIndex((b) => b.classList.contains('is-kbd-active'));
+            const nextIdx = curIdx === -1 ? (delta > 0 ? 0 : navBtns.length - 1) : (curIdx + delta + navBtns.length) % navBtns.length;
+            clearNavHighlight();
+            const nextBtn = navBtns[nextIdx]!;
+            nextBtn.classList.add('is-kbd-active');
+            nextBtn.scrollIntoView?.({ block: 'nearest' });
+            nextBtn.focus?.({ preventScroll: true });
+          }
+          return;
+        }
         if (e.key === 'Enter') {
+          const navBtn = actionBox.querySelector<HTMLButtonElement>('button[data-choice-nav="true"].is-kbd-active');
+          if (navBtn && !navBtn.disabled) {
+            e.preventDefault();
+            navBtn.click();
+            return;
+          }
           const btn = actionBox.querySelector<HTMLButtonElement>('button[data-choice-confirm="true"]');
           if (btn && !btn.disabled) {
             e.preventDefault();
